@@ -12,9 +12,9 @@ from email.mime.text import MIMEText
 from datetime import datetime, timezone
 from html import escape
 
-EMAIL_FROM = os.getenv("EMAIL_FROM", "Administrator.archetsolutions@gmail.com")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "mahee123.aamir@gmail.com")
 EMAIL_TO = os.getenv("EMAIL_TO", EMAIL_FROM)
-EMAIL_APP_PWD = os.getenv("EMAIL_APP_PWD", "yvos uriv ovqs rxkd")
+EMAIL_APP_PWD = os.getenv("EMAIL_APP_PWD", "qovp cfsv jziy uexv")
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 SITE_URL = os.getenv("SITE_URL", "https://archetsolutions.com").rstrip("/")
@@ -98,7 +98,7 @@ def send_confirmation_email(to_email, to_name, company):
 
     <p style="font-size:13px;color:#5f6368;margin-bottom:6px">Have an urgent need? Reach us directly:</p>
     <p style="font-size:13px;color:#202124;margin-bottom:4px">&#128222; <strong>+1 (469) 993-7957</strong></p>
-    <p style="font-size:13px;color:#202124;margin-bottom:20px">&#9993; <a href="mailto:Administrator.archetsolutions@gmail.com" style="color:#1a73e8;text-decoration:none">Administrator.archetsolutions@gmail.com</a></p>
+    <p style="font-size:13px;color:#202124;margin-bottom:20px">&#9993; <a href="mailto:mahee123.aamir@gmail.com" style="color:#1a73e8;text-decoration:none">mahee123.aamir@gmail.com</a></p>
 
     <div class="cta-block">
       <a href="https://archetsolutions.com" class="cta">Visit Archet Solutions &rarr;</a>
@@ -261,7 +261,7 @@ def submit_quote():
         print(f"[email] Failed to send lead notification: {exc}")
         return jsonify({
             "status": "error",
-            "message": "We could not deliver your request. Please email Administrator.archetsolutions@gmail.com or call +1 (469) 993-7957."
+            "message": "We could not deliver your request. Please email mahee123.aamir@gmail.com or call +1 (469) 993-7957."
         }), 500
 
     backup_lead(record)
