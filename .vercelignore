@@ -1,0 +1,9 @@
+.env
+.env.*
+.venv
+__pycache__
+.pytest_cache
+api/creds.py
+tests
+test-results
+leads.json

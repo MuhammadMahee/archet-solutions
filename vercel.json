@@ -1,39 +1,10 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "index.html",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "archet-logo.png",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "archet-logo-dark.png",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "sitemap.xml",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "robots.txt",
-      "use": "@vercel/static"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "flask",
+  "buildCommand": "python scripts/migrate.py",
+  "functions": {
+    "api/index.py": {
+      "excludeFiles": "{tests/**,test-results/**,scripts/**,supabase/**,.env,.env.*,api/creds.py,.pytest_cache/**}"
     }
-  ],
-  "routes": [
-    { "src": "/api/(.*)",    "dest": "/api/index.py" },
-    { "src": "/health",      "dest": "/api/index.py" },
-    { "src": "/archet-logo.png", "dest": "/archet-logo.png" },
-    { "src": "/archet-logo-dark.png", "dest": "/archet-logo-dark.png" },
-    { "src": "/sitemap.xml", "dest": "/sitemap.xml"  },
-    { "src": "/robots.txt",  "dest": "/robots.txt"   },
-    { "src": "/",            "dest": "/index.html"   },
-    { "src": "/(.*)",        "dest": "/api/index.py" }
-  ]
+  }
 }

@@ -1,1095 +1,204 @@
-<!DOCTYPE html>
+﻿<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ARCHET | Operations Intelligence. No Compromises.</title>
-<meta name="description" content="ARCHET powers 900+ retail stores with live surveillance, loss prevention, reconciliation, and workforce operations across 8 major U.S. carriers, gas stations, and vape shops."/>
-<meta name="keywords" content="retail operations management, loss prevention, live surveillance, telecom store operations, workforce management, compensation reconciliation, Metro by T-Mobile operations, Verizon AT&T T-Mobile store management, gas station operations, San Antonio Texas"/>
-<meta name="robots" content="index, follow"/>
-<meta name="author" content="Archet Solutions"/>
-<meta name="google-site-verification" content="0gUCc2_s8TPjXjmsNm89_mk1JwutZueF5_D4VhNJXDc" />
-<link rel="canonical" href="https://archetsolutions.com/"/>
-<link rel="icon" type="image/png" href="/archet-logo-dark.png"/>
-
-<!-- Open Graph / Facebook -->
-<meta property="og:type" content="website"/>
-<meta property="og:url" content="https://archetsolutions.com/"/>
-<meta property="og:site_name" content="Archet Solutions"/>
-<meta property="og:image" content="https://archetsolutions.com/archet-logo.png"/>
-<meta property="og:title" content="ARCHET Solutions — Operations Intelligence. No Compromises."/>
-<meta property="og:description" content="900+ retail stores. 8 major carriers. Live surveillance, loss prevention, workforce ops &amp; reconciliation — deployed nationwide, 24/7/365."/>
-<meta property="og:locale" content="en_US"/>
-
-<!-- Twitter -->
-<meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:image" content="https://archetsolutions.com/archet-logo.png"/>
-<meta name="twitter:title" content="ARCHET Solutions — Operations Intelligence"/>
-<meta name="twitter:description" content="900+ retail stores. 8 major carriers. Live surveillance, loss prevention &amp; workforce ops — nationwide."/>
-
-<!-- Geo -->
-<meta name="geo.region" content="US-TX"/>
-<meta name="geo.placename" content="San Antonio, Texas"/>
-<meta name="geo.position" content="29.6667;-98.4955"/>
-<meta name="ICBM" content="29.6667, -98.4955"/>
-
-<!-- Schema.org structured data -->
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "ProfessionalService",
-  "name": "Archet Solutions",
-  "description": "Archet Solutions powers 900+ retail stores with live surveillance, loss prevention, compensation reconciliation, and workforce operations across 8 major U.S. telecom carriers, gas stations, and vape shops.",
-  "url": "https://archetsolutions.com",
-  "geo": {
-    "@type": "GeoCoordinates",
-    "latitude": 29.6667,
-    "longitude": -98.4955
-  },
-  "openingHours": "Mo-Su 00:00-24:00",
-  "areaServed": {
-    "@type": "Country",
-    "name": "United States"
-  },
-  "hasOfferCatalog": {
-    "@type": "OfferCatalog",
-    "name": "Operations Services",
-    "itemListElement": [
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Live Surveillance"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Loss Prevention"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Compensation Reconciliation"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Workforce Recruitment"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Quality Assurance"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Inventory Management"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Automated Data Reporting"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Web Development & Design"}},
-      {"@type": "Offer", "itemOffered": {"@type": "Service", "name": "Logo & Brand Identity Design"}}
-    ]
-  },
-  "sameAs": []
-}
-</script>
-
-<!-- Tailwind -->
-<script src="https://cdn.tailwindcss.com"></script>
-
-<!-- Fonts: Space Grotesk (display) + Inter (body) -->
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet"/>
-
-<script>
-tailwind.config = {
-  theme: {
-    extend: {
-      colors: {
-        teal:   { DEFAULT:'#0FFFD4', dim:'rgba(15,255,212,.55)', faint:'rgba(15,255,212,.08)' },
-        amber:  { DEFAULT:'#F59E0B', dim:'rgba(245,158,11,.7)' },
-        ink:    { DEFAULT:'#030309', card:'rgba(255,255,255,.03)', lift:'rgba(255,255,255,.055)' },
-        border: { DEFAULT:'rgba(255,255,255,.07)', teal:'rgba(15,255,212,.18)', amber:'rgba(245,158,11,.2)' },
-      },
-      fontFamily: {
-        display: ['"Space Grotesk"','system-ui','sans-serif'],
-        sans:    ['Inter','system-ui','sans-serif'],
-      },
-    },
-  },
-};
-</script>
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Archet | Internal Workspace</title>
+<link rel="icon" href="/archet-logo-dark.png">
 <style>
-/* ──────────────────────── BASE ──────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; scrollbar-width: none; }
-::-webkit-scrollbar { display: none; }
-body {
-  font-family: 'Inter', system-ui, sans-serif;
-  background: #030309;
-  color: #fff;
-  -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
-  cursor: none;
-}
-a, button { cursor: none; }
-
-/* ──────────────────────── CUSTOM CURSOR ──────────────────────── */
-#c-dot {
-  position: fixed; z-index: 99999; pointer-events: none;
-  width: 8px; height: 8px; border-radius: 50%;
-  background: #0FFFD4;
-  box-shadow: 0 0 12px #0FFFD4, 0 0 24px rgba(15,255,212,.6);
-  transform: translate(-50%,-50%);
-  transition: width .2s, height .2s, background .2s;
-  will-change: left, top;
-}
-#c-ring {
-  position: fixed; z-index: 99998; pointer-events: none;
-  width: 32px; height: 32px; border-radius: 50%;
-  border: 1.5px solid rgba(15,255,212,.5);
-  transform: translate(-50%,-50%);
-  transition: width .25s, height .25s, border-color .25s, opacity .25s;
-  will-change: left, top;
-}
-.cursor-hover #c-dot  { width: 14px; height: 14px; }
-.cursor-hover #c-ring { width: 52px; height: 52px; border-color: rgba(15,255,212,.8); }
-.cursor-click #c-dot  { width: 6px; height: 6px; }
-
-/* ──────────────────────── SCROLLBAR ──────────────────────── */
-#arc-sb { position: fixed; top: 0; right: 0; width: 2px; height: 100vh; z-index: 9999; pointer-events: none; }
-#arc-sb-thumb { position: absolute; right: 0; width: 2px; background: linear-gradient(180deg, #0FFFD4, rgba(15,255,212,.3)); border-radius: 2px; box-shadow: 0 0 8px rgba(15,255,212,.6); transition: opacity .2s; }
-
-/* ──────────────────────── HERO CANVAS ──────────────────────── */
-#hero-canvas { position: absolute; inset: 0; z-index: 0; }
-
-/* ──────────────────────── SCAN LINE OVERLAY ──────────────────────── */
-.scanlines {
-  position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .025;
-  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.6) 2px, rgba(0,0,0,.6) 4px);
-}
-
-/* ──────────────────────── NAV ──────────────────────── */
-#nav {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 500;
-  height: 64px;
-  background: rgba(3,3,9,0);
-  border-bottom: 1px solid transparent;
-  transition: background .4s, border-color .4s, backdrop-filter .4s;
-}
-#nav.scrolled {
-  background: rgba(3,3,9,.9);
-  backdrop-filter: blur(20px);
-  border-bottom-color: rgba(15,255,212,.1);
-}
-.nav-link { color: rgba(255,255,255,.4); font-size: .85rem; font-weight: 500; transition: color .2s; letter-spacing: .02em; }
-.nav-link:hover { color: #fff; }
-
-/* ──────────────────────── BUTTONS ──────────────────────── */
-.btn-cta {
-  position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 8px;
-  padding: 14px 32px; border-radius: 14px;
-  background: #F59E0B;
-  color: #030309; font-weight: 800; font-size: .95rem; letter-spacing: -.01em;
-  box-shadow: 0 0 32px rgba(245,158,11,.4), 0 8px 24px rgba(0,0,0,.5);
-  transition: box-shadow .3s, transform .3s;
-  font-family: 'Inter', sans-serif;
-}
-.btn-cta:hover { box-shadow: 0 0 56px rgba(245,158,11,.6), 0 12px 32px rgba(0,0,0,.6); }
-.btn-cta::after {
-  content: ''; position: absolute; top: -60%; left: -40%; width: 30%; height: 220%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.25), transparent);
-  transform: rotate(20deg) translateX(0); transition: none;
-}
-.btn-cta:hover::after { transform: rotate(20deg) translateX(600%); transition: transform .5s ease; }
-
-.btn-ghost {
-  display: inline-flex; align-items: center; gap: 8px;
-  padding: 14px 32px; border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
-  color: rgba(255,255,255,.75); font-weight: 600; font-size: .95rem;
-  backdrop-filter: blur(6px); transition: all .25s;
-}
-.btn-ghost:hover { border-color: rgba(15,255,212,.4); color: #0FFFD4; background: rgba(15,255,212,.06); }
-
-/* ──────────────────────── HERO TEXT ANIMATION ──────────────────────── */
-.hero-word { display: inline-block; overflow: hidden; }
-.hero-word span {
-  display: inline-block;
-  animation: wordUp .8s cubic-bezier(.16,1,.3,1) both;
-}
-@keyframes wordUp { from { transform: translateY(110%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-/* ──────────────────────── GLOW TEXT ──────────────────────── */
-.teal-text {
-  color: #0FFFD4;
-  text-shadow: 0 0 20px rgba(15,255,212,.5), 0 0 60px rgba(15,255,212,.2);
-}
-.grad-text {
-  background: linear-gradient(90deg, #0FFFD4, #60A5FA, #A78BFA, #0FFFD4);
-  background-size: 300%;
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradMove 6s ease infinite;
-}
-@keyframes gradMove { 0%,100%{background-position:0%} 50%{background-position:100%} }
-
-/* ──────────────────────── BENTO GRID ──────────────────────── */
-.bento { display: grid; grid-template-columns: repeat(4, 1fr); grid-template-rows: auto; gap: 12px; }
-.bento-1 { grid-column: span 2; grid-row: span 2; }
-.bento-wide { grid-column: span 2; }
-@media (max-width: 767px) {
-  .bento { grid-template-columns: repeat(2, 1fr); }
-  .bento-1 { grid-column: span 2; }
-  .bento-wide { grid-column: span 2; }
-}
-
-.bento-card {
-  background: rgba(255,255,255,.03);
-  border: 1px solid rgba(255,255,255,.07);
-  border-radius: 20px; padding: 28px;
-  transition: border-color .3s, background .3s, transform .3s, box-shadow .3s;
-  position: relative; overflow: hidden;
-}
-.bento-card::before {
-  content: ''; position: absolute; inset: 0; border-radius: 20px;
-  background: radial-gradient(circle at 50% 0%, rgba(15,255,212,.06), transparent 60%);
-  opacity: 0; transition: opacity .3s;
-}
-.bento-card:hover { border-color: rgba(15,255,212,.25); background: rgba(15,255,212,.03); transform: translateY(-3px); box-shadow: 0 20px 40px rgba(0,0,0,.4), 0 0 30px rgba(15,255,212,.06); }
-.bento-card:hover::before { opacity: 1; }
-
-/* ──────────────────────── MARQUEE ──────────────────────── */
-.marquee-mask { -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
-.marquee-track { display: flex; width: max-content; animation: mq 30s linear infinite; }
-.marquee-track:hover { animation-play-state: paused; }
-@keyframes mq { from{transform:translateX(0)} to{transform:translateX(-50%)} }
-
-/* ──────────────────────── BRAND CARD ──────────────────────── */
-.brand-card {
-  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
-  border-radius: 16px; padding: 20px; text-align: left;
-  cursor: none; transition: all .3s ease;
-}
-.brand-card:hover { border-color: rgba(15,255,212,.3); background: rgba(15,255,212,.04); transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,.4), 0 0 24px rgba(15,255,212,.08); }
-.brand-card.active { background: rgba(15,255,212,.07); border-color: rgba(15,255,212,.45); box-shadow: 0 0 30px rgba(15,255,212,.12), 0 20px 40px rgba(0,0,0,.4); transform: translateY(-4px); }
-.brand-card.active .b-name { color: #0FFFD4; }
-
-/* ──────────────────────── SERVICE CARD ──────────────────────── */
-.svc-card {
-  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
-  border-radius: 18px; padding: 24px; position: relative; overflow: hidden;
-  transform-style: preserve-3d; transition: border-color .3s, box-shadow .3s;
-}
-.svc-card::before {
-  content: ''; position: absolute; inset: 0;
-  background: radial-gradient(circle at var(--mx,50%) var(--my,50%), rgba(15,255,212,.08), transparent 55%);
-  opacity: 0; transition: opacity .3s;
-}
-.svc-card:hover { border-color: rgba(15,255,212,.3); box-shadow: 0 0 30px rgba(15,255,212,.1), 0 24px 48px rgba(0,0,0,.4); }
-.svc-card:hover::before { opacity: 1; }
-.svc-icon-box { width: 48px; height: 48px; border-radius: 14px; background: rgba(15,255,212,.08); border: 1px solid rgba(15,255,212,.15); display: flex; align-items: center; justify-content: center; transition: all .3s; }
-.svc-card:hover .svc-icon-box { background: rgba(15,255,212,.15); border-color: rgba(15,255,212,.3); box-shadow: 0 0 16px rgba(15,255,212,.2); }
-
-/* ──────────────────────── DIGITAL CARDS ──────────────────────── */
-.dig-card {
-  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
-  border-radius: 24px; overflow: hidden;
-  transition: transform .4s cubic-bezier(.16,1,.3,1), box-shadow .4s, border-color .4s;
-  position: relative;
-}
-.dig-card::after {
-  content: ''; position: absolute; inset: -1px; border-radius: 25px; z-index: -1;
-  background: linear-gradient(135deg, rgba(15,255,212,.5), rgba(99,102,241,.4), rgba(245,158,11,.3));
-  opacity: 0; transition: opacity .4s;
-}
-.dig-card:hover { transform: translateY(-8px); box-shadow: 0 36px 72px rgba(0,0,0,.5), 0 0 40px rgba(15,255,212,.1); border-color: rgba(15,255,212,.3); }
-.dig-card:hover::after { opacity: 1; }
-
-/* ──────────────────────── FORM ──────────────────────── */
-.arc-input {
-  width: 100%; padding: 13px 16px; border-radius: 12px;
-  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
-  color: #fff; font-size: .875rem; font-family: 'Inter', sans-serif;
-  outline: none; transition: border-color .2s, box-shadow .2s;
-}
-.arc-input::placeholder { color: rgba(255,255,255,.2); }
-.arc-input:focus { border-color: rgba(15,255,212,.4); box-shadow: 0 0 0 3px rgba(15,255,212,.08); }
-select.arc-input option { background: #0D0D20; color: #fff; }
-
-/* ──────────────────────── PILL BADGE ──────────────────────── */
-.pill {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 5px 13px; border-radius: 999px;
-  background: rgba(15,255,212,.07); border: 1px solid rgba(15,255,212,.2);
-  font-size: .72rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
-  color: rgba(255,255,255,.7);
-}
-
-/* ──────────────────────── PULSE DOT ──────────────────────── */
-.pdot { width: 7px; height: 7px; border-radius: 50%; background: #0FFFD4; box-shadow: 0 0 0 0 rgba(15,255,212,.6); animation: pdotPulse 2s infinite; }
-@keyframes pdotPulse { 0%{box-shadow:0 0 0 0 rgba(15,255,212,.5)} 70%{box-shadow:0 0 0 9px rgba(15,255,212,0)} 100%{box-shadow:0 0 0 0 rgba(15,255,212,0)} }
-
-/* ──────────────────────── IND TABS ──────────────────────── */
-.ind-tab {
-  padding: 9px 20px; border-radius: 12px; font-size: .82rem; font-weight: 600;
-  border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03);
-  color: rgba(255,255,255,.4); cursor: none; transition: all .22s;
-}
-.ind-tab:hover { color: rgba(255,255,255,.8); border-color: rgba(15,255,212,.25); }
-.ind-tab.active { background: rgba(15,255,212,.1); border-color: rgba(15,255,212,.4); color: #0FFFD4; font-weight: 700; }
-
-/* ──────────────────────── REVEAL ──────────────────────── */
-.reveal { opacity: 0; transform: translateY(30px); transition: opacity .9s cubic-bezier(.16,1,.3,1), transform .9s cubic-bezier(.16,1,.3,1); }
-.reveal.in { opacity: 1; transform: translateY(0); }
-.reveal-d1 { transition-delay: .12s; }
-.reveal-d2 { transition-delay: .24s; }
-
-/* ──────────────────────── FADE-IN STAGGER ──────────────────────── */
-.fi { animation: fiUp .5s cubic-bezier(.16,1,.3,1) both; }
-@keyframes fiUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-.fi:nth-child(1){animation-delay:.00s} .fi:nth-child(2){animation-delay:.07s}
-.fi:nth-child(3){animation-delay:.14s} .fi:nth-child(4){animation-delay:.21s}
-.fi:nth-child(5){animation-delay:.28s} .fi:nth-child(6){animation-delay:.35s}
-.fi:nth-child(7){animation-delay:.42s} .fi:nth-child(8){animation-delay:.49s}
-
-/* ──────────────────────── GLOW DIVIDER ──────────────────────── */
-.gdiv { height: 1px; background: linear-gradient(90deg, transparent, rgba(15,255,212,.3), rgba(99,102,241,.25), transparent); }
-
-/* ──────────────────────── SECTION LABEL ──────────────────────── */
-.sec-label { font-size: .68rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: rgba(15,255,212,.8); }
-
-/* ──────────────────────── NUMBER TICKER ──────────────────────── */
-.num-big { font-family: 'Space Grotesk', sans-serif; font-weight: 700; line-height: 1; color: #fff; }
-
-/* ──────────────────────── BOTTOM CLIP ──────────────────────── */
-.bottom-clip { position: absolute; bottom: -1px; left: 0; right: 0; height: 80px; background: #030309; clip-path: ellipse(60% 100% at 50% 100%); }
-
-/* ──────────────────────── MOBILE: HIDE CUSTOM CURSOR ──────────────────────── */
-@media (max-width: 767px), (hover: none) {
-  #c-dot, #c-ring { display: none; }
-  body, a, button, .brand-card, .ind-tab { cursor: auto; }
-}
+:root{color-scheme:dark;--bg:#080d12;--panel:#101820;--border:#25313b;--text:#edf5f7;--muted:#9aadb8;--accent:#0fffd4;--error:#ffaaa5}*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}button,input,select,textarea{font:inherit}button,a,input,select,textarea{outline-offset:4px}button{cursor:pointer;border:1px solid var(--border);border-radius:8px;background:#192630;color:var(--text);padding:10px 16px;font-weight:600}button:hover{border-color:#6b858e}button:disabled{opacity:.5;cursor:wait}.primary{background:var(--accent);color:#042620;border-color:var(--accent)}.subtle{background:transparent}.danger{color:var(--error)}a{color:var(--accent)}h1,h2,h3,p{margin-top:0}h1{font-size:34px;letter-spacing:-1px;line-height:1.2}h2{font-size:21px;letter-spacing:-.4px}h3{font-size:15px}.muted{color:var(--muted)}.eyebrow{color:var(--accent);font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase}.logo{width:120px;height:76px;object-fit:contain}.field{display:grid;gap:7px;margin-bottom:18px}.field label{font-size:13px;color:#c5d3da}input,select,textarea{width:100%;padding:11px 12px;border:1px solid #35454f;border-radius:7px;color:var(--text);background:#0b1219}input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);border-color:transparent}textarea{resize:vertical;min-height:100px}input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}.check{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);margin-bottom:24px}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.between{justify-content:space-between}.error{color:var(--error);font-size:14px;white-space:pre-wrap}.success{color:var(--accent)}[hidden]{display:none!important}.boot{padding:40px;text-align:center;color:var(--muted)}
+.login{min-height:100svh;display:grid;grid-template-columns:1.1fr 1fr}.login-story{padding:60px 10%;background:radial-gradient(ellipse at 15% 90%,#104c453d,transparent 60%),#0d171e;display:flex;flex-direction:column;justify-content:space-between;border-right:1px solid var(--border)}.login-story h1{font-size:clamp(36px,4.5vw,62px);max-width:600px;line-height:1.06;margin:25px 0}.login-story p{max-width:410px;font-size:17px}.story-bottom{font-size:12px;color:var(--muted)}.login-form-wrap{display:grid;place-items:center;padding:40px}.login-card{width:100%;max-width:365px}.login-card h2{font-size:28px;margin-bottom:8px}.login-card form{margin-top:32px}.login-card .primary{width:100%}.password-wrap{display:flex;gap:8px}.password-wrap input{min-width:0}.password-wrap button{font-size:12px}.small{font-size:12px}
+.workspace{display:grid;grid-template-columns:230px 1fr;min-height:100svh}.sidebar{position:sticky;top:0;height:100svh;border-right:1px solid var(--border);padding:24px 18px;display:flex;flex-direction:column;background:#0c131a}.sidebar .logo{margin-left:12px}.workspace-label{font-size:10px;letter-spacing:1.5px;color:var(--muted);margin:25px 12px 12px}.nav{display:grid;gap:7px}.nav button{text-align:left;border:1px solid transparent;background:transparent;color:var(--muted);font-size:14px}.nav button.active{background:#0fffd40e;color:var(--accent);border-color:#0fffd422}.nav-icon{display:inline-block;width:26px;font-size:17px}.sidebar-bottom{margin-top:auto;padding:20px 10px 0}.avatar{width:35px;height:35px;border-radius:9px;background:#0fffd418;color:var(--accent);display:grid;place-items:center;font-weight:700}.identity{min-width:0;overflow-wrap:anywhere}.identity strong{display:block;font-size:13px}.identity span{font-size:11px;color:var(--muted)}.logout{margin-top:20px;width:100%;font-size:12px}.main{min-width:0;padding:0 42px 50px}.topbar{height:80px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;margin-bottom:38px}.topbar span{font-size:12px;color:var(--muted)}.live-dot{display:inline-block;width:7px;height:7px;background:var(--accent);border-radius:50%;margin-right:6px}.page-head{margin-bottom:28px}.page-head h1{margin-bottom:9px}.page-head p{margin-bottom:0}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:28px 0}.card{background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:24px}.stat-label{font-size:12px;color:var(--muted)}.stat{font-size:36px;letter-spacing:-1px;margin:8px 0}.stat-foot{font-size:11px;color:var(--muted)}.panel{border:1px solid var(--border);border-radius:11px;overflow:hidden;background:var(--panel)}.panel-head{padding:20px 24px;border-bottom:1px solid var(--border)}.panel-head h2{font-size:16px;margin:0}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap}th{color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase;background:#0b141b;padding:13px 24px;font-weight:500}td{padding:17px 24px;border-top:1px solid #ffffff07;font-size:13px}td strong{display:block;font-size:13px}td small{display:block;color:var(--muted);margin-top:3px}.table-button{padding:6px 11px;font-size:12px}.badge{border-radius:5px;padding:4px 8px;font-size:11px;display:inline-block;background:#ffffff0a;color:#c5d3da}.badge.new{background:#0fffd413;color:var(--accent)}.badge.contacted{background:#f5bb3614;color:#edc26b}.badge.closed{background:#8795a514;color:#a8b9c8}.empty{padding:48px 24px;text-align:center;color:var(--muted)}.pager{padding:16px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}.pager button{font-size:12px}.notice{margin:0 0 22px;padding:12px 16px;border:1px solid #42545a;border-radius:8px;background:#13232a;font-size:13px}.settings-card{max-width:520px}.settings-card form{margin-top:24px}dialog{color:var(--text);background:var(--panel);border:1px solid #3d515e;border-radius:12px;width:min(600px,calc(100% - 32px));max-height:90svh;padding:28px}dialog::backdrop{background:#000a;backdrop-filter:blur(3px)}.dialog-head{margin-bottom:24px}.dialog-head h2{margin:0}.close{padding:4px 10px;font-size:22px}.details{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px 0}.details dt{font-size:11px;color:var(--muted);margin-bottom:4px}.details dd{margin:0;font-size:14px;overflow-wrap:anywhere}.message{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b141b;border:1px solid var(--border);padding:15px;border-radius:7px;margin-bottom:22px}.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}.hint{font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:20px}
+@media(max-width:1000px){.main{padding:0 24px 35px}.workspace{grid-template-columns:195px 1fr}.cards{gap:10px}.card{padding:18px}td,th{padding-left:16px;padding-right:16px}}@media(max-width:720px){.login{grid-template-columns:1fr}.login-story{padding:24px 28px;border-right:0;border-bottom:1px solid var(--border)}.login-story h1{font-size:32px;margin:16px 0}.login-story p,.story-bottom{display:none}.login-story .logo{height:45px;width:95px}.login-form-wrap{padding:35px 26px}.workspace{display:block}.sidebar{position:relative;height:auto;padding:12px 18px;border-right:0;border-bottom:1px solid var(--border)}.sidebar .logo{height:45px;width:85px;margin:0}.workspace-label{display:none}.nav{display:flex;gap:4px;margin-top:12px}.nav button{font-size:12px;padding:8px 10px}.nav-icon{display:none}.sidebar-bottom{position:absolute;right:18px;top:14px;margin:0;padding:0}.sidebar-bottom .row{display:none}.logout{margin:0;padding:7px 12px}.main{padding:0 18px 35px}.topbar{height:55px;margin-bottom:26px}.topbar span:last-child{display:none}h1{font-size:27px}.cards{grid-template-columns:1fr;gap:10px}.card.stat-card{display:flex;align-items:center;justify-content:space-between;padding:14px 18px}.stat{margin:0;font-size:29px}.stat-foot{display:none}.page-head .row{align-items:flex-start}.details{grid-template-columns:1fr 1fr}.panel-head{padding:16px}.pager{padding:14px}.nav button.active{border-radius:7px}}
 </style>
 </head>
 <body>
-
-<!-- ── Custom cursor ── -->
-<div id="c-dot"></div>
-<div id="c-ring"></div>
-
-<!-- ── Scrollbar ── -->
-<div id="arc-sb"><div id="arc-sb-thumb"></div></div>
-
-<!-- ══════════════════════════ NAV ══════════════════════════ -->
-<nav id="nav">
-  <div class="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
-
-    <a href="#top" class="flex items-center" aria-label="Archet Solutions home">
-      <span class="h-11 w-32 flex items-center justify-center drop-shadow-[0_0_18px_rgba(15,255,212,.18)]">
-        <img src="/archet-logo-dark.png" alt="Archet Solutions" class="h-full w-full object-contain" width="1200" height="811"/>
-      </span>
-    </a>
-
-    <div class="hidden md:flex items-center gap-8">
-      <a href="#brands"   class="nav-link">Industries</a>
-      <a href="#services" class="nav-link">Services</a>
-      <a href="#digital"  class="nav-link">Digital</a>
-      <a href="#contact"  class="nav-link">Contact</a>
-    </div>
-
-    <a href="#contact" class="btn-cta text-sm py-2.5 px-5">
-      Get a Quote
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-    </a>
+<div id="boot" class="boot" role="status">Opening your workspace…</div>
+<section id="login" class="login" hidden>
+  <div class="login-story">
+    <img class="logo" src="/archet-logo-dark.png" alt="Archet Solutions">
+    <div><div class="eyebrow">The Archet workspace</div><h1>One team.<br>Every operation.</h1><p class="muted">Your place to manage inquiries, coordinate follow-ups, and keep the team connected.</p></div>
+    <div class="story-bottom">ARCHET SOLUTIONS &nbsp; / &nbsp; INTERNAL OPERATIONS</div>
   </div>
-</nav>
-
-
-<!-- ══════════════════════════ HERO ══════════════════════════ -->
-<section id="top" class="relative min-h-screen flex flex-col justify-center overflow-hidden" style="background:#030309">
-  <canvas id="hero-canvas"></canvas>
-  <div class="scanlines"></div>
-  <div class="bottom-clip"></div>
-
-  <div class="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pt-28 pb-40 w-full">
-
-    <!-- Badge -->
-    <div class="pill mb-8 w-fit" style="animation:fiUp .6s ease both">
-      <span class="pdot"></span>
-      Live Operations · Nationwide Coverage
-    </div>
-
-    <!-- Headline -->
-    <h1 class="font-bold leading-[1.02] mb-6" style="font-family:'Space Grotesk',sans-serif;font-size:clamp(2.6rem,6.5vw,5.2rem);letter-spacing:-.03em">
-      <div class="hero-word" style="animation-delay:.05s"><span class="text-white">The Last Operations</span></div>
-      <div class="hero-word" style="animation-delay:.15s"><span class="text-white">Partner You'll</span></div>
-      <div class="hero-word" style="animation-delay:.25s"><span class="grad-text">Ever Need.</span></div>
-    </h1>
-
-    <p class="mb-10 max-w-xl text-lg leading-relaxed" style="color:rgba(255,255,255,.5);animation:fiUp .8s .35s cubic-bezier(.16,1,.3,1) both">
-      <span style="color:rgba(255,255,255,.85);font-weight:600">900+ stores. 8 major carriers. Gas stations across the USA.</span> Five years of operational excellence that makes our clients stop looking anywhere else.
-    </p>
-
-    <!-- CTAs (magnetic) -->
-    <div class="flex flex-wrap gap-4 mb-16" style="animation:fiUp .8s .45s cubic-bezier(.16,1,.3,1) both">
-      <div class="mag-wrap">
-        <a href="#contact" class="btn-cta mag-btn">
-          <span class="mag-inner flex items-center gap-2">
-            Start Working With Us
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-          </span>
-        </a>
-      </div>
-      <div class="mag-wrap">
-        <a href="#services" class="btn-ghost mag-btn">
-          <span class="mag-inner">Explore Services</span>
-        </a>
-      </div>
-    </div>
-
-    <!-- BENTO STATS -->
-    <div class="bento" style="animation:fiUp .8s .55s cubic-bezier(.16,1,.3,1) both">
-
-      <!-- Big stat -->
-      <div class="bento-card bento-1 flex flex-col justify-between">
-        <div class="sec-label mb-4">Active Locations</div>
-        <div>
-          <div class="num-big" style="font-size:clamp(3.5rem,7vw,6rem)" data-counter="900" data-suffix="+">0</div>
-          <div class="mt-2 text-sm" style="color:rgba(255,255,255,.35)">Retail locations powered by Archet operations.</div>
-        </div>
-        <div class="mt-6 w-full h-1 rounded-full overflow-hidden" style="background:rgba(255,255,255,.07)">
-          <div class="h-full rounded-full" style="background:linear-gradient(90deg,#0FFFD4,rgba(15,255,212,.3));width:90%;animation:barGrow 1.4s .6s ease both"></div>
-        </div>
-      </div>
-
-      <!-- Experience -->
-      <div class="bento-card">
-        <div class="sec-label mb-3">Experience</div>
-        <div class="num-big" style="font-size:2.8rem"><span data-counter="5">0</span>+</div>
-        <div class="text-xs mt-1" style="color:rgba(255,255,255,.35)">Years in industry</div>
-      </div>
-
-      <!-- Accuracy -->
-      <div class="bento-card">
-        <div class="sec-label mb-3">Reconciliation</div>
-        <div class="num-big" style="font-size:2.8rem"><span data-counter="99.4" data-decimals="1">0</span>%</div>
-        <div class="text-xs mt-1" style="color:rgba(255,255,255,.35)">Accuracy rate</div>
-      </div>
-
-      <!-- Wide: tagline -->
-      <div class="bento-card bento-wide flex items-center gap-4" style="background:rgba(15,255,212,.04);border-color:rgba(15,255,212,.15)">
-        <div class="pdot shrink-0"></div>
-        <div>
-          <div class="text-white font-semibold text-base leading-snug">24/7/365 Live Surveillance</div>
-          <div class="text-xs mt-0.5" style="color:rgba(255,255,255,.35)">Eyes on your stores every hour of every day.</div>
-        </div>
-        <div class="ml-auto num-big teal-text text-3xl shrink-0">24<span class="text-lg">/7</span></div>
-      </div>
-
-    </div>
-  </div>
+  <div class="login-form-wrap"><div class="login-card">
+    <div class="eyebrow">Team access</div><h2 style="margin-top:16px">Welcome back.</h2><p class="muted">Sign in with your Archet account.</p>
+    <form id="login-form">
+      <div class="field"><label for="login-username">Username</label><input id="login-username" name="username" autocomplete="username" required maxlength="32" placeholder="Your username"></div>
+      <div class="field"><label for="login-password">Password</label><div class="password-wrap"><input id="login-password" name="password" type="password" autocomplete="current-password" required maxlength="128"><button type="button" id="show-password" aria-controls="login-password" aria-pressed="false">Show</button></div></div>
+      <label class="check"><input id="remember" type="checkbox"> Keep me signed in for 30 days</label>
+      <p id="login-error" class="error" role="alert"></p>
+      <button class="primary" type="submit">Sign in to workspace →</button>
+    </form>
+    <p class="muted small" style="margin-top:25px">Need an account or a password reset? Contact your administrator.</p>
+  </div></div>
 </section>
-
-<style>
-@keyframes barGrow { from{width:0} to{width:90%} }
-</style>
-
-
-<!-- ══════════════════════════ MARQUEE ══════════════════════════ -->
-<section class="py-8 relative z-10" style="background:#030309">
-  <div class="gdiv mb-7"></div>
-  <p class="text-center text-xs mb-5" style="color:rgba(255,255,255,.18);letter-spacing:.22em;text-transform:uppercase;font-weight:600">Operating Across</p>
-  <div class="marquee-mask overflow-hidden">
-    <div class="marquee-track">
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Verizon Wireless</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">AT&amp;T</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">T-Mobile</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Metro by T-Mobile</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Cricket Wireless</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Boost Mobile</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Visible</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Total Wireless</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Gas Stations &amp; Vape Shops</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <!-- duplicate -->
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Verizon Wireless</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">AT&amp;T</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">T-Mobile</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Metro by T-Mobile</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Cricket Wireless</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Boost Mobile</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Visible</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Total Wireless</span><span class="mx-3 teal-text opacity-40">◆</span>
-      <span class="mx-7 text-sm font-semibold whitespace-nowrap" style="color:rgba(255,255,255,.3)">Gas Stations &amp; Vape Shops</span><span class="mx-3 teal-text opacity-40">◆</span>
-    </div>
-  </div>
-  <div class="gdiv mt-7"></div>
-</section>
-
-
-<!-- ══════════════════════════ WHY ARCHET ══════════════════════════ -->
-<section class="py-20 lg:py-28 relative z-10" style="background:#04040E">
-  <div class="max-w-7xl mx-auto px-6 lg:px-8">
-
-    <div class="reveal mb-14">
-      <div class="sec-label mb-4">Why Archet</div>
-      <h2 class="font-bold leading-tight text-white" style="font-family:'Space Grotesk',sans-serif;font-size:clamp(2rem,4vw,3.2rem);letter-spacing:-.025em">
-        The partner your operations<br/><span class="grad-text">actually deserve.</span>
-      </h2>
-    </div>
-
-    <div class="grid md:grid-cols-3 gap-5">
-      <div class="reveal bento-card group">
-        <div class="w-11 h-11 rounded-2xl flex items-center justify-center mb-6 transition-all group-hover:shadow-[0_0_20px_rgba(15,255,212,.2)]" style="background:rgba(15,255,212,.07);border:1px solid rgba(15,255,212,.15)">
-          <svg class="w-5 h-5" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-        </div>
-        <h3 class="text-lg font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif">No Learning Curve.</h3>
-        <p class="text-sm leading-relaxed" style="color:rgba(255,255,255,.4)">We arrive trained, certified, and ready to integrate from day one. Zero onboarding drag. Maximum impact, immediately.</p>
+<div id="workspace" class="workspace" hidden>
+  <aside class="sidebar">
+    <img class="logo" src="/archet-logo-dark.png" alt="Archet Solutions">
+    <div class="workspace-label">WORKSPACE</div>
+    <nav class="nav" aria-label="Workspace navigation">
+      <button data-page="overview" class="active"><span class="nav-icon">◫</span>Overview</button>
+      <button data-page="quotes"><span class="nav-icon">▤</span>Quote inbox</button>
+      <button data-page="users" id="users-nav" hidden><span class="nav-icon">♧</span>Accounts</button>
+      <button data-page="settings"><span class="nav-icon">⚙</span>Settings</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="row"><div class="avatar" id="avatar"></div><div class="identity"><strong id="identity-name"></strong><span id="identity-role"></span></div></div><button id="logout" class="subtle logout">Sign out</button></div>
+  </aside>
+  <main class="main">
+    <header class="topbar"><span>ARCHET &nbsp; / &nbsp; INTERNAL</span><span><i class="live-dot"></i>Team workspace</span></header>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section id="page-overview">
+      <div class="page-head"><div class="eyebrow">Your workspace at a glance</div><h1 id="greeting" style="margin-top:14px">Welcome back.</h1><p class="muted">Keep every conversation moving forward.</p></div>
+      <div class="cards">
+        <div class="card stat-card"><div class="stat-label">Recent inquiries</div><div id="stat-total" class="stat">—</div><div class="stat-foot">Latest 50 submissions</div></div>
+        <div class="card stat-card"><div class="stat-label">Awaiting follow-up</div><div id="stat-new" class="stat" style="color:var(--accent)">—</div><div class="stat-foot">New in the latest 50</div></div>
+        <div class="card stat-card"><div class="stat-label">Contacted</div><div id="stat-contacted" class="stat">—</div><div class="stat-foot">In the latest 50</div></div>
       </div>
-      <div class="reveal reveal-d1 bento-card group">
-        <div class="w-11 h-11 rounded-2xl flex items-center justify-center mb-6 transition-all group-hover:shadow-[0_0_20px_rgba(15,255,212,.2)]" style="background:rgba(15,255,212,.07);border:1px solid rgba(15,255,212,.15)">
-          <svg class="w-5 h-5" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.6 5A9 9 0 1112 3a9 9 0 018.6 12z"/></svg>
-        </div>
-        <h3 class="text-lg font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif">Accountability Built-In.</h3>
-        <p class="text-sm leading-relaxed" style="color:rgba(255,255,255,.4)">SLA-backed response times. Real analysts on every account. We don't over-promise — we over-deliver, every single time.</p>
-      </div>
-      <div class="reveal reveal-d2 bento-card group">
-        <div class="w-11 h-11 rounded-2xl flex items-center justify-center mb-6 transition-all group-hover:shadow-[0_0_20px_rgba(15,255,212,.2)]" style="background:rgba(15,255,212,.07);border:1px solid rgba(15,255,212,.15)">
-          <svg class="w-5 h-5" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-        </div>
-        <h3 class="text-lg font-bold text-white mb-2" style="font-family:'Space Grotesk',sans-serif">Scale Without Chaos.</h3>
-        <p class="text-sm leading-relaxed" style="color:rgba(255,255,255,.4)">From your first location to your 500th, our systems grow with you. The bigger your portfolio, the more value Archet creates.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-
-<!-- ══════════════════════════ INDUSTRIES ══════════════════════════ -->
-<section id="brands" class="py-20 lg:py-28 relative z-10" style="background:#030309">
-  <div class="max-w-7xl mx-auto px-6 lg:px-8">
-    <div class="reveal mb-10">
-      <div class="sec-label mb-4">Industries We Serve</div>
-      <h2 class="font-bold text-white mb-3" style="font-family:'Space Grotesk',sans-serif;font-size:clamp(1.9rem,3.5vw,2.8rem);letter-spacing:-.025em">
-        From telecom giants to gas stations —<br/><span class="teal-text">we run the operations.</span>
-      </h2>
-      <p class="text-sm max-w-lg" style="color:rgba(255,255,255,.4)">Select any carrier or industry to see the complete Archet service stack. Every client gets the full suite.</p>
-    </div>
-
-    <div class="flex flex-wrap gap-3 mb-7 reveal">
-      <button class="ind-tab active" data-filter="telecom">Telecom Carriers</button>
-      <button class="ind-tab" data-filter="retail">Gas Stations &amp; Vape Shops</button>
-    </div>
-
-    <div id="brandGrid" class="reveal grid grid-cols-2 md:grid-cols-4 gap-3"></div>
-  </div>
-</section>
-
-
-<!-- ══════════════════════════ SERVICES ══════════════════════════ -->
-<section id="services" class="py-20 lg:py-28 relative z-10" style="background:#04040E">
-  <div class="max-w-7xl mx-auto px-6 lg:px-8">
-    <div class="gdiv mb-16"></div>
-    <div class="reveal flex flex-wrap items-end justify-between gap-5 mb-10">
-      <div>
-        <div class="sec-label mb-3">Full Operations Stack</div>
-        <h2 class="font-bold text-white" style="font-family:'Space Grotesk',sans-serif;font-size:clamp(1.7rem,3vw,2.4rem);letter-spacing:-.02em">
-          Services for <span id="activeBrandName" class="teal-text">Metro by T-Mobile</span>
-        </h2>
-        <p class="mt-1.5 text-sm" style="color:rgba(255,255,255,.35)"><span id="servicesCount">8</span> specialized services — deployed directly into your workflow.</p>
-      </div>
-      <div class="pill"><span class="pdot"></span>Active Stack</div>
-    </div>
-    <div id="servicesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
-  </div>
-</section>
-
-
-<!-- ══════════════════════════ DIGITAL SERVICES ══════════════════════════ -->
-<section id="digital" class="py-20 lg:py-32 relative z-10 overflow-hidden" style="background:#030309">
-  <div style="position:absolute;top:-120px;right:-80px;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(15,255,212,.06),transparent 70%);pointer-events:none"></div>
-  <div style="position:absolute;bottom:-80px;left:-60px;width:350px;height:350px;border-radius:50%;background:radial-gradient(circle,rgba(245,158,11,.05),transparent 70%);pointer-events:none"></div>
-
-  <div class="relative max-w-7xl mx-auto px-6 lg:px-8">
-    <div class="reveal text-center max-w-3xl mx-auto mb-16">
-      <div class="sec-label mb-4">Digital Services</div>
-      <h2 class="font-bold text-white mb-4" style="font-family:'Space Grotesk',sans-serif;font-size:clamp(2rem,4vw,3.2rem);letter-spacing:-.025em">
-        Your brand and your data,<br/><span class="grad-text">working harder than ever.</span>
-      </h2>
-      <p class="text-base" style="color:rgba(255,255,255,.4)">Beyond operations, Archet builds the digital infrastructure that gives your business clarity, speed, and a brand that commands respect.</p>
-    </div>
-
-    <div class="reveal grid md:grid-cols-2 gap-6 lg:gap-8">
-
-      <!-- Website Dev -->
-      <div class="dig-card">
-        <div class="p-8 lg:p-10">
-          <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-7" style="background:rgba(15,255,212,.07);border:1px solid rgba(15,255,212,.18)">
-            <svg class="w-7 h-7" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M3 9h18M9 21V9"/></svg>
-          </div>
-          <div class="sec-label mb-3" style="color:rgba(15,255,212,.7)">Web Development &amp; Design</div>
-          <h3 class="text-2xl font-bold text-white mb-4 leading-snug" style="font-family:'Space Grotesk',sans-serif;letter-spacing:-.02em">Portals that work as hard as you do.</h3>
-          <p class="text-sm leading-relaxed mb-6" style="color:rgba(255,255,255,.45)">Your business deserves more than a static webpage. We build custom digital portals — intelligent, automated, and personalized to your operations — that surface exactly the data you need, eliminate the manual tasks that drain your team, and free up the bandwidth to focus on what actually moves the needle. When your systems work smarter, your people solve bigger problems.</p>
-          <ul class="space-y-2.5 mb-8">
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Real-time automated data dashboards</li>
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Personalized portals per team, role, or store</li>
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Scheduled reports, alerts &amp; integrations</li>
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#0FFFD4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Mobile-first, fast &amp; built to scale</li>
-          </ul>
-          <a href="#contact" class="btn-cta text-sm py-3 px-6">
-            Get a Web Quote
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-          </a>
-        </div>
-      </div>
-
-      <!-- Logo Design -->
-      <div class="dig-card">
-        <div class="p-8 lg:p-10">
-          <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-7" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2)">
-            <svg class="w-7 h-7" style="color:#F59E0B" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>
-          </div>
-          <div class="sec-label mb-3" style="color:rgba(245,158,11,.8)">Logo &amp; Brand Identity Design</div>
-          <h3 class="text-2xl font-bold text-white mb-4 leading-snug" style="font-family:'Space Grotesk',sans-serif;letter-spacing:-.02em">First impressions are permanent.</h3>
-          <p class="text-sm leading-relaxed mb-6" style="color:rgba(255,255,255,.45)">Your logo is the first thing every customer, partner, and competitor sees — and it either earns respect immediately or it doesn't. We craft logos and brand identities that communicate credibility, professionalism, and purpose at a glance. Because your visual identity should be doing serious work for your business, not just filling space on a business card.</p>
-          <ul class="space-y-2.5 mb-8">
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#F59E0B" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Custom logo concepts with unlimited revisions</li>
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#F59E0B" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Full brand color palette &amp; typography system</li>
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#F59E0B" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>All formats: print, digital, signage</li>
-            <li class="flex items-center gap-2.5 text-sm" style="color:rgba(255,255,255,.5)"><svg class="w-4 h-4 shrink-0" style="color:#F59E0B" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>Complete brand guidelines document</li>
-          </ul>
-          <a href="#contact" class="btn-cta text-sm py-3 px-6">
-            Request Design Work
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-          </a>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</section>
-
-
-<!-- ══════════════════════════ CONTACT ══════════════════════════ -->
-<section id="contact" class="py-20 lg:py-28 relative z-10" style="background:#04040E">
-  <div class="gdiv mb-16"></div>
-  <div class="max-w-3xl mx-auto px-6 lg:px-8">
-
-    <div class="reveal text-center mb-10">
-      <div class="sec-label mb-4">Request a Quote</div>
-      <h2 class="font-bold text-white mb-4" style="font-family:'Space Grotesk',sans-serif;font-size:clamp(1.7rem,3vw,2.4rem);letter-spacing:-.025em">
-        Let's run your operations <span class="teal-text">like clockwork.</span>
-      </h2>
-      <p class="text-sm max-w-xl mx-auto leading-relaxed" style="color:rgba(255,255,255,.4)">Tell us about your business. An Archet strategist will respond within one business day with a tailored proposal.</p>
-    </div>
-
-    <div class="reveal">
-      <form id="quoteForm" class="rounded-2xl p-6 md:p-8" style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)">
-        <div id="formMsg" class="hidden mb-4 px-4 py-3 rounded-xl text-sm font-medium"></div>
-        <div class="grid sm:grid-cols-2 gap-4">
-          <div><label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,.25)">Full Name *</label><input name="full_name" required type="text" placeholder="Jane Doe" class="arc-input"/></div>
-          <div><label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,.25)">Company *</label><input name="company" required type="text" placeholder="Your Business Name" class="arc-input"/></div>
-          <div><label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,.25)">Work Email *</label><input name="email" required type="email" placeholder="jane@company.com" class="arc-input"/></div>
-          <div><label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,.25)">Phone</label><input name="phone" type="tel" placeholder="Your phone number" class="arc-input"/></div>
-          <div>
-            <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,.25)">Industry / Brand *</label>
-            <select name="brand" required class="arc-input">
-              <option value="">Select your industry…</option>
-              <optgroup label="Telecom Carriers">
-                <option>Verizon Wireless</option><option>AT&amp;T</option><option>T-Mobile</option>
-                <option>Visible</option><option>Cricket Wireless</option><option>Total Wireless</option>
-                <option>Boost Mobile</option><option selected>Metro by T-Mobile</option>
-              </optgroup>
-              <optgroup label="Retail Operations">
-                <option>Gas Station / Vape Shop</option>
-              </optgroup>
-              <optgroup label="Digital Services">
-                <option>Website Development &amp; Design</option>
-                <option>Logo &amp; Brand Identity Design</option>
-              </optgroup>
-            </select>
-          </div>
-          <div><label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,.25)">Number of Locations</label><input name="stores" type="number" min="1" placeholder="e.g. 25" class="arc-input"/></div>
-        </div>
-        <div class="mt-4">
-          <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,.25)">What do you need help with?</label>
-          <textarea name="message" rows="4" placeholder="Tell us about your current challenges…" class="arc-input resize-none"></textarea>
-        </div>
-        <button type="submit" class="btn-cta mt-6 w-full justify-center text-base py-4">
-          Request My Custom Quote
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        </button>
-        <p class="mt-3 text-xs text-center" style="color:rgba(255,255,255,.18)">We respect your data. No spam — ever.</p>
-      </form>
-    </div>
-  </div>
-</section>
-
-
-<!-- ══════════════════════════ FOOTER ══════════════════════════ -->
-<footer style="background:#020207;border-top:1px solid rgba(255,255,255,.05)">
-  <div class="max-w-7xl mx-auto px-6 lg:px-8 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
-    <div class="flex items-center gap-3">
-      <span class="h-10 w-28 flex items-center justify-center drop-shadow-[0_0_16px_rgba(15,255,212,.14)]">
-        <img src="/archet-logo-dark.png" alt="Archet Solutions" class="h-full w-full object-contain" width="1200" height="811" loading="lazy"/>
-      </span>
-      <span style="color:rgba(255,255,255,.15);font-size:.8rem">&nbsp;·&nbsp; Operations Intelligence, Delivered.</span>
-    </div>
-    <div class="text-xs" style="color:rgba(255,255,255,.18)">© <span id="year"></span> Archet Solutions. All rights reserved.</div>
-  </div>
-</footer>
-
-
-<!-- ══════════════════════════ JAVASCRIPT ══════════════════════════ -->
+      <div class="panel"><div class="panel-head row between"><h2>Latest inquiries</h2><button class="subtle table-button" data-open-inbox>View inbox →</button></div><div id="recent-quotes"></div></div>
+    </section>
+    <section id="page-quotes" hidden>
+      <div class="page-head row between"><div><h1>Quote inbox</h1><p class="muted">Inquiries from archetsolutions.com, shared with your team.</p></div><button id="refresh-quotes" class="subtle">Refresh</button></div>
+      <div class="panel"><div id="quote-list"></div><div class="pager"><button id="previous" class="subtle">← Previous</button><span id="page-number" class="muted small"></span><button id="next" class="subtle">Next →</button></div></div>
+    </section>
+    <section id="page-users" hidden>
+      <div class="page-head row between"><div><h1>Team accounts</h1><p class="muted">Create logins and manage workspace access.</p></div><button id="add-user" class="primary">+ Create account</button></div>
+      <div class="panel" id="user-list"></div><p class="muted small" style="margin-top:18px">Admins manage accounts. Members can view inquiries and update follow-ups. The owner account is permanent.</p>
+    </section>
+    <section id="page-settings" hidden>
+      <div class="page-head"><h1>Account settings</h1><p class="muted">Keep your login up to date.</p></div>
+      <div class="card settings-card"><h2>Change password</h2><p class="muted small">Changing your password signs you out on all devices.</p><form id="password-form">
+        <div class="field"><label for="current-password">Current password</label><input id="current-password" type="password" autocomplete="current-password" required maxlength="128"></div>
+        <div class="field"><label for="new-password">New password</label><input id="new-password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></div>
+        <div class="field"><label for="confirm-password">Confirm new password</label><input id="confirm-password" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></div>
+        <p id="password-error" class="error" role="alert"></p><button class="primary" type="submit">Update password</button>
+      </form></div>
+    </section>
+  </main>
+</div>
+<dialog id="user-dialog" aria-labelledby="user-title">
+  <div class="dialog-head row between"><h2 id="user-title">Create account</h2><button class="subtle close" data-close="user-dialog" aria-label="Close account form">×</button></div>
+  <form id="user-form">
+    <div id="new-user-fields"><div class="field"><label for="user-display-name">Full name</label><input id="user-display-name" maxlength="100" autocomplete="off"></div><div class="field"><label for="user-username">Username</label><input id="user-username" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="off"></div><p class="hint">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p></div>
+    <div class="field"><label for="user-role">Role</label><select id="user-role"><option value="member">Member — inquiries and follow-ups</option><option value="admin">Admin — accounts and inquiries</option></select></div>
+    <div class="field" id="user-active-field" hidden><label for="user-active">Account access</label><select id="user-active"><option value="true">Active</option><option value="false">Disabled</option></select></div>
+    <div class="field"><label id="user-password-label" for="user-password">Initial password</label><input id="user-password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div>
+    <p id="user-hint" class="hint">Share the username and password privately with your team member.</p>
+    <p id="user-error" class="error" role="alert"></p><div class="actions"><button type="button" class="subtle" data-close="user-dialog">Cancel</button><button type="submit" class="primary">Save account</button></div>
+  </form>
+</dialog>
+<dialog id="quote-dialog" aria-labelledby="quote-title">
+  <div class="dialog-head row between"><h2 id="quote-title">Quote request</h2><button class="subtle close" data-close="quote-dialog" aria-label="Close quote request">×</button></div>
+  <dl id="quote-details" class="details"></dl><h3>Message</h3><div id="quote-message" class="message"></div>
+  <form id="quote-form"><div class="field"><label for="quote-status">Follow-up status</label><select id="quote-status"><option value="new">New</option><option value="contacted">Contacted</option><option value="closed">Closed</option></select></div><div class="field"><label for="quote-notes">Team notes</label><textarea id="quote-notes" maxlength="10000" placeholder="Add context for your team…"></textarea></div><p id="quote-error" class="error" role="alert"></p><div class="actions"><button type="button" class="subtle" data-close="quote-dialog">Cancel</button><button type="submit" class="primary">Save follow-up</button></div></form>
+</dialog>
 <script>
-(function () {
 'use strict';
-
-/* ── PARTICLE CANVAS ────────────────────────────────────── */
-const canvas = document.getElementById('hero-canvas');
-const ctx    = canvas.getContext('2d');
-let W, H, animId;
-const mouse = { x: -999, y: -999 };
-let particles = [];
-const N = 85, MAX_D = 130;
-
-function resize() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
-  particles = Array.from({ length: N }, () => ({
-    x: Math.random() * W, y: Math.random() * H,
-    vx: (Math.random() - .5) * .55, vy: (Math.random() - .5) * .55,
-    r: Math.random() * 1.8 + .5, opacity: Math.random() * .5 + .3,
-  }));
+const $ = id => document.getElementById(id);
+let currentUser = null, page = 'overview', quotes = [], users = [], offset = 0, hasMore = false, editingUser = null, editingQuote = null;
+const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const date = value => new Date(value).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
+function notice(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = !message; }
+function signedOut(message = '') {
+  document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+  currentUser = null; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
+  ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
+  ['password-form','user-form','quote-form'].forEach(id => $(id).reset());
+  $('workspace').hidden = true; $('boot').hidden = true; $('login').hidden = false; $('login-error').textContent = message;
+  $('login-password').value = ''; $('login-username').focus();
 }
-resize();
-window.addEventListener('resize', resize);
-
-window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
-
-function drawFrame() {
-  ctx.clearRect(0, 0, W, H);
-
-  particles.forEach(p => {
-    // Cursor repulsion
-    const dx = mouse.x - p.x, dy = mouse.y - p.y;
-    const d  = Math.hypot(dx, dy);
-    if (d < 110 && d > 0) {
-      const force = (110 - d) / 110;
-      p.vx -= (dx / d) * force * .4;
-      p.vy -= (dy / d) * force * .4;
-    }
-    // Speed cap
-    const spd = Math.hypot(p.vx, p.vy);
-    if (spd > 2) { p.vx = (p.vx/spd)*2; p.vy = (p.vy/spd)*2; }
-    // Friction
-    p.vx *= .99; p.vy *= .99;
-
-    p.x += p.vx; p.y += p.vy;
-    if (p.x < 0) { p.x = 0; p.vx *= -1; }
-    if (p.x > W) { p.x = W; p.vx *= -1; }
-    if (p.y < 0) { p.y = 0; p.vy *= -1; }
-    if (p.y > H) { p.y = H; p.vy *= -1; }
-
-    // Draw dot
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(15,255,212,${p.opacity})`;
-    ctx.fill();
-  });
-
-  // Draw connections
-  for (let i = 0; i < N; i++) {
-    for (let j = i + 1; j < N; j++) {
-      const dx = particles[i].x - particles[j].x;
-      const dy = particles[i].y - particles[j].y;
-      const d  = Math.hypot(dx, dy);
-      if (d < MAX_D) {
-        const a = (1 - d / MAX_D) * .35;
-        ctx.beginPath();
-        ctx.moveTo(particles[i].x, particles[i].y);
-        ctx.lineTo(particles[j].x, particles[j].y);
-        ctx.strokeStyle = `rgba(15,255,212,${a})`;
-        ctx.lineWidth = .7;
-        ctx.stroke();
-      }
-    }
+async function api(path, method = 'GET', data) {
+  let response;
+  try { response = await fetch('/api/internal/' + path, {method, credentials:'same-origin', headers:{'Content-Type':'application/json','X-Archet-Request':'1'}, ...(data !== undefined ? {body:JSON.stringify(data)} : {})}); }
+  catch { throw new Error('Unable to connect. Check your connection and try again.'); }
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = result.message || 'The request could not be completed.';
+    if (response.status === 401 && currentUser) signedOut('Your session has ended. Please sign in again.');
+    throw new Error(message);
   }
-
-  // Mouse to nearby particles
-  particles.forEach(p => {
-    const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
-    if (d < 160) {
-      const a = (1 - d / 160) * .6;
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-      ctx.lineTo(mouse.x, mouse.y);
-      ctx.strokeStyle = `rgba(15,255,212,${a})`;
-      ctx.lineWidth = .5;
-      ctx.stroke();
-    }
-  });
-
-  animId = requestAnimationFrame(drawFrame);
+  return result;
 }
-drawFrame();
-
-// Pause canvas when not in viewport
-new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting) { if (!animId) drawFrame(); }
-    else { cancelAnimationFrame(animId); animId = null; }
-  });
-}).observe(document.getElementById('top'));
-
-
-/* ── CUSTOM CURSOR ─────────────────────────────────────── */
-const cDot  = document.getElementById('c-dot');
-const cRing = document.getElementById('c-ring');
-let mx = window.innerWidth/2, my = window.innerHeight/2;
-let rx = mx, ry = my;
-
-window.addEventListener('mousemove', e => {
-  mx = e.clientX; my = e.clientY;
-  cDot.style.left = mx + 'px';
-  cDot.style.top  = my + 'px';
-});
-(function ringLoop() {
-  rx += (mx - rx) * .11;
-  ry += (my - ry) * .11;
-  cRing.style.left = rx + 'px';
-  cRing.style.top  = ry + 'px';
-  requestAnimationFrame(ringLoop);
-})();
-
-document.querySelectorAll('a, button, .brand-card, .ind-tab').forEach(el => {
-  el.addEventListener('mouseenter', () => document.body.classList.add('cursor-hover'));
-  el.addEventListener('mouseleave', () => document.body.classList.remove('cursor-hover'));
-});
-window.addEventListener('mousedown', () => document.body.classList.add('cursor-click'));
-window.addEventListener('mouseup',   () => document.body.classList.remove('cursor-click'));
-
-
-/* ── MAGNETIC BUTTONS ──────────────────────────────────── */
-document.querySelectorAll('.mag-btn').forEach(btn => {
-  btn.addEventListener('mousemove', e => {
-    const r  = btn.getBoundingClientRect();
-    const x  = e.clientX - r.left - r.width  / 2;
-    const y  = e.clientY - r.top  - r.height / 2;
-    btn.style.transform = `translate(${x * .28}px, ${y * .28}px)`;
-    const inner = btn.querySelector('.mag-inner');
-    if (inner) inner.style.transform = `translate(${x * .1}px, ${y * .1}px)`;
-  });
-  btn.addEventListener('mouseleave', () => {
-    btn.style.transform = '';
-    const inner = btn.querySelector('.mag-inner');
-    if (inner) inner.style.transform = '';
-    btn.style.transition = 'transform .5s cubic-bezier(.16,1,.3,1)';
-    setTimeout(() => { btn.style.transition = ''; }, 500);
-  });
-});
-
-
-/* ── BRAND & SERVICE DATA ──────────────────────────────── */
-const TELECOM = [
-  { id:'verizon', name:'Verizon Wireless',  tag:'National Carrier',   color:'#CD040B' },
-  { id:'att',     name:'AT&T',              tag:'National Carrier',   color:'#00A8E0' },
-  { id:'tmobile', name:'T-Mobile',          tag:'National Carrier',   color:'#E20074' },
-  { id:'visible', name:'Visible',           tag:'MVNO',               color:'#7C3AED' },
-  { id:'cricket', name:'Cricket Wireless',  tag:'Prepaid',            color:'#00B140' },
-  { id:'total',   name:'Total Wireless',    tag:'Prepaid',            color:'#0033A0' },
-  { id:'boost',   name:'Boost Mobile',      tag:'Prepaid',            color:'#F58220' },
-  { id:'metro',   name:'Metro by T-Mobile', tag:'Prepaid · Flagship', color:'#E20074', flagship:true },
-];
-const RETAIL = [
-  { id:'gas', name:'Gas Station & Vape Shops', tag:'Retail Operations · USA', color:'#10B981' },
-];
-
-const ic = p => `<svg class="w-5 h-5 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${p}</svg>`;
-const ICONS = {
-  eye:   ic('<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.46 12C3.73 7.94 7.52 5 12 5s8.27 2.94 9.54 7c-1.27 4.06-5.06 7-9.54 7s-8.27-2.94-9.54-7z"/>'),
-  shield:ic('<path stroke-linecap="round" stroke-linejoin="round" d="M12 2l8 4v6c0 5-3.5 9.4-8 10-4.5-.6-8-5-8-10V6l8-4z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4"/>'),
-  check: ic('<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.6 5A9 9 0 1112 3a9 9 0 018.6 12z"/>'),
-  users: ic('<path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5.13a4 4 0 11-8 0 4 4 0 018 0zm6 0a3 3 0 11-6 0 3 3 0 016 0z"/>'),
-  doc:   ic('<path stroke-linecap="round" stroke-linejoin="round" d="M9 7h6m-6 4h6m-6 4h4M5 5a2 2 0 012-2h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5z"/>'),
-  box:   ic('<path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0v10l-8 4m8-14l-8 4m0 10V11m0 10l-8-4V7m8 4L4 7"/>'),
-  chart: ic('<path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8M17 7h4v4"/>'),
-  data:  ic('<path stroke-linecap="round" stroke-linejoin="round" d="M9 19V5m6 14v-9m-3 9v-5M3 21h18M3 3h18"/>'),
-  cal:   ic('<rect x="3" y="4" width="18" height="18" rx="2" stroke-linecap="round" stroke-linejoin="round"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 2v4M8 2v4M3 10h18"/>'),
-  clip:  ic('<path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>'),
-};
-
-const TELECOM_SVC = [
-  { name:'Live Surveillance',              icon:ICONS.eye,   desc:"Real-time camera monitoring with trained operators flagging suspicious activity 24/7/365." },
-  { name:'Loss Prevention',                icon:ICONS.shield,desc:'Proactive shrinkage control, escalation protocols, and detailed incident documentation.' },
-  { name:'Quality Assurance',              icon:ICONS.check, desc:'Mystery audits, KPI scoring, and corrective action workflows that drive measurable store lift.' },
-  { name:'Recruitment',                    icon:ICONS.users, desc:'End-to-end hiring funnel: sourcing, screening, scheduling, and onboarding telecom-ready talent.' },
-  { name:'Compensation Reconciliation',    icon:ICONS.doc,   desc:"Line-by-line audit of carrier compensation files against POS data — recover every dollar you're owed." },
-  { name:'Inventory Ordering / Hardcount', icon:ICONS.box,   desc:'Demand-driven ordering plus scheduled hardcount audits to keep stock tight and theft-free.' },
-  { name:'Commissions',                    icon:ICONS.chart, desc:'Accurate, on-time commission calculation and payout tracking for your entire sales floor.' },
-  { name:'Automated Data Reporting',       icon:ICONS.data,  desc:'Custom portal, live dashboards, and scheduled reports — your data, exactly when you need it.' },
-];
-const GAS_SVC = [
-  { name:'24/7 Live Surveillance',          icon:ICONS.eye,   desc:'Round-the-clock monitoring of forecourt, convenience store, and back-office areas — every shift.' },
-  { name:'Loss Prevention & Shrinkage',     icon:ICONS.shield,desc:'Dedicated theft deterrence, vendor compliance checks, and incident documentation to protect margins.' },
-  { name:'Staff Recruitment & Vetting',     icon:ICONS.users, desc:'End-to-end hiring for cashiers, shift supervisors, and overnight staff — background-checked and ready.' },
-  { name:'Inventory & Stock Management',    icon:ICONS.box,   desc:'Demand-driven ordering, daily shelf audits, and shrink reconciliation to keep your vape shop stocked.' },
-  { name:'Compliance & Safety Audits',      icon:ICONS.clip,  desc:'Age verification checks, safety protocol reviews, and regulatory compliance documentation per location.' },
-  { name:'Shift Scheduling & Workforce',    icon:ICONS.cal,   desc:'Optimized shift scheduling, attendance tracking, and coverage management so no shift goes unstaffed.' },
-  { name:'Revenue Reconciliation',          icon:ICONS.doc,   desc:'Cash drawer audits, fuel sales matching, and daily revenue reconciliation to catch every discrepancy.' },
-  { name:'Automated Reporting & Dashboards',icon:ICONS.data,  desc:'Custom portals with real-time sales, inventory, and staff performance data — your entire operation at a glance.' },
-];
-
-const SVC_MAP = {};
-TELECOM.forEach(b => { SVC_MAP[b.id] = TELECOM_SVC; });
-SVC_MAP['gas'] = GAS_SVC;
-
-let activeId = 'metro';
-const brandGrid    = document.getElementById('brandGrid');
-const activeBName  = document.getElementById('activeBrandName');
-const svcCount     = document.getElementById('servicesCount');
-const svcGrid      = document.getElementById('servicesGrid');
-
-
-/* ── RENDER BRAND GRID ─────────────────────────────────── */
-function renderBrands(list) {
-  brandGrid.innerHTML = '';
-  list.forEach(b => {
-    const btn = document.createElement('button');
-    btn.type = 'button'; btn.dataset.id = b.id;
-    btn.className = 'brand-card' + (b.id === activeId ? ' active' : '');
-    btn.innerHTML = `
-      <div class="flex items-center justify-between mb-4">
-        <span class="w-2.5 h-2.5 rounded-full inline-block" style="background:${b.color};box-shadow:0 0 8px ${b.color}66"></span>
-        ${b.flagship ? '<span class="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" style="background:rgba(15,255,212,.1);color:#0FFFD4;border:1px solid rgba(15,255,212,.2)">Flagship</span>' : ''}
-      </div>
-      <div class="b-name text-sm font-bold text-white leading-tight mb-1">${b.name}</div>
-      <div class="text-[10px] uppercase tracking-wider" style="color:rgba(255,255,255,.25)">${b.tag}</div>
-    `;
-    btn.addEventListener('mouseenter', () => document.body.classList.add('cursor-hover'));
-    btn.addEventListener('mouseleave', () => document.body.classList.remove('cursor-hover'));
-    btn.addEventListener('click', () => {
-      activeId = b.id;
-      document.querySelectorAll('.brand-card').forEach(el => el.classList.toggle('active', el.dataset.id === b.id));
-      renderServices(b.id);
-      document.getElementById('services').scrollIntoView({ behavior:'smooth', block:'start' });
-    });
-    brandGrid.appendChild(btn);
-  });
+async function submit(form, errorId, action) {
+  const button = form.querySelector('[type=submit]'); button.disabled = true; $(errorId).textContent = '';
+  try { await action(); } catch (error) { $(errorId).textContent = error.message; } finally { button.disabled = false; }
 }
-
-
-/* ── RENDER SERVICE CARDS ─────────────────────────────── */
-function renderServices(id) {
-  const brand = [...TELECOM, ...RETAIL].find(b => b.id === id);
-  const svcs  = SVC_MAP[id] || TELECOM_SVC;
-  activeBName.textContent = brand.name;
-  svcCount.textContent    = svcs.length;
-  svcGrid.innerHTML = '';
-
-  svcs.forEach((s, i) => {
-    const card = document.createElement('div');
-    card.className = 'svc-card fi';
-    card.style.animationDelay = (i * .07) + 's';
-    card.innerHTML = `
-      <div class="svc-icon-box mb-5">${s.icon}</div>
-      <h3 class="text-sm font-bold text-white mb-2 leading-snug">${s.name}</h3>
-      <p class="text-xs leading-relaxed" style="color:rgba(255,255,255,.38)">${s.desc}</p>
-      <div class="mt-5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider" style="color:rgba(15,255,212,.7)">
-        Included <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
-      </div>
-    `;
-    // 3D tilt
-    card.addEventListener('mousemove', e => {
-      const r  = card.getBoundingClientRect();
-      const x  = (e.clientX - r.left) / r.width;
-      const y  = (e.clientY - r.top)  / r.height;
-      card.style.setProperty('--mx', (x*100)+'%');
-      card.style.setProperty('--my', (y*100)+'%');
-      card.style.transform = `perspective(700px) rotateX(${(y-.5)*-9}deg) rotateY(${(x-.5)*9}deg) translateY(-4px)`;
-    });
-    card.addEventListener('mouseleave', () => { card.style.transform=''; });
-    svcGrid.appendChild(card);
-  });
+function enterWorkspace(user) {
+  currentUser = user; $('boot').hidden = true; $('login').hidden = true; $('workspace').hidden = false;
+  $('identity-name').textContent = user.display_name; $('identity-role').textContent = user.is_owner ? 'Workspace owner' : user.role === 'admin' ? 'Administrator' : 'Team member';
+  $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
+  $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice(''); showPage('overview');
 }
-
-
-/* ── INDUSTRY TABS ─────────────────────────────────────── */
-document.querySelectorAll('.ind-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.ind-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    if (tab.dataset.filter === 'telecom') {
-      activeId = 'metro'; renderBrands(TELECOM); renderServices('metro');
-    } else {
-      activeId = 'gas'; renderBrands(RETAIL); renderServices('gas');
-    }
-    document.getElementById('services').scrollIntoView({ behavior:'smooth', block:'start' });
-  });
-});
-
-renderBrands(TELECOM);
-renderServices('metro');
-
-
-/* ── STAT COUNTERS ─────────────────────────────────────── */
-function animCounter(el) {
-  const target   = parseFloat(el.dataset.counter);
-  const decimals = parseInt(el.dataset.decimals || '0', 10);
-  const suffix   = el.dataset.suffix || '';
-  const dur = 1800, t0 = performance.now();
-  (function tick(now) {
-    const t = Math.min(1, (now - t0) / dur);
-    const v = target * (1 - Math.pow(1 - t, 4));
-    el.textContent = (decimals ? v.toFixed(decimals) : Math.floor(v).toLocaleString('en-US')) + suffix;
-    if (t < 1) requestAnimationFrame(tick);
-    else el.textContent = (decimals ? target.toFixed(decimals) : target.toLocaleString('en-US')) + suffix;
-  })(t0);
+async function showPage(name) {
+  if (name === 'users' && currentUser?.role !== 'admin') return;
+  page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
+  document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
+  notice('');
+  try { if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
+  catch (error) { notice(error.message, true); }
 }
-document.querySelectorAll('[data-counter]').forEach(el => {
-  new IntersectionObserver((entries, obs) => {
-    entries.forEach(e => { if (e.isIntersecting) { animCounter(el); obs.unobserve(el); } });
-  }, { threshold: .5 }).observe(el);
-});
-
-
-/* ── SCROLL REVEAL ─────────────────────────────────────── */
-document.querySelectorAll('.reveal').forEach(el => {
-  new IntersectionObserver((entries, obs) => {
-    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); } });
-  }, { threshold: .1 }).observe(el);
-});
-
-
-/* ── NAV SCROLL EFFECT ─────────────────────────────────── */
-window.addEventListener('scroll', () => {
-  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 60);
-}, { passive: true });
-
-
-/* ── CUSTOM SCROLLBAR ──────────────────────────────────── */
-const sbThumb = document.getElementById('arc-sb-thumb');
-function updateSB() {
-  const max = document.documentElement.scrollHeight - window.innerHeight;
-  if (max <= 0) return;
-  const ratio = window.scrollY / max;
-  const th = Math.max(40, (window.innerHeight / document.documentElement.scrollHeight) * window.innerHeight);
-  sbThumb.style.height    = th + 'px';
-  sbThumb.style.transform = `translateY(${ratio * (window.innerHeight - th)}px)`;
-  sbThumb.style.opacity   = window.scrollY > 10 ? '1' : '.5';
+function quoteTable(rows) {
+  if (!rows.length) return '<div class="empty">No inquiries yet. New quote requests will appear here.</div>';
+  return '<div class="table-wrap"><table><thead><tr><th>Contact / company</th><th>Industry</th><th>Received</th><th>Status</th><th><span class="muted">Details</span></th></tr></thead><tbody>' + rows.map(q => '<tr><td><strong>' + escapeHTML(q.full_name) + '</strong><small>' + escapeHTML(q.company) + '</small></td><td>' + escapeHTML(q.brand) + '</td><td>' + escapeHTML(date(q.received_at)) + '</td><td><span class="badge ' + escapeHTML(q.status) + '">' + escapeHTML(q.status) + '</span></td><td><button class="subtle table-button" data-quote="' + escapeHTML(q.id) + '">Open →</button></td></tr>').join('') + '</tbody></table></div>';
 }
-window.addEventListener('scroll', updateSB, { passive:true });
-window.addEventListener('resize', updateSB);
-updateSB();
-
-
-/* ── QUOTE FORM ────────────────────────────────────────── */
-const form    = document.getElementById('quoteForm');
-const formMsg = document.getElementById('formMsg');
-form.addEventListener('submit', async e => {
-  e.preventDefault();
-  const data = Object.fromEntries(new FormData(form).entries());
-  formMsg.className = 'mb-4 px-4 py-3 rounded-xl text-sm font-medium';
-  formMsg.style.cssText = 'background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1)';
-  formMsg.textContent = 'Sending…';
-  formMsg.classList.remove('hidden');
-  try {
-    const res = await fetch('/api/quote', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-    const out = await res.json();
-    if (res.ok) {
-      formMsg.style.cssText = 'background:rgba(15,255,212,.08);color:#0FFFD4;border:1px solid rgba(15,255,212,.2)';
-      formMsg.textContent = out.message; form.reset();
-    } else {
-      formMsg.style.cssText = 'background:rgba(239,68,68,.1);color:#FCA5A5;border:1px solid rgba(239,68,68,.2)';
-      formMsg.textContent = out.message || 'Something went wrong.';
-    }
-  } catch {
-    formMsg.style.cssText = 'background:rgba(239,68,68,.1);color:#FCA5A5;border:1px solid rgba(239,68,68,.2)';
-    formMsg.textContent = 'Network error. Please try again.';
-  }
+async function loadOverview() {
+  $('recent-quotes').innerHTML = '<div class="empty">Loading inquiries…</div>';
+  const data = await api('quotes'); if (!currentUser || page !== 'overview') return; quotes = data.quotes;
+  $('stat-total').textContent = quotes.length; $('stat-new').textContent = quotes.filter(q => q.status === 'new').length; $('stat-contacted').textContent = quotes.filter(q => q.status === 'contacted').length;
+  $('recent-quotes').innerHTML = quoteTable(quotes.slice(0,5));
+}
+async function loadQuotes() {
+  $('quote-list').innerHTML = '<div class="empty">Loading inquiries…</div>';
+  const requestedOffset = offset; const data = await api('quotes?offset=' + requestedOffset); if (!currentUser || page !== 'quotes' || offset !== requestedOffset) return;
+  quotes = data.quotes; hasMore = data.has_more; $('quote-list').innerHTML = quoteTable(quotes);
+  $('previous').disabled = offset === 0; $('next').disabled = !hasMore; $('page-number').textContent = 'Page ' + (offset / 50 + 1);
+}
+async function loadUsers() {
+  $('user-list').innerHTML = '<div class="empty">Loading accounts…</div>';
+  const data = await api('users'); if (!currentUser || page !== 'users') return; users = data.users;
+  $('user-list').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Team member</th><th>Username</th><th>Role</th><th>Access</th><th>Manage</th></tr></thead><tbody>' + users.map(u => '<tr><td><strong>' + escapeHTML(u.display_name) + '</strong><small>Added ' + escapeHTML(date(u.created_at)) + '</small></td><td>' + escapeHTML(u.username) + '</td><td>' + (u.is_owner ? 'Owner' : escapeHTML(u.role)) + '</td><td><span class="badge ' + (u.active ? 'new' : 'closed') + '">' + (u.active ? 'Active' : 'Disabled') + '</span></td><td>' + (u.is_owner ? '<span class="muted small">Permanent owner</span>' : u.id === currentUser.id ? '<span class="muted small">Your account</span>' : '<button class="subtle table-button" data-user="' + escapeHTML(u.id) + '">Manage</button>') + '</td></tr>').join('') + '</tbody></table></div>';
+}
+function userDialog(user = null) {
+  editingUser = user; $('user-form').reset(); $('user-error').textContent = '';
+  $('user-title').textContent = user ? 'Manage ' + user.username : 'Create account'; $('new-user-fields').hidden = !!user; $('user-active-field').hidden = !user;
+  $('user-display-name').required = !user; $('user-username').required = !user; $('user-password').required = !user;
+  $('user-password-label').textContent = user ? 'Reset password (optional)' : 'Initial password';
+  $('user-hint').textContent = user ? 'Leave the password blank to keep it. Saving revokes all current sessions for this account.' : 'Share the username and password privately with your team member.';
+  if (user) { $('user-role').value = user.role; $('user-active').value = String(user.active); }
+  $('user-dialog').showModal();
+}
+function quoteDialog(quote) {
+  editingQuote = quote; $('quote-error').textContent = ''; $('quote-title').textContent = quote.company;
+  const fields = [['Contact',quote.full_name],['Email',quote.email],['Phone',quote.phone || 'Not provided'],['Industry',quote.brand],['Locations',quote.stores || 'Not provided'],['Received',date(quote.received_at)],['Email notification',quote.notification_status]];
+  $('quote-details').innerHTML = fields.map(([label,value]) => '<div><dt>' + escapeHTML(label) + '</dt><dd>' + escapeHTML(value) + '</dd></div>').join('');
+  $('quote-message').textContent = quote.message || 'No message provided.'; $('quote-status').value = quote.status; $('quote-notes').value = quote.notes; $('quote-dialog').showModal();
+}
+$('show-password').onclick = () => { const visible = $('login-password').type === 'password'; $('login-password').type = visible ? 'text' : 'password'; $('show-password').textContent = visible ? 'Hide' : 'Show'; $('show-password').setAttribute('aria-pressed', String(visible)); };
+$('login-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'login-error', async () => { const data = await api('login', 'POST', {username:$('login-username').value.trim(), password:$('login-password').value, remember:$('remember').checked}); enterWorkspace(data.user); }); };
+$('logout').onclick = async () => { $('logout').disabled = true; try { await api('logout','POST',{}); signedOut(); } catch (error) { notice(error.message,true); } finally { $('logout').disabled = false; } };
+document.addEventListener('click', event => {
+  const nav = event.target.closest('[data-page]'); if (nav) showPage(nav.dataset.page);
+  const close = event.target.closest('[data-close]'); if (close) $(close.dataset.close).close();
+  if (event.target.closest('[data-open-inbox]')) { offset = 0; showPage('quotes'); }
+  const user = event.target.closest('[data-user]'); if (user) { const found = users.find(u => u.id === user.dataset.user); if (found) userDialog(found); }
+  const quote = event.target.closest('[data-quote]'); if (quote) { const found = quotes.find(q => q.id === quote.dataset.quote); if (found) quoteDialog(found); }
 });
-
-document.getElementById('year').textContent = new Date().getFullYear();
-
-})();
+$('add-user').onclick = () => userDialog();
+$('refresh-quotes').onclick = () => showPage('quotes');
+$('previous').onclick = () => { offset = Math.max(0,offset - 50); showPage('quotes'); };
+$('next').onclick = () => { if (hasMore) { offset += 50; showPage('quotes'); } };
+$('user-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'user-error', async () => {
+  const data = {role:$('user-role').value}; const password = $('user-password').value;
+  if (editingUser) { data.active = $('user-active').value === 'true'; if (password) data.password = password; await api('users/' + editingUser.id,'PATCH',data); }
+  else { Object.assign(data,{username:$('user-username').value.trim(), display_name:$('user-display-name').value.trim(), password}); await api('users','POST',data); }
+  $('user-dialog').close(); $('user-form').reset(); notice(editingUser ? 'Account updated. Previous sessions were revoked.' : 'Account created. Your team member can now sign in.'); await loadUsers();
+}); };
+$('quote-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'quote-error', async () => { await api('quotes/' + editingQuote.id, 'PATCH', {status:$('quote-status').value, notes:$('quote-notes').value}); $('quote-dialog').close(); await showPage(page); notice('Follow-up saved.'); }); };
+$('password-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'password-error', async () => {
+  if ($('new-password').value !== $('confirm-password').value) throw new Error('The new passwords do not match.');
+  await api('password','POST',{current_password:$('current-password').value,new_password:$('new-password').value}); signedOut('Password updated. Sign in with your new password.');
+}); };
+api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));
 </script>
 </body>
 </html>

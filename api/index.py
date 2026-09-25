@@ -1,20 +1,30 @@
 """
 ARCHET SOLUTIONS - Flask Backend Server
-Serves index.html directly from the root directory (no templates/static folders).
+Serves the public website and the internal workspace by hostname.
 """
 
-from flask import Flask, send_from_directory, request, jsonify
+from flask import Flask, send_from_directory, request, jsonify, redirect
 import os
-import json
+from dotenv import load_dotenv
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, timezone
 from html import escape
 
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+
+try:
+    from api.supabase_store import db, StoreError
+    from api.portal import register_portal, portal_host, INTERNAL_HOST, rate_limit, client_address, PortalError
+except ModuleNotFoundError:
+    from supabase_store import db, StoreError
+    from portal import register_portal, portal_host, INTERNAL_HOST, rate_limit, client_address, PortalError
+
 EMAIL_FROM = os.getenv("EMAIL_FROM", "mahee123.aamir@gmail.com")
 EMAIL_TO = os.getenv("EMAIL_TO", EMAIL_FROM)
-EMAIL_APP_PWD = os.getenv("EMAIL_APP_PWD", "qovp cfsv jziy uexv")
+EMAIL_APP_PWD = os.getenv("EMAIL_APP_PWD", "")
 SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
 SITE_URL = os.getenv("SITE_URL", "https://archetsolutions.com").rstrip("/")
@@ -30,7 +40,7 @@ def send_email(to_email, subject, html):
     msg["From"] = f"Archet Solutions <{EMAIL_FROM}>"
     msg["To"] = to_email
     msg.attach(MIMEText(html, "html"))
-    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as srv:
+    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as srv:
         srv.login(EMAIL_FROM, EMAIL_APP_PWD)
         srv.sendmail(EMAIL_FROM, to_email, msg.as_string())
 
@@ -159,40 +169,8 @@ def send_lead_notification(record):
 
 
 # Resolve the absolute path of the directory this file lives in.
-# Both joinnex.py and index.html sit in this same directory.
-# Go up one level from api/ to reach the repo root where index.html lives
+# Go up one level from api/ to reach the frontend files.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-def leads_backup_path():
-    configured_path = os.getenv("LEADS_FILE")
-    if configured_path:
-        return configured_path
-    if os.getenv("VERCEL"):
-        return os.path.join("/tmp", "archet-leads.json")
-    return os.path.join(BASE_DIR, "leads.json")
-
-
-def backup_lead(record):
-    leads_path = leads_backup_path()
-    try:
-        leads_dir = os.path.dirname(leads_path)
-        if leads_dir:
-            os.makedirs(leads_dir, exist_ok=True)
-
-        existing = []
-        if os.path.exists(leads_path):
-            with open(leads_path, "r", encoding="utf-8") as fh:
-                try:
-                    existing = json.load(fh)
-                except json.JSONDecodeError:
-                    existing = []
-
-        existing.append(record)
-        with open(leads_path, "w", encoding="utf-8") as fh:
-            json.dump(existing, fh, indent=2)
-    except OSError as exc:
-        print(f"[leads] Could not write backup to {leads_path}: {exc}")
-
 
 # Disable Flask's default template_folder and static_folder so it does
 # NOT look for a /templates or /static directory at all.
@@ -201,17 +179,40 @@ app = Flask(
     static_folder=None,
     template_folder=None,
 )
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024
+register_portal(app)
 
 # ---------------------------------------------------------------------------
-# Route: Serve the homepage (index.html) directly from the project root.
+# Route: Serve the appropriate homepage directly from the project root.
 # ---------------------------------------------------------------------------
 @app.route("/", methods=["GET"])
 def home():
     """
-    Safely serves index.html from BASE_DIR using send_from_directory,
+    Safely serves the frontend from BASE_DIR using send_from_directory,
     which guards against path traversal attacks.
     """
+    filename = "index.html" if request.host.split(":")[0].lower() == INTERNAL_HOST else "public.html"
+    return send_from_directory(BASE_DIR, filename)
+
+
+@app.get("/internal")
+@app.get("/internal/")
+def internal():
+    if not portal_host():
+        return redirect("https://" + INTERNAL_HOST, code=302)
     return send_from_directory(BASE_DIR, "index.html")
+
+
+@app.get("/robots.txt")
+def robots():
+    if request.host.split(":")[0].lower() == INTERNAL_HOST:
+        return app.response_class("User-agent: *\nDisallow: /\n", mimetype="text/plain")
+    return send_from_directory(BASE_DIR, "robots.txt")
+
+
+@app.get("/sitemap.xml")
+def sitemap():
+    return send_from_directory(BASE_DIR, "sitemap.xml")
 
 
 @app.route("/archet-logo.png", methods=["GET"])
@@ -231,10 +232,19 @@ def dark_logo():
 def submit_quote():
     """
     Accepts JSON or form-encoded data from the website's quote form.
-    Emails the lead to Archet and writes a best-effort local backup.
+    Persists the lead in Supabase before attempting email notifications.
     """
     # Accept both JSON payloads (fetch) and standard form posts.
     payload = request.get_json(silent=True) or request.form.to_dict()
+
+    if not isinstance(payload, dict):
+        raise PortalError("Invalid quote request.")
+    limits = {"full_name": 100, "company": 200, "email": 254, "phone": 50,
+              "brand": 100, "stores": 100, "message": 10000}
+    for field, limit in limits.items():
+        value = payload.get(field, "")
+        if not isinstance(value, str) or len(value) > limit:
+            raise PortalError("Invalid " + field.replace("_", " ") + ".")
 
     required_fields = ["full_name", "company", "email", "brand"]
     missing = [f for f in required_fields if not payload.get(f, "").strip()]
@@ -243,6 +253,10 @@ def submit_quote():
             "status": "error",
             "message": f"Missing required fields: {', '.join(missing)}"
         }), 400
+
+    if not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", payload["email"].strip()):
+        raise PortalError("Please enter a valid email address.")
+    rate_limit("quote-ip", client_address(), limit=10, seconds=900)
 
     record = {
         "received_at": datetime.now(timezone.utc).isoformat(),
@@ -255,16 +269,17 @@ def submit_quote():
         "message":   payload.get("message", "").strip(),
     }
 
+    saved = db("quote_requests", "POST", record)[0]
+    notification_status = "sent"
     try:
         send_lead_notification(record)
-    except Exception as exc:
-        print(f"[email] Failed to send lead notification: {exc}")
-        return jsonify({
-            "status": "error",
-            "message": "We could not deliver your request. Please email mahee123.aamir@gmail.com or call +1 (469) 993-7957."
-        }), 500
-
-    backup_lead(record)
+    except Exception:
+        notification_status = "failed"
+        app.logger.warning("Quote saved, but email notification failed")
+    try:
+        db("quote_requests", "PATCH", {"notification_status": notification_status}, id="eq." + saved["id"])
+    except StoreError:
+        app.logger.warning("Quote saved, but notification status could not be updated")
     send_confirmation_email(record["email"], record["full_name"], record["company"])
 
     return jsonify({
@@ -283,7 +298,7 @@ def health():
 
 # ---------------------------------------------------------------------------
 # Block any attempt to fetch other arbitrary files from the root directory.
-# Only /, /health, and /api/quote are exposed.
+# Only explicitly registered routes are exposed.
 # ---------------------------------------------------------------------------
 @app.errorhandler(404)
 def not_found(_):
@@ -292,4 +307,4 @@ def not_found(_):
 
 if __name__ == "__main__":
     # debug=False is recommended for production; flip to True while developing.
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=False)

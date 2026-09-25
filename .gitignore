@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+.vercel/
+__pycache__/
+.pytest_cache/
+*.pyc
+api/creds.py
+leads.json
+.venv/
+test-results/
