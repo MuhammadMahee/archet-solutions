@@ -3,6 +3,9 @@ from decimal import Decimal
 from io import BytesIO
 from threading import Barrier
 from contextlib import nullcontext
+from http.client import IncompleteRead
+from urllib.error import HTTPError, URLError
+import ssl
 
 import pytest
 from openpyxl import load_workbook
@@ -77,6 +80,80 @@ def test_new_account_sessions_discard_shared_fw_cookie(monkeypatch):
 def test_redirect_cannot_send_cookie_to_unrelated_host():
     with pytest.raises(sales.ReportError):
         sales.SameHostRedirect().redirect_request(None, None, 302, '', {}, 'https://example.com/')
+
+
+@pytest.mark.parametrize('error', [TimeoutError(), URLError(TimeoutError()),
+    ConnectionResetError(), IncompleteRead(b'partial'),
+    HTTPError(sales.REPORT_URL, 503, 'Unavailable', {}, None)])
+def test_source_transport_retries_and_recovers(error, monkeypatch):
+    attempts, delays = [], []
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def read(self, limit): return b'complete'
+    class Opener:
+        def open(self, req, timeout):
+            attempts.append(timeout)
+            if len(attempts) < 3: raise error
+            return Response()
+    monkeypatch.setattr(sales.time, 'sleep', delays.append)
+    assert sales.read_source(Opener(), sales.REPORT_URL, 100) == b'complete'
+    assert len(attempts) == 3 and delays == [1, 3]
+
+
+@pytest.mark.parametrize('error,code', [
+    (HTTPError(sales.REPORT_URL, 403, 'Forbidden', {}, None), 'source_http_403'),
+    (URLError(ssl.SSLCertVerificationError()), 'source_tls_error')])
+def test_source_does_not_retry_denied_access_or_bad_certificates(error, code, monkeypatch):
+    class Opener:
+        def open(self, *args, **kwargs): raise error
+    monkeypatch.setattr(sales.time, 'sleep', lambda _: pytest.fail('must not retry'))
+    with pytest.raises(type(error)):
+        sales.read_source(Opener(), sales.REPORT_URL, 100)
+    assert sales.source_error(error) == code
+
+
+def test_source_retries_stop_at_attempt_limit(monkeypatch):
+    calls = []
+    class Opener:
+        def open(self, *args, **kwargs):
+            calls.append(1)
+            raise URLError(TimeoutError())
+    monkeypatch.setattr(sales.time, 'sleep', lambda _: None)
+    with pytest.raises(URLError) as error:
+        sales.read_source(Opener(), sales.REPORT_URL, 100)
+    assert len(calls) == 3
+    assert sales.source_error(error.value) == 'source_timeout'
+
+
+def test_source_deadline_caps_timeout_and_stops_retries(monkeypatch):
+    monkeypatch.setattr(sales.time, 'monotonic', lambda: 100)
+    monkeypatch.setattr(sales.time, 'sleep', lambda _: pytest.fail('budget exhausted'))
+    class Opener:
+        def open(self, req, timeout):
+            assert timeout == 0.5
+            raise TimeoutError()
+    with pytest.raises(TimeoutError):
+        sales.read_source(Opener(), sales.REPORT_URL, 100, deadline=100.5)
+    with pytest.raises(sales.ReportError, match='source_timeout'):
+        sales.read_source(Opener(), sales.REPORT_URL, 100, deadline=99)
+
+
+def test_partial_response_is_discarded_before_retry(monkeypatch):
+    attempts = []
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def read(self, limit):
+            if len(attempts) == 1: raise IncompleteRead(b'partial')
+            return b'complete'
+    class Opener:
+        def open(self, *args, **kwargs):
+            attempts.append(1)
+            return Response()
+    monkeypatch.setattr(sales.time, 'sleep', lambda _: None)
+    assert sales.read_source(Opener(), sales.REPORT_URL, 100) == b'complete'
+    assert len(attempts) == 2
 
 
 @pytest.mark.parametrize('signature', [b'\x09\x00', b'\x09\x02', b'\x09\x04', b'\x09\x08', b'\xd0\xcf\x11\xe0'])

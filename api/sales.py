@@ -3,10 +3,15 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from http.cookiejar import Cookie, CookieJar
+from http.client import IncompleteRead
 from io import BytesIO
 import json
+import logging
 import os
 import secrets
+import ssl
+import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, build_opener, HTTPCookieProcessor, HTTPRedirectHandler
 from zoneinfo import ZoneInfo
@@ -42,6 +47,8 @@ COLUMNS = [('dealer', 'Dealer'), ('market', 'Market'), ('store', 'Store'),
            ('qpay', 'QPay'), ('qpay_conv', 'QPay conv')]
 LOCK_ID = 731043260926
 MAX_REPORT_BYTES = 20 * 1024 * 1024
+SOURCE_BUDGET_SECONDS = 210
+SOURCE_ATTEMPTS = 3
 
 
 class ReportError(Exception):
@@ -68,7 +75,45 @@ class SameHostRedirect(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def open_source(cookies):
+def source_error(exc):
+    """Return diagnostics without leaking credentials or response contents."""
+    if isinstance(exc, ReportError):
+        return str(exc)
+    if isinstance(exc, HTTPError):
+        return f'source_http_{exc.code}'
+    reason = exc.reason if isinstance(exc, URLError) else exc
+    if isinstance(reason, TimeoutError):
+        return 'source_timeout'
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return 'source_tls_error'
+    return 'source_unavailable'
+
+
+def read_source(opener, req, limit, *, deadline=None):
+    """Retry only transient transport errors within the worker's time budget."""
+    deadline = deadline if deadline is not None else time.monotonic() + 110
+    for attempt in range(SOURCE_ATTEMPTS):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise ReportError('source_timeout')
+        try:
+            with opener.open(req, timeout=min(35, remaining)) as response:
+                return response.read(limit)
+        except (OSError, IncompleteRead) as exc:
+            code = source_error(exc)
+            transient = (exc.code in (408, 429, 500, 502, 503, 504)
+                         if isinstance(exc, HTTPError) else code != 'source_tls_error')
+            if isinstance(exc, HTTPError):
+                exc.close()
+            logging.getLogger(__name__).warning('RT-POS %s attempt %s: %s',
+                'session' if isinstance(req, str) else 'export', attempt + 1, code)
+            delay = (1, 3, 0)[attempt]
+            if not transient or attempt + 1 == SOURCE_ATTEMPTS or deadline - time.monotonic() <= delay:
+                raise
+            time.sleep(delay)
+
+
+def open_source(cookies, *, deadline=None):
     """Ignore shared FW_SessionID: RT-POS must issue a NEW session per account."""
     jar = CookieJar()
     for name in ('sec85952EAF_id', 'sec85952EAF_pd'):
@@ -79,22 +124,20 @@ def open_source(cookies):
                               False, '/newbdi', True, True, None, True, None, None, {}, False))
     opener = build_opener(SameHostRedirect(), HTTPCookieProcessor(jar))
     opener.addheaders = [('User-Agent', 'Mozilla/5.0 (compatible; ArchetSales/1.0)')]
-    with opener.open(REPORT_URL, timeout=35) as response:
-        html = response.read(2 * 1024 * 1024).decode('utf-8', errors='replace')
+    html = read_source(opener, REPORT_URL, 2 * 1024 * 1024, deadline=deadline).decode('utf-8', errors='replace')
     if 'frmStart' not in html or 'frmEnd' not in html:
         raise ReportError('cookies_expired')
     return opener
 
 
-def fetch_report(opener, report_date):
+def fetch_report(opener, report_date, *, deadline=None):
     formatted = report_date.strftime('%m/%d/%Y')
     payload = urlencode({'frmMarketID': '', 'frmRegionID': '', 'frmStateID': '',
                          'frmStoreType': '', 'frmStore': '', 'frmStart': formatted,
                          'frmEnd': formatted, 'btnExcel': 'click'}).encode()
     req = Request(REPORT_URL, data=payload, headers={
         'Content-Type': 'application/x-www-form-urlencoded', 'Referer': REPORT_URL})
-    with opener.open(req, timeout=35) as response:
-        data = response.read(MAX_REPORT_BYTES + 1)
+    data = read_source(opener, req, MAX_REPORT_BYTES + 1, deadline=deadline)
     if len(data) > MAX_REPORT_BYTES:
         raise ReportError('report_too_large')
     # RT-POS uses raw BIFF2 as well as OLE-wrapped XLS; xlrd validates both.
@@ -191,6 +234,7 @@ def mark_error(conn, source, report_date, code):
 
 
 def source_worker(source, cookies, current):
+    deadline = time.monotonic() + SOURCE_BUDGET_SECONDS
     with connect() as conn:
         jobs = conn.execute('''select report_date from public.sales_imports
             where source_id=%s and report_date<=%s and status in ('pending','error') and retry_at<=now()
@@ -198,20 +242,22 @@ def source_worker(source, cookies, current):
         if not jobs:
             return {'source': source, 'completed': 0, 'failed': 0}
         try:
-            opener = open_source(cookies)
+            opener = open_source(cookies, deadline=deadline)
         except Exception as exc:
-            code = str(exc) if isinstance(exc, ReportError) else 'source_unavailable'
+            code = source_error(exc)
             for job in jobs:
                 mark_error(conn, source, job['report_date'], code)
             return {'source': source, 'completed': 0, 'failed': len(jobs), 'error': code}
         completed, failed = 0, 0
         for job in jobs:
+            if time.monotonic() >= deadline:
+                break  # Keep unattempted dates due for the next bounded batch.
             try:
-                rows = fetch_report(opener, job['report_date'])
+                rows = fetch_report(opener, job['report_date'], deadline=deadline)
                 save_rows(conn, source, job['report_date'], rows)
                 completed += 1
-            except (ReportError, OSError, ValueError) as exc:
-                code = str(exc) if isinstance(exc, ReportError) else 'source_unavailable'
+            except (ReportError, OSError, IncompleteRead, ValueError) as exc:
+                code = source_error(exc)
                 mark_error(conn, source, job['report_date'], code)
                 failed += 1
         return {'source': source, 'completed': completed, 'failed': failed}
