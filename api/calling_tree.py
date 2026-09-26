@@ -23,9 +23,9 @@ FIELDS = {'Dealer':'original_dealer','Store ID':'store_id','Market':'market','St
           'Door Code':'door_code','SAP ID':'sap_id','Address':'address','ZIP Code':'zip_code'}
 REQUIRED = {'Dealer','Store ID','Market','Store Name'}
 ALIASES = {'connect':'Connect','california':'California','spdica':'California',
-           'srh':'SRH','supreme':'SRH','arm':'ARM','armwireless':'ARM','dfwireless':'ARM',
+           'srh':'SRH','supreme':'SRH','arm1':'ARM1','arm2':'ARM2','armwireless':'ARM2','dfwireless':'ARM1',
            'arbf':'ARBF','arbfwirelessmetro':'ARBF'}
-DEALERS = {'connect':'Connect','california':'California','srh':'SRH','arm1':'ARM','arm2':'ARM','arbf':'ARBF'}
+DEALERS = {'connect':'Connect','california':'California','srh':'SRH','arm1':'ARM1','arm2':'ARM2','arbf':'ARBF'}
 
 
 def clean(value):
@@ -87,7 +87,7 @@ def parse_workbook(data, worksheet=''):
             alias=re.sub(r'[^a-z0-9]','',mapped['original_dealer'].lower())
             dealer=ALIASES.get(alias)
             if not dealer:
-                raise PortalError(f'Row {idx}: unknown dealer. Use Connect, California, SRH, ARM or ARBF.')
+                raise PortalError(f'Row {idx}: unknown dealer. Use Connect, California, SRH, ARM1, ARM2 or ARBF.')
             mapped.update(dealer=dealer,store_id=mapped['store_id'].upper(),
                           market=mapped['market'].upper(),store=mapped['store'].upper(),row_number=idx)
             key=(dealer,mapped['store_id'])

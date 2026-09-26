@@ -17,21 +17,31 @@ def row(source='arm1', day=date(2026, 9, 1), sid='S1', **changes):
             **{k: 0 for k in sales.METRICS}, **changes}
 
 
-def test_arm_overlap_is_not_double_counted_and_dealers_stay_separate():
+def test_arm_accounts_with_same_store_id_remain_separate():
     rows = [row(new_activation=2, total_boxes=2, accessory=Decimal('50'), qpay=4),
             row('arm2', new_activation=99, total_boxes=99),
             row('connect', new_activation=3, total_boxes=3),
             row(day=date(2026, 9, 2), total_boxes=1, accessory=Decimal('10'), qpay=2)]
     result = sales.aggregate(rows)
-    arm = next(r for r in result if r['dealer'] == 'ARM')
+    arm = next(r for r in result if r['dealer'] == 'ARM1')
     assert arm['total_boxes'] == 3
     assert arm['apo'] == Decimal('20.00')
     assert arm['qpay_conv'] == Decimal('50.00')
-    assert len(result) == 2
+    assert next(r for r in result if r['dealer'] == 'ARM2')['total_boxes'] == 99
+    assert len(result) == 3
 
 
-def test_fresh_arm_copy_wins_over_retained_copy():
+def test_arm_freshness_is_independent_per_account():
     result = sales.aggregate([row(stale=True, total_boxes=5), row('arm2', total_boxes=3)])
+    by_dealer = {r['dealer']: r for r in result}
+    assert by_dealer['ARM1']['total_boxes'] == 5
+    assert by_dealer['ARM1']['stale'] is True
+    assert by_dealer['ARM2']['total_boxes'] == 3
+    assert by_dealer['ARM2']['stale'] is False
+
+
+def test_fresh_copy_wins_within_one_dealer():
+    result = sales.aggregate([row(stale=True, total_boxes=5), row(total_boxes=3)])
     assert result[0]['total_boxes'] == 3
     assert result[0]['stale'] is False
 
@@ -160,7 +170,7 @@ def test_xlsx_keeps_dealer_and_blocks_formula_injection():
     book = load_workbook(sales.workbook_bytes(data))
     sheet = book.active
     assert sheet.cell(1,1).value == 'Dealer'
-    assert sheet.cell(2,1).value == 'ARM'
+    assert sheet.cell(2,1).value == 'ARM1'
     assert sheet.cell(2,3).data_type == 's'
     assert sheet.cell(2,10).value == 20
     assert sheet.cell(2,13).value == 50

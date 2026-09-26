@@ -49,7 +49,7 @@ def main():
                 page.goto(origin+'/internal')
                 page.locator('#login-username').fill('Mahee');page.locator('#login-password').fill('TestPass123')
                 page.locator('#login-form button[type=submit]').click()
-                expect(page.locator('#sales-count')).to_have_text('60 STORES')
+                expect(page.locator('#sales-count')).to_have_text('72 STORES')
                 expect(page.locator('#sales-table th').first).to_have_text('Dealer')
                 backgrounds=[]
                 for dealer in sales.COLORS:
@@ -58,7 +58,7 @@ def main():
                     expect(page.locator('#sales-table tbody tr').first).to_contain_text(dealer.upper()+' STORE')
                     page.wait_for_timeout(300)
                     backgrounds.append(page.evaluate('getComputedStyle(document.body).backgroundColor'))
-                assert len(set(backgrounds))==5
+                assert len(set(backgrounds))==6
                 page.locator('#sales-dealer').select_option('California')
                 expect(page.locator('#sales-table tbody tr').first).to_contain_text('CALIFORNIA STORE')
                 page.screenshot(path=str(ROOT/'test-results/sales-desktop.png'),full_page=True)
@@ -78,7 +78,7 @@ def main():
                 assert page.evaluate("async()=> (await navigator.clipboard.read())[0].types.includes('image/png')")
                 page.locator('#sales-period').select_option('month')
                 expect(page.locator('#sales-range-badge')).to_contain_text('1,')
-                page.locator('#sales-dealer').select_option('ARM')
+                page.locator('#sales-dealer').select_option('ARM2')
                 expect(page.locator('#sales-count')).to_have_text('12 STORES')
                 assert page.locator('#sales-market').input_value()==''
                 assert page.locator('#sales-store').input_value()==''
@@ -89,7 +89,7 @@ def main():
                 assert page.locator('#sales-table tbody tr').count()==0
                 assert not errors,errors
                 browser.close()
-                print('Sales browser checks passed: filters, 5 persistent themes, dates, XLSX, PNG clipboard without Dealer, mobile layout, logout cleanup.')
+                print('Sales browser checks passed: filters, 6 persistent themes, dates, XLSX, PNG clipboard without Dealer, mobile layout, logout cleanup.')
         finally:server.shutdown()
 
 

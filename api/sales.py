@@ -30,9 +30,9 @@ except ModuleNotFoundError:
 REPORT_URL = 'https://myrtpos.com/newbdi/Store_Performance_lp.fwx'
 CENTRAL = ZoneInfo('America/Chicago')
 SOURCES = {'connect': 'Connect', 'california': 'California', 'srh': 'SRH',
-           'arm1': 'ARM', 'arm2': 'ARM', 'arbf': 'ARBF'}
+           'arm1': 'ARM1', 'arm2': 'ARM2', 'arbf': 'ARBF'}
 COLORS = {'Connect': '#095570', 'California': '#a92d49', 'SRH': '#a06118',
-          'ARM': '#365cad', 'ARBF': '#7646a5'}
+          'ARM1': '#365cad', 'ARM2': '#176b56', 'ARBF': '#7646a5'}
 METRICS = ('new_activation', 'upgrade', 'reactivation', 'bts', 'hsi',
            'accessory', 'total_boxes', 'qpay')
 COLUMNS = [('dealer', 'Dealer'), ('market', 'Market'), ('store', 'Store'),
@@ -246,7 +246,7 @@ def ratios(row):
 
 
 def aggregate(raw):
-    """ARM overlap is one store/day; prefer arm1 consistently, never sum duplicate accounts."""
+    """Aggregate each dealer independently, preferring fresh copies of a store/day."""
     daily = {}
     for row in sorted(raw, key=lambda r: (r['stale'], r['source_id'])):
         key = (SOURCES[row['source_id']], row['report_date'], row['store_id'])
