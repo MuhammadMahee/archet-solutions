@@ -182,6 +182,19 @@ app = Flask(
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024
 register_portal(app)
 
+try:
+    from api.sales import register_sales
+except ModuleNotFoundError:
+    from sales import register_sales
+register_sales(app)
+
+
+@app.get('/assets/<filename>')
+def portal_assets(filename):
+    if filename not in ('sales.js', 'sales.css'):
+        return '', 404
+    return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
+
 # ---------------------------------------------------------------------------
 # Route: Serve the appropriate homepage directly from the project root.
 # ---------------------------------------------------------------------------

@@ -6,6 +6,9 @@ dependencies = [
     "flask==3.0.3",
     "python-dotenv==1.0.1",
     "psycopg[binary]==3.3.6",
+    "xlrd==2.0.2",
+    "openpyxl==3.1.5",
+    "tzdata==2026.2",
 ]
 
 [tool.vercel]

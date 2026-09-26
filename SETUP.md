@@ -1,5 +1,27 @@
 # Archet internal workspace setup
 
+## Sales Update and parallel RT-POS imports
+
+The Sales Update page is the default internal landing page. It has Dealer, Market, Store, and date filters; Today, Yesterday, Month to date, and custom ranges are supported. Each dealer has a fixed color: Connect green, California burgundy, SRH amber, ARM blue, ARBF purple. Excel includes Dealer. Copy Snapshot generates a PNG of the filtered table **without the Dealer column**; if the browser blocks image clipboard access, it downloads the PNG instead.
+
+Six isolated account workers download daily XLS reports in parallel. ARM's two accounts appear as one dealer. Overlapping store IDs are counted once per date; a fresh copy wins over a retained copy, then ARM account 1 is preferred. Totals recalculate APO and QPay conversion from summed amounts, rather than averaging store percentages. RT-POS may omit stores from exports; previously saved same-date rows are retained and marked. The portal displays returned/saved stores, not an assumed complete store roster.
+
+**Do not share `FW_SessionID` between workers.** Three supplied accounts shared a server session and returned the wrong dealer's stores during verification. The importer deliberately ignores this cookie, uses each account's remembered-login cookies, and obtains a fresh session in a separate cookie jar before exporting. HTTP redirects are restricted to HTTPS RT-POS hosts.
+
+Production variables:
+
+- `RTPOS_COOKIES`: JSON object keyed by `connect`, `california`, `srh`, `arm1`, `arm2`, `arbf`. Each value contains `sec85952EAF_id` and `sec85952EAF_pd`. Keep it in ignored `.env` locally and in Vercel Production secrets. `api/creds.py` remains ignored and is not deployed.
+- `CRON_SECRET`: a random secret, identical in Vercel Production and the GitHub repository's Actions secret `CRON_SECRET`.
+- Existing `SUPABASE_DB_URL` is used by the importer and reports as well as migrations. Use the session pooler on port 5432.
+
+Vercel functions have bounded lifetimes; there is no infinite background loop. `.github/workflows/sales-refresh.yml` triggers the authenticated Vercel endpoint every hour at :01, :21, and :41. GitHub only sends the trigger; credentials, RT-POS downloads, parsing, and database writes stay on Vercel. GitHub schedules can be delayed and are not a precise timing guarantee. Public repositories may have scheduled workflows disabled after 60 days without activity; monitor the Actions page. See [GitHub scheduled workflow behavior](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule) and [Vercel function duration limits](https://vercel.com/docs/functions/limitations).
+
+For initial setup, deploy successfully (migration `002_sales_performance.sql` runs automatically), then run **Actions → Refresh sales on Vercel → Run workflow**. The first run fills daily dates from the first of the current Central-time month through today. Every Vercel request processes at most four dates per account; the workflow calls again until the backlog is complete. Supabase records progress, so interrupted runs resume. Today is refreshed on schedule and yesterday is finalized after midnight. Errors preserve saved data and retry after 20 minutes. A database advisory lock prevents overlapping refreshes. Only authenticated admins can use **Sync sources**; members can read/export. The scheduler endpoint requires its bearer secret and rejects preview deployments.
+
+To renew expired RT-POS access, replace only the affected account's remembered-login cookies in `RTPOS_COOKIES` and redeploy. Import errors are shown on the Sales Update page. No cookie or raw upstream error is returned to the browser or written to logs.
+
+Verification: `python -m pytest -q`, `python tests/browser_sales.py`, and `python tests/browser_smoke.py`. Browser checks use synthetic data and save artifacts in ignored `test-results/`. Never commit downloaded sales reports or credentials.
+
 The application is implemented locally. A Supabase project, production environment variables, deployment, and the DNS record still need to be configured. No cloud resources have been created by this code change.
 
 ## 1. Create the Supabase project

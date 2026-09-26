@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="/assets/sales.css">
 <title>Archet | Internal Workspace</title>
 <link rel="icon" href="/archet-logo-dark.png">
 <style>
@@ -38,6 +39,7 @@
     <img class="logo" src="/archet-logo-dark.png" alt="Archet Solutions">
     <div class="workspace-label">WORKSPACE</div>
     <nav class="nav" aria-label="Workspace navigation">
+      <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
       <button data-page="overview" class="active"><span class="nav-icon">◫</span>Overview</button>
       <button data-page="quotes"><span class="nav-icon">▤</span>Quote inbox</button>
       <button data-page="users" id="users-nav" hidden><span class="nav-icon">♧</span>Accounts</button>
@@ -48,6 +50,21 @@
   <main class="main">
     <header class="topbar"><span>ARCHET &nbsp; / &nbsp; INTERNAL</span><span><i class="live-dot"></i>Team workspace</span></header>
     <div id="notice" class="notice" role="status" hidden></div>
+    <section id="page-sales" hidden>
+      <div class="sales-hero"><div><div class="sales-eyebrow">STORE PERFORMANCE</div><h1>Sales Update</h1><p id="sales-period-label">Daily performance across your dealers</p></div><div class="sales-freshness"><span class="sales-status-dot"></span><div><small>OLDEST SOURCE REFRESH</small><strong id="sales-updated">Loading…</strong></div></div></div>
+      <div class="sales-filters">
+        <label>Dealer<select id="sales-dealer"><option value="">All Dealers</option></select></label>
+        <label>Market<select id="sales-market"><option value="">All Markets</option></select></label>
+        <label>Store<select id="sales-store"><option value="">All Stores</option></select></label>
+        <label>Date<select id="sales-period"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="month">Month to date</option><option value="custom">Custom range</option></select></label>
+        <div class="sales-actions"><button type="button" id="sales-copy">▣ &nbsp;Copy Snapshot</button><button type="button" id="sales-excel" class="sales-excel">↓ &nbsp;Download Excel</button></div>
+        <div id="sales-custom" class="sales-custom" hidden><label>From<input type="date" id="sales-start"></label><label>To<input type="date" id="sales-end"></label><button type="button" id="sales-apply">Apply dates</button></div>
+      </div>
+      <div class="sales-toolbar"><span id="sales-coverage" role="status">Loading saved sales…</span><div><button type="button" id="sales-reload">↻ Reload</button><button type="button" id="sales-sync" hidden>Sync sources</button></div></div>
+      <div id="sales-message" class="sales-message" role="status" hidden></div>
+      <div class="sales-panel"><div class="sales-panel-head"><div><small id="sales-count">0 STORES</small><h2>SALES UPDATE</h2></div><span id="sales-range-badge"></span></div><div class="sales-table-scroll"><table id="sales-table"><caption>Sales Update</caption><thead></thead><tbody></tbody><tfoot></tfoot></table></div><div id="sales-empty" class="sales-empty" hidden>No saved results for this selection.</div></div>
+      <p class="sales-footnote">Central time · Scheduled every 20 minutes · ARM combines both accounts without counting the same store twice. <span id="sales-stale-note"></span></p>
+    </section>
     <section id="page-overview">
       <div class="page-head"><div class="eyebrow">Your workspace at a glance</div><h1 id="greeting" style="margin-top:14px">Welcome back.</h1><p class="muted">Keep every conversation moving forward.</p></div>
       <div class="cards">
@@ -100,6 +117,7 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const date = value => new Date(value).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
 function notice(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = !message; }
 function signedOut(message = '') {
+  if (window.salesDashboard) window.salesDashboard.clear();
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   currentUser = null; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
   ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
@@ -127,14 +145,15 @@ function enterWorkspace(user) {
   currentUser = user; $('boot').hidden = true; $('login').hidden = true; $('workspace').hidden = false;
   $('identity-name').textContent = user.display_name; $('identity-role').textContent = user.is_owner ? 'Workspace owner' : user.role === 'admin' ? 'Administrator' : 'Team member';
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
-  $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice(''); showPage('overview');
+  $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice(''); showPage('sales');
 }
 async function showPage(name) {
   if (name === 'users' && currentUser?.role !== 'admin') return;
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
+  document.body.classList.toggle('sales-mode', name === 'sales');
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
   notice('');
-  try { if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
+  try { if (name === 'sales') await window.salesDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
   catch (error) { notice(error.message, true); }
 }
 function quoteTable(rows) {
@@ -198,7 +217,8 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
   if ($('new-password').value !== $('confirm-password').value) throw new Error('The new passwords do not match.');
   await api('password','POST',{current_password:$('current-password').value,new_password:$('new-password').value}); signedOut('Password updated. Sign in with your new password.');
 }); };
-api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));
 </script>
+<script src="/assets/sales.js"></script>
+<script>api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));</script>
 </body>
 </html>

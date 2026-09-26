@@ -1,0 +1,20 @@
+name: Refresh sales on Vercel
+on:
+  schedule:
+    - cron: '1,21,41 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sales-refresh-production
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run bounded Vercel workers until backfill completes
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: python3 scripts/invoke_sales.py

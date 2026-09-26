@@ -13,7 +13,8 @@ sys.path.insert(0, str(ROOT))
 from playwright.sync_api import sync_playwright, expect
 from werkzeug.serving import make_server
 from test_portal import FakeStore, QUOTE
-from api import index, portal
+from api import index, portal, sales
+from browser_sales import fixture_report
 
 
 def main():
@@ -24,7 +25,7 @@ def main():
     artifacts.mkdir(exist_ok=True)
     server = make_server("127.0.0.1", 0, index.app, threaded=True)
     origin = f"http://127.0.0.1:{server.server_port}"
-    with patch.object(portal, "db", fake.db), patch.object(portal, "auth", fake.auth), patch.object(index, "db", fake.db):
+    with patch.object(portal, "db", fake.db), patch.object(portal, "auth", fake.auth), patch.object(index, "db", fake.db), patch.object(sales, "report_data", fixture_report):
         worker = Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
@@ -42,6 +43,7 @@ def main():
                 page.locator("#remember").check()
                 page.get_by_role("button", name="Sign in to workspace").click()
                 expect(page.locator("#greeting")).to_have_text("Welcome back, Mahee.")
+                page.locator('[data-page="overview"]').click()
                 expect(page.locator("#stat-total")).to_have_text("1")
                 page.screenshot(path=str(artifacts / "workspace-desktop.png"), full_page=True)
                 page.get_by_role("button", name="Open →").click()
@@ -68,6 +70,7 @@ def main():
                 member.locator("#login-password").fill("TeamPass123")
                 member.get_by_role("button", name="Sign in to workspace").click()
                 expect(member.locator("#greeting")).to_have_text("Welcome back, Team.")
+                member.locator('[data-page="overview"]').click()
                 expect(member.locator("#users-nav")).to_be_hidden()
                 assert member.request.get(origin + "/api/internal/users").status == 403
                 expect(member.locator("#stat-total")).to_have_text("1")
