@@ -179,19 +179,22 @@ app = Flask(
     static_folder=None,
     template_folder=None,
 )
-app.config["MAX_CONTENT_LENGTH"] = 32 * 1024
+app.config["MAX_CONTENT_LENGTH"] = 3 * 1024 * 1024
 register_portal(app)
 
 try:
-    from api.sales import register_sales
+    from api.sales import register_sales, connect as sales_connect
+    from api.calling_tree import register_calling_tree
 except ModuleNotFoundError:
-    from sales import register_sales
+    from sales import register_sales, connect as sales_connect
+    from calling_tree import register_calling_tree
 register_sales(app)
+register_calling_tree(app,lambda: sales_connect())
 
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename not in ('sales.js', 'sales.css'):
+    if filename not in ('sales.js', 'sales.css', 'calling-tree.js'):
         return '', 404
     return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
 

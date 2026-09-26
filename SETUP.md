@@ -2,9 +2,21 @@
 
 ## Sales Update and parallel RT-POS imports
 
-The Sales Update page is the default internal landing page. It has Dealer, Market, Store, and date filters; Today, Yesterday, Month to date, and custom ranges are supported. Each dealer has a fixed color: Connect green, California burgundy, SRH amber, ARM blue, ARBF purple. Excel includes Dealer. Copy Snapshot generates a PNG of the filtered table **without the Dealer column**; if the browser blocks image clipboard access, it downloads the PNG instead.
+### Calling Tree store list
 
-Six isolated account workers download daily XLS reports in parallel. ARM's two accounts appear as one dealer. Overlapping store IDs are counted once per date; a fresh copy wins over a retained copy, then ARM account 1 is preferred. Totals recalculate APO and QPay conversion from summed amounts, rather than averaging store percentages. RT-POS may omit stores from exports; previously saved same-date rows are retained and marked. The portal displays returned/saved stores, not an assumed complete store roster.
+Open **Calling Tree** in the sidebar (or `https://internal.archetsolutions.com/#callingtree`). Admins can upload an `.xlsx` workbook up to 2 MB, preview its stores and dealer counts, then click **Use this Calling Tree**. Members can view the directory but cannot upload or replace it. The uploaded workbook replaces the complete store list across all dealers, while sales history stays intact. Store lists and their versions are stored in Supabase; the workbook is parsed as data and formulas are rejected.
+
+Required headers are **Dealer**, **Store ID**, **Market**, and **Store Name**. Carrier, DM, State, Dealer Code, Door Code, SAP ID, Address, and ZIP Code are preserved when supplied. If several worksheets contain store lists, enter the worksheet name. Unknown dealers, duplicate dealer/Store ID pairs, and invalid rows stop the upload before the active list changes. A preview also fails safely if another administrator replaces the active list before you apply it.
+
+Supported dealer aliases include CONNECT → Connect, SPDI-CA → California, SUPREME → SRH, DF Wireless and Arm Wireless → ARM, and ARBF Wireless Metro → ARBF. Matching uses exact normalized Store IDs within the dealer, not fuzzy store names. Calling Tree names and markets are used in reports. Unmatched IDs remain visible with unavailable metrics until RT-POS reports them.
+
+Only active Calling Tree stores appear in Sales Update, its market/store filters, totals, snapshots, and Excel exports. No active Calling Tree means no sales stores are displayed. Listed stores missing from an otherwise completed source report show zero; unavailable imports show dashes or mark partial totals. The compact PNG snapshot excludes Dealer, uses the selected market/dealer and dates in its centered title, and matches the report's metric colors. Connect uses the reference blue palette; the other dealers retain their own colors.
+
+The initial `Calling Tree - Sep-26.xlsx` contains 44 stores: Connect 18, California 12, ARM 5, ARBF 5, SRH 4. The workbook itself stays outside Git; only the application code and schema migration are committed.
+
+The Sales Update page is the default internal landing page. It has Dealer, Market, Store, and date filters; Today, Yesterday, Month to date, and custom ranges are supported. Each dealer has a fixed color: Connect deep blue, California burgundy, SRH amber, ARM royal blue, ARBF purple. Excel includes Dealer. Copy Snapshot generates a PNG of the filtered table **without the Dealer column**; if the browser blocks image clipboard access, it downloads the PNG instead.
+
+Six isolated account workers download daily XLS reports in parallel. ARM's two accounts appear as one dealer. Overlapping store IDs are counted once per date; a fresh copy wins over a retained copy, then ARM account 1 is preferred. Totals recalculate APO and QPay conversion from summed amounts, rather than averaging store percentages. RT-POS may omit stores from exports; previously saved same-date rows are retained and marked. The importer retains source data independently; the active Calling Tree determines which stores appear in the portal.
 
 **Do not share `FW_SessionID` between workers.** Three supplied accounts shared a server session and returned the wrong dealer's stores during verification. The importer deliberately ignores this cookie, uses each account's remembered-login cookies, and obtains a fresh session in a separate cookie jar before exporting. HTTP redirects are restricted to HTTPS RT-POS hosts.
 
@@ -20,7 +32,7 @@ For initial setup, deploy successfully (migration `002_sales_performance.sql` ru
 
 To renew expired RT-POS access, replace only the affected account's remembered-login cookies in `RTPOS_COOKIES` and redeploy. Import errors are shown on the Sales Update page. No cookie or raw upstream error is returned to the browser or written to logs.
 
-Verification: `python -m pytest -q`, `python tests/browser_sales.py`, and `python tests/browser_smoke.py`. Browser checks use synthetic data and save artifacts in ignored `test-results/`. Never commit downloaded sales reports or credentials.
+Verification: `python -m pytest -q`, `python tests/browser_sales.py`, `python tests/browser_calling_tree.py`, and `python tests/browser_smoke.py`. Browser checks use synthetic data and save artifacts in ignored `test-results/`. Never commit downloaded sales reports or credentials.
 
 The application is implemented locally. A Supabase project, production environment variables, deployment, and the DNS record still need to be configured. No cloud resources have been created by this code change.
 

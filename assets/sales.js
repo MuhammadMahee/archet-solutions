@@ -2,11 +2,11 @@
 (() => {
   const el = id => document.getElementById('sales-' + id);
   const columns = [['dealer','Dealer'],['market','Market'],['store','Store'],['new_activation','New activation'],['upgrade','Upgrade'],['reactivation','Reactivation'],['bts','BTS'],['hsi','HSI'],['accessory','Accessory'],['apo','APO'],['total_boxes','Total boxes'],['qpay','QPay'],['qpay_conv','QPay conv']];
-  const themes = {'': ['#176b56','#eff6f3','#193d33','#d8e5df'],Connect:['#176b56','#eff6f3','#193d33','#d8e5df'],California:['#a92d49','#faf0f2','#491c2c','#ecd8de'],SRH:['#a06118','#fbf5ea','#503718','#e8dcc9'],ARM:['#365cad','#eef2fa','#20335b','#d6dfef'],ARBF:['#7646a5','#f5effa','#3d2652','#e4d7ed']};
+  const themes = {'': ['#095570','#f3f8fa','#083c51','#829aa5'],Connect:['#095570','#f3f8fa','#083c51','#829aa5'],California:['#a92d49','#faf0f2','#491c2c','#ecd8de'],SRH:['#a06118','#fbf5ea','#503718','#e8dcc9'],ARM:['#365cad','#eef2fa','#20335b','#d6dfef'],ARBF:['#7646a5','#f5effa','#3d2652','#e4d7ed']};
   let data = null, revision = 0, syncing = false;
   const localToday = () => new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const dateLabel = day => new Date(day + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-  const text = (key,value) => ['accessory','apo'].includes(key) ? '$' + Number(value || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : key === 'qpay_conv' ? Number(value || 0).toFixed(0) + '%' : String(value ?? '');
+  const text = (key,value) => value === null ? '—' : ['accessory','apo'].includes(key) ? '$' + Number(value || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : key === 'qpay_conv' ? Number(value || 0).toFixed(0) + '%' : String(value ?? '');
   function theme() {
     const values = themes[el('dealer').value] || themes[''];
     ['accent','tint','dark','border'].forEach((key,i) => document.documentElement.style.setProperty('--sales-' + key,values[i]));
@@ -29,9 +29,10 @@
   }
   function message(value) { el('message').textContent = value; el('message').hidden = !value; }
   function cellClass(key,value) {
+    if (value === null) return '';
     if (key === 'total_boxes') return 'metric-boxes';
     if (key === 'qpay_conv') return Number(value)>=100 ? 'metric-good' : Number(value)>=50 ? 'metric-mid' : 'metric-low';
-    if (key === 'apo') return Number(value)>=20 ? 'metric-good' : Number(value)>=10 ? 'metric-mid' : 'metric-low';
+    if (key === 'apo') return Number(value)>=20 ? 'metric-good' : 'metric-mid';
     return '';
   }
   function render(result) {
@@ -48,8 +49,11 @@
     el('stale-note').textContent = c.retained ? '† Some stores were omitted by the latest source export; their last saved values are shown.' : '';
     if (c.errors.length) message('Refresh failed for ' + c.errors.join(', ') + '. Saved data remains available; the next scheduled run retries.');
     const table = el('table');
+    table.caption.textContent = reportTitle(result);
+    el('empty').textContent = result.calling_tree && !result.calling_tree.active ? 'Upload a Calling Tree to choose the stores shown here.' : 'No Calling Tree stores match this selection.';
+    if (result.calling_tree?.unmatched) message(result.calling_tree.unmatched + ' Calling Tree Store IDs have not appeared in RT-POS yet. Their sales are unavailable.');
     table.tHead.innerHTML = '<tr>' + columns.map(([,label])=>'<th scope="col">'+label+'</th>').join('') + '</tr>';
-    table.tBodies[0].innerHTML = result.rows.map(r => '<tr>' + columns.map(([k])=>'<td class="'+cellClass(k,r[k])+'">'+(k==='dealer'?'<span class="sales-dealer-chip">':'')+escapeHTML(text(k,r[k]))+(k==='dealer'?'</span>':'')+(k==='store'&&r.stale?'<span class="sales-stale-mark" title="Last saved values; source refresh is incomplete">†</span>':'')+'</td>').join('')+'</tr>').join('');
+    table.tBodies[0].innerHTML = result.rows.map(r => '<tr>' + columns.map(([k])=>'<td class="'+cellClass(k,r[k])+'">'+(k==='dealer'?'<span class="sales-dealer-chip">':'')+escapeHTML(text(k,r[k]))+(k==='dealer'?'</span>':'')+(k==='store'&&(r.stale||r.incomplete)?'<span class="sales-stale-mark" title="Values may be incomplete; a source report is unavailable or retained">†</span>':'')+'</td>').join('')+'</tr>').join('');
     table.tFoot.innerHTML = '<tr><td colspan="3">TOTAL</td>' + columns.slice(3).map(([k])=>'<td>'+escapeHTML(text(k,result.totals[k]))+'</td>').join('') + '</tr>';
     el('empty').hidden = result.rows.length>0; el('copy').disabled = !result.rows.length; el('excel').disabled = !result.rows.length;
     el('sync').hidden = currentUser?.role !== 'admin';
@@ -64,34 +68,50 @@
       data = result; render(result);
     } catch (error) { if (id===revision) { data=null; el('table').tBodies[0].replaceChildren(); el('table').tFoot.replaceChildren(); el('coverage').textContent='Unable to load this selection.'; message(error.message); } }
   }
-  // Canvas generates a PNG of the filtered report. Dealer is deliberately absent.
+  function reportTitle(result) {
+    const location=el('market').value || el('dealer').value || 'ALL DEALERS';
+    const period=result.start===result.end?dateLabel(result.start):dateLabel(result.start)+' – '+dateLabel(result.end);
+    return ('SALES UPDATE • '+location+' • '+period).toUpperCase();
+  }
+  // Match the supplied table layout. Dealer stays on screen and is omitted here.
   function snapshot() {
-    const cols = columns.filter(([key])=>key !== 'dealer'), rows = data.rows;
-    const widths = cols.map(([key,label]) => {
-      const longest = Math.max(label.length,...rows.map(r=>text(key,r[key]).length));
-      return key==='store' ? Math.min(370,Math.max(190,longest*7+22)) : key==='market' ? Math.min(185,Math.max(105,longest*7+18)) : Math.max(75,label.length*7+16);
-    });
-    const width=widths.reduce((a,b)=>a+b,0), height=112+(rows.length+2)*29+35;
-    const scale=Math.min(2,16000/height); const canvas=document.createElement('canvas');canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
-    const ctx=canvas.getContext('2d');ctx.scale(scale,scale); const colors=themes[el('dealer').value]||themes[''];
-    ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);ctx.fillStyle=colors[2];ctx.fillRect(0,0,width,77);
-    ctx.fillStyle='#fff';ctx.font='bold 24px Georgia';ctx.fillText('SALES UPDATE',20,31);
-    ctx.font='12px Arial';ctx.fillText(el('period-label').textContent,20,56);
-    ctx.fillStyle='#617269';ctx.font='11px Arial';ctx.fillText(el('coverage').textContent,15,99);
-    function drawRow(values,y,kind) {
-      let x=0;ctx.textBaseline='middle';
-      cols.forEach(([key,label],i)=>{
+    const cols=columns.filter(([key])=>key!=='dealer'),rows=data.rows;
+    const widths=[143,330,256,141,211,111,80,180,104,205,106,181];
+    const width=2048,titleHeight=60,rowHeight=54,headerHeight=54;
+    const incomplete=data.coverage.complete<data.coverage.expected || rows.some(r=>r.incomplete||r.stale);
+    const height=titleHeight+headerHeight+(rows.length+1)*rowHeight+(incomplete?34:0);
+    const scale=Math.min(1.5,15000/height),canvas=document.createElement('canvas');
+    canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
+    const ctx=canvas.getContext('2d');ctx.scale(scale,scale);
+    const colors=themes[el('dealer').value]||themes[''];
+    const border=el('dealer').value==='Connect'||!el('dealer').value?'#829aa5':colors[3];
+    ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
+    const gradient=ctx.createLinearGradient(0,0,width,0);gradient.addColorStop(0,colors[2]);gradient.addColorStop(.5,colors[0]);gradient.addColorStop(1,colors[2]);
+    ctx.fillStyle=gradient;ctx.fillRect(0,0,width,titleHeight);ctx.strokeStyle=border;ctx.lineWidth=2;ctx.strokeRect(0,0,width,titleHeight);
+    function label(value,x,y,w,font=22,color='#083c51',align='center'){
+      ctx.save();ctx.beginPath();ctx.rect(x+8,y,w-16,rowHeight);ctx.clip();
+      ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
+      let size=font;ctx.font='800 '+size+'px Arial';
+      while(ctx.measureText(value).width>w-24&&size>12){size--;ctx.font='800 '+size+'px Arial';}
+      ctx.fillText(value,align==='left'?x+16:x+w/2,y+rowHeight/2);ctx.restore();
+    }
+    label(reportTitle(data),0,3,width,30,'#fff');
+    function drawRow(values,y,kind){
+      let x=0;
+      cols.forEach(([key,heading],i)=>{
+        if(kind==='total'&&i===0){ctx.fillStyle=colors[2];ctx.fillRect(0,y,widths[0]+widths[1],rowHeight);ctx.strokeStyle=border;ctx.strokeRect(0,y,widths[0]+widths[1],rowHeight);label('TOTAL',0,y,widths[0]+widths[1],24,'#fff');x+=widths[0];return;}
+        if(kind==='total'&&i===1){x+=widths[1];return;}
         const value=values[key],cls=cellClass(key,value);
-        ctx.fillStyle=kind==='head'?colors[0]:kind==='total'?colors[2]:cls==='metric-good'?'#bbe2bb':cls==='metric-mid'?'#eee5b7':cls==='metric-low'?'#f0cccc':cls==='metric-boxes'?'#e5f0e7':kind%2?colors[1]:'#fff';
-        ctx.fillRect(x,y,widths[i],29);ctx.strokeStyle=colors[3];ctx.strokeRect(x,y,widths[i],29);
-        ctx.fillStyle=kind==='head'||kind==='total'?'#fff':'#243d30';ctx.font=(kind==='head'||kind==='total'?'bold ':'')+(kind==='head'?'10':'11')+'px Arial';
-        ctx.save();ctx.beginPath();ctx.rect(x+4,y,widths[i]-8,29);ctx.clip();
-        const labelText=kind==='head'?label.toUpperCase():text(key,value);
-        ctx.textAlign=i<2?'left':'center';ctx.fillText(labelText,i<2?x+9:x+widths[i]/2,y+15);ctx.restore();x+=widths[i];
+        ctx.fillStyle=kind==='head'?colors[0]:kind==='total'?colors[2]:cls==='metric-good'?'#80e77f':cls==='metric-mid'?'#eeee88':cls==='metric-low'?'#e98181':cls==='metric-boxes'?'#b9e7f5':kind%2?colors[1]:'#fff';
+        ctx.fillRect(x,y,widths[i],rowHeight);ctx.strokeStyle=border;ctx.strokeRect(x,y,widths[i],rowHeight);
+        const valueText=kind==='head'?heading.toUpperCase():text(key,value)+(key==='store'&&(values.stale||values.incomplete)?' †':'');
+        label(valueText,x,y,widths[i],kind==='head'?21:22,kind==='head'||kind==='total'?'#fff':'#083c51',i===1&&kind!=='head'?'left':'center');
+        x+=widths[i];
       });
     }
-    drawRow({},112,'head');rows.forEach((r,i)=>drawRow(r,141+i*29,i));drawRow({market:'TOTAL',store:'',...data.totals},141+rows.length*29,'total');
-    ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillStyle='#687b70';ctx.font='10px Arial';ctx.fillText('Archet Solutions · '+(data.coverage.retained?'Includes last saved values for omitted stores. ':'')+'Refreshed: '+el('updated').textContent,15,height-12);
+    drawRow({},titleHeight,'head');rows.forEach((r,i)=>drawRow(r,titleHeight+headerHeight+i*rowHeight,i));
+    drawRow(data.totals,titleHeight+headerHeight+rows.length*rowHeight,'total');
+    if(incomplete){ctx.fillStyle='#765016';ctx.font='16px Arial';ctx.textAlign='left';ctx.fillText('† Partial or retained source data. Totals reflect available values.',16,height-11);}
     return canvas;
   }
   el('copy').onclick = async () => {

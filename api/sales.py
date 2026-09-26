@@ -21,15 +21,17 @@ from openpyxl.styles import Font, PatternFill
 try:
     from api.portal import require_user, PortalError
     from api.supabase_store import StoreError
+    from api.calling_tree import active_roster, source_catalog
 except ModuleNotFoundError:
     from portal import require_user, PortalError
     from supabase_store import StoreError
+    from calling_tree import active_roster, source_catalog
 
 REPORT_URL = 'https://myrtpos.com/newbdi/Store_Performance_lp.fwx'
 CENTRAL = ZoneInfo('America/Chicago')
 SOURCES = {'connect': 'Connect', 'california': 'California', 'srh': 'SRH',
            'arm1': 'ARM', 'arm2': 'ARM', 'arbf': 'ARBF'}
-COLORS = {'Connect': '#176b56', 'California': '#a92d49', 'SRH': '#a06118',
+COLORS = {'Connect': '#095570', 'California': '#a92d49', 'SRH': '#a06118',
           'ARM': '#365cad', 'ARBF': '#7646a5'}
 METRICS = ('new_activation', 'upgrade', 'reactivation', 'bts', 'hsi',
            'accessory', 'total_boxes', 'qpay')
@@ -274,15 +276,39 @@ def date_range():
     return start, end
 
 
+def restrict_to_roster(rows, roster, catalog, imports, start, end):
+    """The active Calling Tree is the allowlist, including stores with no source activity."""
+    by_id={(r['dealer'],r['store_id']):r for r in rows}
+    completed={(i['source_id'],i['report_date']) for i in imports if i['status']=='complete'}
+    days=[start+timedelta(days=n) for n in range((end-start).days+1)]
+    result=[]
+    for store in roster:
+        key=store['dealer'],store['store_id'];sources=catalog.get(key,[])
+        available=bool(sources) and all(any((s,d) in completed for s in sources) for d in days)
+        out=by_id.get(key)
+        if out is None:
+            out=ratios({k:0 for k in METRICS}) if available else {k:None for k in (*METRICS,'apo','qpay_conv')}
+            out.update(stale=False,no_activity=available)
+        else:
+            out=dict(out)
+        out.update(dealer=store['dealer'],store_id=store['store_id'],market=store['market'],
+                   store=store['store'],incomplete=not available,unmatched=not bool(sources))
+        result.append(out)
+    return sorted(result,key=lambda r:(r['dealer'],r['market'],r['store']))
+
+
 def report_data(start, end):
-    with connect() as conn:
+    with connect() as conn, conn.transaction():
+        conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
         raw = conn.execute('''select p.*, (p.loaded_at<i.loaded_at or i.status='error') as stale
             from public.sales_performance p join public.sales_imports i using(source_id,report_date)
             where p.report_date between %s and %s order by p.report_date,p.source_id,p.store_id''', (start, end)).fetchall()
         imports = conn.execute('''select source_id, report_date,status,loaded_at,row_count,retained_count,error_code
             from public.sales_imports where report_date between %s and %s
             order by source_id,report_date''', (start, end)).fetchall()
-    rows = aggregate(raw)
+        roster=active_roster(conn)
+        catalog=source_catalog(conn)
+    rows = restrict_to_roster(aggregate(raw),roster,catalog,imports,start,end)
     dealer = request.args.get('dealer', '')
     if dealer and dealer not in COLORS:
         raise PortalError('Unknown dealer.')
@@ -296,13 +322,15 @@ def report_data(start, end):
     stores = [{'id': r['dealer'] + ':' + r['store_id'], 'name': r['store']} for r in rows]
     if store_id:
         rows = [r for r in rows if r['dealer'] + ':' + r['store_id'] == store_id]
-    total = ratios({k: sum(r[k] for r in rows) for k in METRICS})
+    total = ratios({k: sum((r[k] or 0) for r in rows) for k in METRICS})
     expected = sum(1 for s in SOURCES if not dealer or SOURCES[s] == dealer) * ((end - start).days + 1)
     complete = sum(i['status'] == 'complete' for i in relevant)
     times = [i['loaded_at'] for i in relevant if i['loaded_at']]
     return {'rows': rows, 'totals': total, 'markets': markets, 'stores': stores,
             'dealers': [{'name': d, 'color': c} for d, c in COLORS.items()],
             'start': start.isoformat(), 'end': end.isoformat(), 'today': today().isoformat(),
+            'calling_tree': {'active':bool(roster),'filename':roster[0]['filename'] if roster else None,
+                             'stores':len(roster),'unmatched':sum(r.get('unmatched',False) for r in rows)},
             'coverage': {'complete': complete, 'expected': expected,
                          'retained': sum(i['retained_count'] for i in relevant),
                          'errors': sorted({SOURCES[i['source_id']] for i in relevant if i['status'] == 'error'})},
@@ -324,9 +352,28 @@ def workbook_bytes(data):
         for key, col in [('accessory', 9), ('apo', 10)]:
             sheet.cell(sheet.max_row, col).number_format = '$#,##0.00'
         sheet.cell(sheet.max_row, 13).number_format = '0.00"%"'
+    dealers={r['dealer'] for r in data['rows']}
+    accent=COLORS[next(iter(dealers))] if len(dealers)==1 else COLORS['Connect']
     for cell in sheet[1]:
         cell.font = Font(bold=True, color='FFFFFF')
-        cell.fill = PatternFill('solid', fgColor='19352E')
+        cell.fill = PatternFill('solid', fgColor=accent.lstrip('#'))
+    for idx in range(2,sheet.max_row):
+        for cell in sheet[idx]:
+            cell.font=Font(bold=True,color='083C51')
+        for col in (9,10,11,13):
+            value=sheet.cell(idx,col).value
+            if value is None:
+                continue
+            color='B9E7F5' if col==11 else None
+            if col==10:
+                color='80E77F' if value>=20 else 'EEEE88'
+            elif col==13:
+                color='80E77F' if value>=100 else 'EEEE88' if value>=50 else 'E98181'
+            if color:
+                sheet.cell(idx,col).fill=PatternFill('solid',fgColor=color)
+    for cell in sheet[sheet.max_row]:
+        cell.font=Font(bold=True,color='FFFFFF')
+        cell.fill=PatternFill('solid',fgColor=accent.lstrip('#'))
     sheet.freeze_panes = 'D2'
     sheet.auto_filter.ref = sheet.dimensions
     for cells in sheet.columns:
@@ -337,6 +384,11 @@ def workbook_bytes(data):
     meta.append(['Expected source-days', data['coverage']['expected']])
     meta.append(['Retained source rows', data['coverage']['retained']])
     meta.append(['Oldest successful refresh', data['updated_at'] or 'Not available'])
+    meta.append(['Calling Tree', data.get('calling_tree',{}).get('filename') or 'Not provided'])
+    for row in meta:
+        for cell in row:
+            if isinstance(cell.value,str):
+                cell.data_type='s'
     result = BytesIO(); book.save(result); result.seek(0)
     return result
 
