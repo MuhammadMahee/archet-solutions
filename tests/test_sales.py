@@ -101,13 +101,18 @@ def test_reports_require_login(client, path):
 
 def test_member_can_read_but_only_admin_can_refresh(client, monkeypatch):
     monkeypatch.setattr(sales, 'report_data', lambda *args: {'rows': []})
-    monkeypatch.setattr(sales, 'run_batch', lambda: {'status': 'complete'})
+    calls = []
+    def run_batch(**kwargs):
+        calls.append(kwargs)
+        return {'status': 'complete'}
+    monkeypatch.setattr(sales, 'run_batch', run_batch)
     login(client, 'Member')
     assert client.get('/api/internal/sales').status_code == 200
     assert write(client, 'sales/refresh', {}).status_code == 403
     login(client)
     assert write(client, 'sales/refresh', {}).status_code == 200
     assert client.post('/api/internal/sales/refresh', json={}).status_code == 403
+    assert calls == [{'force_today': True}]
 
 
 def test_scheduler_fails_closed_and_blocks_preview(client, monkeypatch):
@@ -128,7 +133,8 @@ def test_invalid_ranges_are_rejected_before_database(client, query):
     assert client.get('/api/internal/sales?' + query).status_code == 400
 
 
-def test_six_workers_actually_start_together(monkeypatch):
+@pytest.mark.parametrize('force', [False, True])
+def test_six_workers_actually_start_together(monkeypatch, force):
     barrier = Barrier(6, timeout=5)
     calls = []
     class Result:
@@ -145,13 +151,16 @@ def test_six_workers_actually_start_together(monkeypatch):
         barrier.wait()
         return {'source':source,'completed':1,'failed':0}
     monkeypatch.setattr(sales, 'connect', Conn)
-    monkeypatch.setattr(sales, 'seed_jobs', lambda *args: None)
+    seeded = []
+    monkeypatch.setattr(sales, 'seed_jobs', lambda *args, **kwargs: seeded.append(kwargs))
     monkeypatch.setattr(sales, 'source_worker', worker)
-    assert sales.run_batch()['status'] == 'complete'
+    assert sales.run_batch(force_today=force)['status'] == 'complete'
+    assert seeded == [{'force_today': force}]
     assert set(calls) == set(sales.SOURCES)
 
 
-def test_busy_lock_does_not_start_downloads(monkeypatch):
+@pytest.mark.parametrize('force', [False, True])
+def test_busy_lock_does_not_start_downloads(monkeypatch, force):
     class Result:
         def fetchone(self): return {'locked':False}
     class Conn:
@@ -160,7 +169,8 @@ def test_busy_lock_does_not_start_downloads(monkeypatch):
         def execute(self, *args): return Result()
     monkeypatch.setattr(sales, 'connect', Conn)
     monkeypatch.setattr(sales, 'source_worker', lambda *args: pytest.fail('must not download'))
-    assert sales.run_batch()['status'] == 'busy'
+    monkeypatch.setattr(sales, 'seed_jobs', lambda *args, **kwargs: pytest.fail('must not requeue'))
+    assert sales.run_batch(force_today=force)['status'] == 'busy'
 
 
 def test_xlsx_keeps_dealer_and_blocks_formula_injection():

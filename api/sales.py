@@ -149,7 +149,7 @@ def read_xls(data):
     return rows
 
 
-def seed_jobs(conn, current):
+def seed_jobs(conn, current, *, force_today=False):
     """Resume month backfill and refresh today; close yesterday after midnight."""
     with conn.transaction():
         with conn.cursor() as cur:
@@ -160,6 +160,9 @@ def seed_jobs(conn, current):
             where status='complete' and ((report_date=%s and loaded_at < now()-interval '18 minutes')
               or (report_date=%s and loaded_at < %s))''',
                      (current, current - timedelta(days=1), datetime.combine(current, datetime.min.time(), CENTRAL)))
+        if force_today:
+            conn.execute('''update public.sales_imports set status='pending', retry_at=now()
+                where report_date=%s''', (current,))
 
 
 def save_rows(conn, source, report_date, rows):
@@ -214,7 +217,7 @@ def source_worker(source, cookies, current):
         return {'source': source, 'completed': completed, 'failed': failed}
 
 
-def run_batch():
+def run_batch(*, force_today=False):
     try:
         cookies = json.loads(os.getenv('RTPOS_COOKIES', '{}'))
         if not isinstance(cookies, dict):
@@ -226,7 +229,7 @@ def run_batch():
             return {'status': 'busy', 'remaining': 1, 'workers': []}
         try:
             current = today()
-            seed_jobs(conn, current)
+            seed_jobs(conn, current, force_today=force_today)
             with ThreadPoolExecutor(max_workers=6) as pool:
                 futures = [pool.submit(source_worker, s, cookies.get(s, {}), current) for s in SOURCES]
                 results = [future.result() for future in futures]
@@ -415,7 +418,7 @@ def register_sales(app):
     @app.post('/api/internal/sales/refresh')
     @require_user(admin=True)
     def sales_refresh():
-        return jsonify(run_batch())
+        return jsonify(run_batch(force_today=True))
 
     @app.post('/api/jobs/sales')
     def scheduled_sales():
