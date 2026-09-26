@@ -70,6 +70,7 @@ def main():
                 member.locator("#login-password").fill("TeamPass123")
                 member.get_by_role("button", name="Sign in to workspace").click()
                 expect(member.locator("#greeting")).to_have_text("Welcome back, Team.")
+                member.locator('#sidebar-toggle').click()
                 member.locator('[data-page="overview"]').click()
                 expect(member.locator("#users-nav")).to_be_hidden()
                 assert member.request.get(origin + "/api/internal/users").status == 403

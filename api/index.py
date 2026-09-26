@@ -194,7 +194,7 @@ register_calling_tree(app,lambda: sales_connect())
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename not in ('sales.js', 'sales.css', 'calling-tree.js'):
+    if filename not in ('sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css'):
         return '', 404
     return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
 

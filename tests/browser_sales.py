@@ -51,6 +51,27 @@ def main():
                 page.locator('#login-form button[type=submit]').click()
                 expect(page.locator('#sales-count')).to_have_text('72 STORES')
                 expect(page.locator('#sales-table th').first).to_have_text('Dealer')
+                assert page.locator('#sales-table tbody tr').first.bounding_box()['height'] <= 27
+                before=page.locator('.main').bounding_box()['width']
+                page.locator('#sidebar-toggle').click()
+                expect(page.locator('#workspace-sidebar')).to_be_hidden()
+                assert page.locator('.main').bounding_box()['width'] > before + 150
+                page.reload()
+                expect(page.locator('#sales-count')).to_have_text('72 STORES')
+                expect(page.locator('#workspace-sidebar')).to_be_hidden()
+                page.locator('#sidebar-toggle').click()
+                expect(page.locator('#workspace-sidebar')).to_be_visible()
+                page.locator('#sales-dealer-trigger').click()
+                page.get_by_role('combobox',name='Search dealer').fill('arm2')
+                expect(page.locator('#sales-dealer-options [role=option]')).to_have_count(1)
+                page.get_by_role('combobox',name='Search dealer').press('Enter')
+                expect(page.locator('#sales-count')).to_have_text('12 STORES')
+                expect(page.locator('#sales-dealer-trigger')).to_contain_text('ARM2')
+                page.locator('#sales-market-trigger').click()
+                page.get_by_role('combobox',name='Search market').fill('not a market')
+                expect(page.locator('#sales-market-menu')).to_contain_text('No matches')
+                page.get_by_role('combobox',name='Search market').press('Escape')
+                expect(page.locator('#sales-market-trigger')).to_be_focused()
                 backgrounds=[]
                 for dealer in sales.COLORS:
                     page.locator('#sales-dealer').select_option(dealer)
@@ -62,6 +83,9 @@ def main():
                 page.locator('#sales-dealer').select_option('California')
                 expect(page.locator('#sales-table tbody tr').first).to_contain_text('CALIFORNIA STORE')
                 page.screenshot(path=str(ROOT/'test-results/sales-desktop.png'),full_page=True)
+                page.locator('#sales-market-trigger').click()
+                page.screenshot(path=str(ROOT/'test-results/sales-dropdown.png'),full_page=True)
+                page.get_by_role('combobox',name='Search market').press('Escape')
                 page.locator('#sales-market').select_option('CALIFORNIA 1')
                 expect(page.locator('#sales-count')).to_have_text('6 STORES')
                 page.locator('#sales-store').select_option('California:1')
@@ -83,8 +107,18 @@ def main():
                 assert page.locator('#sales-market').input_value()==''
                 assert page.locator('#sales-store').input_value()==''
                 page.set_viewport_size({'width':390,'height':844})
+                expect(page.locator('#workspace-sidebar')).to_be_hidden()
+                page.locator('#sales-dealer-trigger').click()
+                menu=page.locator('#sales-dealer-menu').bounding_box()
+                assert menu['x'] >= 0 and menu['x']+menu['width'] <= 390
+                page.get_by_role('combobox',name='Search dealer').press('Escape')
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 page.screenshot(path=str(ROOT/'test-results/sales-mobile.png'),full_page=True)
+                page.locator('#sidebar-toggle').click()
+                expect(page.locator('#workspace-sidebar')).to_be_visible()
+                page.locator('#sidebar-close').press('Escape')
+                expect(page.locator('#workspace-sidebar')).to_be_hidden()
+                page.locator('#sidebar-toggle').click()
                 page.locator('#logout').click();expect(page.locator('#login')).to_be_visible()
                 assert page.locator('#sales-table tbody tr').count()==0
                 assert not errors,errors

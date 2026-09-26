@@ -56,6 +56,7 @@ def main():
                 page.screenshot(path=str(ROOT/'test-results/calling-tree-desktop.png'),full_page=True)
                 page.set_viewport_size({'width':390,'height':844});assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
                 page.screenshot(path=str(ROOT/'test-results/calling-tree-mobile.png'),full_page=True)
+                page.locator('#sidebar-toggle').click()
                 page.locator('#logout').click();expect(page.locator('#login')).to_be_visible()
                 assert page.locator('#tree-table tbody tr').count()==0
                 page.locator('#login-username').fill('Member');page.locator('#login-password').fill('TestPass123');page.locator('#login-form button[type=submit]').click()
