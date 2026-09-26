@@ -35,9 +35,9 @@ except ModuleNotFoundError:
 REPORT_URL = 'https://myrtpos.com/newbdi/Store_Performance_lp.fwx'
 CENTRAL = ZoneInfo('America/Chicago')
 SOURCES = {'connect': 'Connect', 'california': 'California', 'srh': 'SRH',
-           'arm1': 'ARM1', 'arm2': 'ARM2', 'arbf': 'ARBF'}
+           'arm1': 'AMQ', 'arm2': 'ARM', 'arbf': 'ARBF'}
 COLORS = {'Connect': '#095570', 'California': '#a92d49', 'SRH': '#a06118',
-          'ARM1': '#365cad', 'ARM2': '#176b56', 'ARBF': '#7646a5'}
+          'AMQ': '#365cad', 'ARM': '#176b56', 'ARBF': '#7646a5'}
 METRICS = ('new_activation', 'upgrade', 'reactivation', 'bts', 'hsi',
            'accessory', 'total_boxes', 'qpay')
 COLUMNS = [('dealer', 'Dealer'), ('market', 'Market'), ('store', 'Store'),

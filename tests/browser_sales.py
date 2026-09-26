@@ -62,11 +62,11 @@ def main():
                 page.locator('#sidebar-toggle').click()
                 expect(page.locator('#workspace-sidebar')).to_be_visible()
                 page.locator('#sales-dealer-trigger').click()
-                page.get_by_role('combobox',name='Search dealer').fill('arm2')
+                page.get_by_role('combobox',name='Search dealer').fill('arm')
                 expect(page.locator('#sales-dealer-options [role=option]')).to_have_count(1)
                 page.get_by_role('combobox',name='Search dealer').press('Enter')
                 expect(page.locator('#sales-count')).to_have_text('12 STORES')
-                expect(page.locator('#sales-dealer-trigger')).to_contain_text('ARM2')
+                expect(page.locator('#sales-dealer-trigger')).to_contain_text('ARM')
                 page.locator('#sales-market-trigger').click()
                 page.get_by_role('combobox',name='Search market').fill('not a market')
                 expect(page.locator('#sales-market-menu')).to_contain_text('No matches')
@@ -102,7 +102,7 @@ def main():
                 assert page.evaluate("async()=> (await navigator.clipboard.read())[0].types.includes('image/png')")
                 page.locator('#sales-period').select_option('month')
                 expect(page.locator('#sales-range-badge')).to_contain_text('1,')
-                page.locator('#sales-dealer').select_option('ARM2')
+                page.locator('#sales-dealer').select_option('ARM')
                 expect(page.locator('#sales-count')).to_have_text('12 STORES')
                 assert page.locator('#sales-market').input_value()==''
                 assert page.locator('#sales-store').input_value()==''

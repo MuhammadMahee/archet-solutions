@@ -25,7 +25,7 @@ def test_dealer_aliases_preserve_ids_and_metadata():
         ['SPDI-CA','SPSCA1','Cali','Store 3','Person'],
         ['SUPREME','TX1','Dallas','Store 4','Person'],
         ['ARBF Wireless Metro','C-70851157','Metro','Store 5','Person']]))
-    assert [r['dealer'] for r in rows]==['ARM1','ARM2','California','SRH','ARBF']
+    assert [r['dealer'] for r in rows]==['AMQ','ARM','California','SRH','ARBF']
     assert rows[0]['original_dealer']=='DF Wireless'
     assert rows[0]['store_id']=='N1301A'
     assert rows[0]['market']=='CHICAGO'
@@ -34,7 +34,7 @@ def test_dealer_aliases_preserve_ids_and_metadata():
 @pytest.mark.parametrize('rows,message',[
     ([['Connect','S1','Reno','Store'],['CONNECT','S1','Reno','Other']],'duplicate'),
     ([['Unknown','S1','Reno','Store']],'unknown dealer'),
-    ([['ARM','S1','Reno','Store']],'unknown dealer'),
+    ([['AMQ','S1','Reno','Store'],['ARM1','S1','Reno','Other']],'duplicate'),
     ([['Connect','','Reno','Store']],'cannot be empty'),
     ([['Connect','S1','Reno','=HYPERLINK("https://example.com")']],'formulas'),
 ])
@@ -43,9 +43,14 @@ def test_bad_workbooks_fail_before_replacing_active_roster(rows,message):
 
 
 def test_same_store_id_in_different_dealers_is_not_merged():
-    _,rows=calling_tree.parse_workbook(workbook([['ARM1','S1','Reno','One'],['ARM2','S1','Reno','Two']]))
+    _,rows=calling_tree.parse_workbook(workbook([['AMQ','S1','Reno','One'],['ARM','S1','Reno','Two']]))
     assert len(rows)==2
-    assert [r['dealer'] for r in rows] == ['ARM1','ARM2']
+    assert [r['dealer'] for r in rows] == ['AMQ','ARM']
+
+
+def test_legacy_arm_names_map_to_new_dealers():
+    _,rows=calling_tree.parse_workbook(workbook([['ARM1','S1','Reno','One'],['ARM2','S2','Reno','Two']]))
+    assert [r['dealer'] for r in rows] == ['AMQ','ARM']
 
 
 def test_wrong_file_empty_workbook_and_headers_rejected():
