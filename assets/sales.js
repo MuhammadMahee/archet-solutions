@@ -31,8 +31,6 @@
   function cellClass(key,value) {
     if (value === null) return '';
     if (key === 'total_boxes') return 'metric-boxes';
-    if (key === 'qpay_conv') return Number(value)>=100 ? 'metric-good' : Number(value)>=50 ? 'metric-mid' : 'metric-low';
-    if (key === 'apo') return Number(value)>=20 ? 'metric-good' : 'metric-mid';
     return '';
   }
   function render(result) {
@@ -54,6 +52,11 @@
     if (result.calling_tree?.unmatched) message(result.calling_tree.unmatched + ' Calling Tree Store IDs have not appeared in RT-POS yet. Their sales are unavailable.');
     table.tHead.innerHTML = '<tr>' + columns.map(([,label])=>'<th scope="col">'+label+'</th>').join('') + '</tr>';
     table.tBodies[0].innerHTML = result.rows.map(r => '<tr>' + columns.map(([k])=>'<td class="'+cellClass(k,r[k])+'">'+(k==='dealer'?'<span class="sales-dealer-chip">':'')+escapeHTML(text(k,r[k]))+(k==='dealer'?'</span>':'')+(k==='store'&&(r.stale||r.incomplete)?'<span class="sales-stale-mark" title="Values may be incomplete; a source report is unavailable or retained">†</span>':'')+'</td>').join('')+'</tr>').join('');
+    [...table.tBodies[0].rows].forEach((row,index) => {
+      for (const [key,col] of [['apo',9],['qpay_conv',12]]) {
+        row.cells[col].style.backgroundColor = result.metric_fills?.[index]?.[key] || '';
+      }
+    });
     table.tFoot.innerHTML = '<tr><td colspan="3">TOTAL</td>' + columns.slice(3).map(([k])=>'<td>'+escapeHTML(text(k,result.totals[k]))+'</td>').join('') + '</tr>';
     el('empty').hidden = result.rows.length>0; el('copy').disabled = !result.rows.length; el('excel').disabled = !result.rows.length;
     el('sync').hidden = currentUser?.role !== 'admin';
@@ -102,7 +105,7 @@
         if(kind==='total'&&i===0){ctx.fillStyle=colors[2];ctx.fillRect(0,y,widths[0]+widths[1],rowHeight);ctx.strokeStyle=border;ctx.strokeRect(0,y,widths[0]+widths[1],rowHeight);label('TOTAL',0,y,widths[0]+widths[1],24,'#fff');x+=widths[0];return;}
         if(kind==='total'&&i===1){x+=widths[1];return;}
         const value=values[key],cls=cellClass(key,value);
-        ctx.fillStyle=kind==='head'?colors[0]:kind==='total'?colors[2]:cls==='metric-good'?'#80e77f':cls==='metric-mid'?'#eeee88':cls==='metric-low'?'#e98181':cls==='metric-boxes'?'#b9e7f5':kind%2?colors[1]:'#fff';
+        ctx.fillStyle=kind==='head'?colors[0]:kind==='total'?colors[2]:data.metric_fills?.[kind]?.[key] || (cls==='metric-boxes'?'#b9e7f5':kind%2?colors[1]:'#fff');
         ctx.fillRect(x,y,widths[i],rowHeight);ctx.strokeStyle=border;ctx.strokeRect(x,y,widths[i],rowHeight);
         const valueText=kind==='head'?heading.toUpperCase():text(key,value)+(key==='store'&&(values.stale||values.incomplete)?' †':'');
         label(valueText,x,y,widths[i],kind==='head'?21:22,kind==='head'||kind==='total'?'#fff':'#083c51',i===1&&kind!=='head'?'left':'center');

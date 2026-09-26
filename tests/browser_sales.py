@@ -29,7 +29,7 @@ def fixture_report(start, end):
     if market: rows=[r for r in rows if r['market']==market]
     stores=[{'id':r['dealer']+':'+r['store_id'],'name':r['store']} for r in rows]
     if sid: rows=[r for r in rows if r['dealer']+':'+r['store_id']==sid]
-    return {'rows':rows,'totals':sales.ratios({k:sum(r[k] for r in rows) for k in sales.METRICS}),
+    return {'rows':rows,'metric_fills':sales.metric_fills(rows),'totals':sales.ratios({k:sum(r[k] for r in rows) for k in sales.METRICS}),
             'dealers':[{'name':d,'color':c} for d,c in sales.COLORS.items()],
             'markets':markets,'stores':stores,'start':start.isoformat(),'end':end.isoformat(),
             'today':sales.today().isoformat(),'updated_at':'2026-09-26T17:41:00+00:00',
@@ -82,6 +82,19 @@ def main():
                 assert len(set(backgrounds))==6
                 page.locator('#sales-dealer').select_option('California')
                 expect(page.locator('#sales-table tbody tr').first).to_contain_text('CALIFORNIA STORE')
+                colors=page.evaluate('''() => {
+                    const rows=[...document.querySelectorAll('#sales-table tbody tr')];
+                    const canvas=salesDashboard.snapshot(),ctx=canvas.getContext('2d'),scale=canvas.width/2048;
+                    return [9,12].map((col,index)=>({
+                        table:rows.map(row=>getComputedStyle(row.cells[col]).backgroundColor),
+                        snapshot:[...ctx.getImageData(Math.floor((index?1871:1456)*scale),Math.floor(118*scale),1,1).data].slice(0,3)
+                    }));
+                }''')
+                for column in colors:
+                    assert len(set(column['table'])) > 3
+                    assert 'rgb(233, 129, 129)' in column['table']
+                    assert 'rgb(128, 231, 127)' in column['table']
+                    assert column['table'][0] == 'rgb('+', '.join(map(str,column['snapshot']))+')'
                 page.screenshot(path=str(ROOT/'test-results/sales-desktop.png'),full_page=True)
                 page.locator('#sales-market-trigger').click()
                 page.screenshot(path=str(ROOT/'test-results/sales-dropdown.png'),full_page=True)

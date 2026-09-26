@@ -54,6 +54,39 @@ def test_zero_denominators_and_half_up_rounding():
     assert sales.ratios({'accessory': 0, 'total_boxes': 0, 'qpay': 0})['qpay_conv'] == 0
 
 
+def test_metric_gradients_scale_columns_independently_and_continuously():
+    rows = [{'apo': n * 5, 'qpay_conv': 200 - n * 50} for n in range(5)]
+    fills = sales.metric_fills(rows)
+    assert fills[0] == {'apo': '#e98181', 'qpay_conv': '#80e77f'}
+    assert fills[2] == {'apo': '#eeee88', 'qpay_conv': '#eeee88'}
+    assert fills[4] == {'apo': '#80e77f', 'qpay_conv': '#e98181'}
+    assert len({fill['apo'] for fill in fills}) == 5
+    assert sales.metric_fills(rows[1:4])[0]['apo'] == '#e98181'
+
+
+def test_metric_gradients_handle_missing_and_equal_values():
+    assert sales.metric_fills([]) == []
+    assert sales.metric_fills([{'apo': None, 'qpay_conv': None}]) == [{}]
+    assert sales.metric_fills([{'apo': 0, 'qpay_conv': 0}] * 2) == [
+        {'apo': '#e98181', 'qpay_conv': '#e98181'}] * 2
+    assert sales.metric_fills([{'apo': 10, 'qpay_conv': None}]) == [{'apo': '#e98181'}]
+
+
+def test_excel_uses_the_same_metric_gradients_as_the_report():
+    rows = sales.aggregate([row(sid=str(n), total_boxes=n, accessory=n*n*5, qpay=4) for n in range(5)])
+    rows.append({**rows[-1], 'apo': None, 'qpay_conv': None})
+    data = {'rows': rows, 'totals': rows[0], 'start': '2026-09-01', 'end': '2026-09-01',
+            'coverage': {'complete': 6, 'expected': 6, 'retained': 0}, 'updated_at': None}
+    sheet = load_workbook(sales.workbook_bytes(data)).active
+    for index, fill in enumerate(sales.metric_fills(rows), 2):
+        for key, column in [('apo', 10), ('qpay_conv', 13)]:
+            cell = sheet.cell(index, column)
+            if key in fill:
+                assert cell.fill.fgColor.rgb[-6:].lower() == fill[key][1:]
+            else:
+                assert cell.fill.patternType is None
+
+
 @pytest.mark.parametrize('value', ['NaN', 'Infinity', 'wrong'])
 def test_bad_numeric_values_reject_whole_report(value):
     with pytest.raises(sales.ReportError):

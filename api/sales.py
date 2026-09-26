@@ -346,6 +346,27 @@ def restrict_to_roster(rows, roster, catalog, imports, start, end):
     return sorted(result,key=lambda r:(r['dealer'],r['market'],r['store']))
 
 
+def metric_fills(rows):
+    """Continuous red/yellow/green scales per visible column; missing data stays blank."""
+    fills = [{} for _ in rows]
+    stops = ((233, 129, 129), (238, 238, 136), (128, 231, 127))
+    for key in ('apo', 'qpay_conv'):
+        values = [Decimal(str(row[key])) for row in rows if row.get(key) is not None]
+        if not values:
+            continue
+        low, high = min(values), max(values)
+        for row, fill in zip(rows, fills):
+            if row.get(key) is None:
+                continue
+            position = (Decimal(str(row[key])) - low) / (high - low) if high > low else Decimal(0)
+            segment = 0 if position <= Decimal('.5') else 1
+            fraction = position * 2 - segment
+            channels = [int((Decimal(a) + Decimal(b - a) * fraction).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+                        for a, b in zip(stops[segment], stops[segment + 1])]
+            fill[key] = '#' + ''.join(f'{channel:02x}' for channel in channels)
+    return fills
+
+
 def report_data(start, end):
     with connect() as conn, conn.transaction():
         conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
@@ -375,7 +396,7 @@ def report_data(start, end):
     expected = sum(1 for s in SOURCES if not dealer or SOURCES[s] == dealer) * ((end - start).days + 1)
     complete = sum(i['status'] == 'complete' for i in relevant)
     times = [i['loaded_at'] for i in relevant if i['loaded_at']]
-    return {'rows': rows, 'totals': total, 'markets': markets, 'stores': stores,
+    return {'rows': rows, 'metric_fills': metric_fills(rows), 'totals': total, 'markets': markets, 'stores': stores,
             'dealers': [{'name': d, 'color': c} for d, c in COLORS.items()],
             'start': start.isoformat(), 'end': end.isoformat(), 'today': today().isoformat(),
             'calling_tree': {'active':bool(roster),'filename':roster[0]['filename'] if roster else None,
@@ -387,6 +408,7 @@ def report_data(start, end):
 
 
 def workbook_bytes(data):
+    fills = metric_fills(data['rows'])
     book = Workbook()
     sheet = book.active
     sheet.title = 'Sales Update'
@@ -415,9 +437,9 @@ def workbook_bytes(data):
                 continue
             color='B9E7F5' if col==11 else None
             if col==10:
-                color='80E77F' if value>=20 else 'EEEE88'
+                color=fills[idx-2].get('apo', '').lstrip('#')
             elif col==13:
-                color='80E77F' if value>=100 else 'EEEE88' if value>=50 else 'E98181'
+                color=fills[idx-2].get('qpay_conv', '').lstrip('#')
             if color:
                 sheet.cell(idx,col).fill=PatternFill('solid',fgColor=color)
     for cell in sheet[sheet.max_row]:
