@@ -95,7 +95,9 @@ def fetch_report(opener, report_date):
         data = response.read(MAX_REPORT_BYTES + 1)
     if len(data) > MAX_REPORT_BYTES:
         raise ReportError('report_too_large')
-    if not data.startswith(b'\xd0\xcf\x11\xe0'):
+    # RT-POS uses raw BIFF2 as well as OLE-wrapped XLS; xlrd validates both.
+    signatures = (b'\xd0\xcf\x11\xe0', b'\x09\x00', b'\x09\x02', b'\x09\x04', b'\x09\x08')
+    if not data.startswith(signatures):
         raise ReportError('invalid_report_or_expired_cookies')
     return read_xls(data)
 

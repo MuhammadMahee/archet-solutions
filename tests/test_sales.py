@@ -69,6 +69,21 @@ def test_redirect_cannot_send_cookie_to_unrelated_host():
         sales.SameHostRedirect().redirect_request(None, None, 302, '', {}, 'https://example.com/')
 
 
+@pytest.mark.parametrize('signature', [b'\x09\x00', b'\x09\x02', b'\x09\x04', b'\x09\x08', b'\xd0\xcf\x11\xe0'])
+def test_download_accepts_raw_biff_and_ole_xls(signature, monkeypatch):
+    class Response:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def read(self,*args):return signature+b'workbook'
+    class Opener:
+        def open(self, req, **kwargs):
+            assert b'frmStart=09%2F01%2F2026' in req.data
+            assert b'frmEnd=09%2F01%2F2026' in req.data
+            return Response()
+    monkeypatch.setattr(sales,'read_xls',lambda data:['parsed'])
+    assert sales.fetch_report(Opener(),date(2026,9,1))==['parsed']
+
+
 @pytest.mark.parametrize('path', ['sales', 'sales/export'])
 def test_reports_require_login(client, path):
     assert client.get('/api/internal/' + path).status_code == 401
