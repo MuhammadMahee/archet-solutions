@@ -83,19 +83,21 @@ def main():
                 page.locator('#sales-dealer').select_option('California')
                 expect(page.locator('#sales-table tbody tr').first).to_contain_text('CALIFORNIA STORE')
                 snapshot_details=page.evaluate('''() => {
-                    const labels=[],orig=CanvasRenderingContext2D.prototype.fillText;
-                    CanvasRenderingContext2D.prototype.fillText=function(text,...args){labels.push(text);return orig.call(this,text,...args)};
-                    try { const c=salesDashboard.snapshot();return {width:c.width,height:c.height,title:labels[0]}; }
+                    const labels=[],fonts=new Set(),orig=CanvasRenderingContext2D.prototype.fillText;
+                    const tableBottom=164+54+document.querySelectorAll('#sales-table tbody tr').length*52+60;
+                    CanvasRenderingContext2D.prototype.fillText=function(text,x,y,...args){labels.push(text);if(y>=164&&y<tableBottom)fonts.add(this.font);return orig.call(this,text,x,y,...args)};
+                    try { const c=salesDashboard.snapshot();return {width:c.width,height:c.height,title:labels[0],fonts:[...fonts]}; }
                     finally { CanvasRenderingContext2D.prototype.fillText=orig; }
                 }''')
                 assert snapshot_details['width']==2835
                 assert 'ALL MARKETS' in snapshot_details['title']
+                assert len(snapshot_details['fonts'])==1
                 colors=page.evaluate('''() => {
                     const rows=[...document.querySelectorAll('#sales-table tbody tr')];
                     const canvas=salesDashboard.snapshot(),ctx=canvas.getContext('2d'),scale=canvas.width/2112;
                     return [9,12].map((col,index)=>({
                         table:rows.map(row=>getComputedStyle(row.cells[col]).backgroundColor),
-                        snapshot:[...ctx.getImageData(Math.floor((index?1927:1510)*scale),Math.floor(230*scale),1,1).data].slice(0,3)
+                        snapshot:[...ctx.getImageData(Math.floor((index?1917:1500)*scale),Math.floor(250*scale),1,1).data].slice(0,3)
                     }));
                 }''')
                 for column in colors:

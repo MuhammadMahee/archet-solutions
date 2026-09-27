@@ -88,6 +88,15 @@
     const ctx=canvas.getContext('2d');ctx.scale(scale,scale);
     const colors=themes[el('dealer').value]||themes[''];
     const ink='#16354a',grid='#e0e8ef';
+    // Fit the entire table once, so headings, values and totals share one size.
+    let tableFont=22;
+    ctx.font='700 22px Arial, sans-serif';
+    cols.forEach(([key,heading],i)=>{
+      const values=[heading.toUpperCase(),...rows.map(row=>text(key,row[key])+(key==='store'&&(row.stale||row.incomplete)?' †':''))];
+      if(i>1)values.push(text(key,data.totals[key]));
+      for(const value of values){const measured=ctx.measureText(value).width;if(measured)tableFont=Math.min(tableFont,22*(widths[i]-32)/measured);}
+    });
+    tableFont=Math.floor(tableFont*2)/2;
     function rounded(x,y,w,h,r,fill){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();}
     function raisedCell(x,y,w,h,fill,dark=false){
       ctx.save();
@@ -95,6 +104,12 @@
       ctx.shadowBlur=5*scale;ctx.shadowOffsetX=1*scale;ctx.shadowOffsetY=3*scale;
       ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);
       ctx.restore();
+      // A translucent top reflection leaves the base performance color visible.
+      const shine=ctx.createLinearGradient(x,y+2,x,y+h*.46);
+      shine.addColorStop(0,dark?'#ffffff4d':'#ffffff85');
+      shine.addColorStop(.6,dark?'#ffffff18':'#ffffff30');
+      shine.addColorStop(1,'#ffffff00');
+      ctx.fillStyle=shine;ctx.fillRect(x+2,y+2,w-4,h*.46-2);
       // Beveled edges create depth without changing the performance fill color.
       const bevel=ctx.createLinearGradient(x,y,x,y+h);
       bevel.addColorStop(0,dark?'#ffffff55':'#ffffffee');
@@ -103,11 +118,11 @@
       ctx.strokeStyle=bevel;ctx.lineWidth=1.5;
       ctx.strokeRect(x+.75,y+.75,w-1.5,h-1.5);
     }
-    function label(value,x,y,w,h,font=23,color=ink,align='center',weight=700){
+    function label(value,x,y,w,h,font=23,color=ink,align='center',weight=700,fit=true){
       ctx.save();ctx.beginPath();ctx.rect(x+8,y,w-16,h);ctx.clip();
       ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
       let size=font;ctx.font=weight+' '+size+'px Arial, sans-serif';
-      while(ctx.measureText(value).width>w-28&&size>12){size--;ctx.font=weight+' '+size+'px Arial, sans-serif';}
+      while(fit&&ctx.measureText(value).width>w-28&&size>12){size--;ctx.font=weight+' '+size+'px Arial, sans-serif';}
       ctx.fillText(value,align==='left'?x+16:x+w/2,y+h/2);ctx.restore();
     }
     ctx.fillStyle='#f0f5f9';ctx.fillRect(0,0,width,height);
@@ -130,13 +145,13 @@
       ctx.fillRect(pad,y,tableWidth,head?headerHeight:h);
       let x=pad;
       cols.forEach(([key,heading],i)=>{
-        if(total&&i===0){raisedCell(x+5,y+6,widths[0]+widths[1]-10,h-12,colors[2],true);label('TOTAL',x,y,widths[0]+widths[1],h,25,'#fff','left',800);x+=widths[0];return;}
+        if(total&&i===0){raisedCell(x+5,y+6,widths[0]+widths[1]-10,h-12,colors[2],true);label('TOTAL',x,y,widths[0]+widths[1],h,tableFont,'#fff','left',700,false);x+=widths[0];return;}
         if(total&&i===1){x+=widths[1];return;}
         const value=values[key];
         const fill=head?colors[0]:total?colors[2]:data.metric_fills?.[kind]?.[key] || (key==='total_boxes'&&value!==null?'#d9edf7':kind%2?'#f7fafc':'#fff');
         raisedCell(x+5,y+6,widths[i]-10,(head?headerHeight:h)-12,fill,head||total);
         const valueText=head?heading.toUpperCase():text(key,value)+(key==='store'&&(values.stale||values.incomplete)?' †':'');
-        label(valueText,x,y,widths[i],head?headerHeight:h,head?19:total?25:23,head||total?'#fff':key==='market'?colors[0]:ink,i===1&&!head?'left':'center',head||total||key==='apo'||key==='qpay_conv'?800:700);
+        label(valueText,x,y,widths[i],head?headerHeight:h,tableFont,head||total?'#fff':key==='market'?colors[0]:ink,i===1&&!head?'left':'center',700,false);
         x+=widths[i];
       });
       if(!head&&!total&&(kind===0||rows[kind-1].market!==values.market)){ctx.fillStyle=colors[0];ctx.fillRect(pad,y,4,h);}
