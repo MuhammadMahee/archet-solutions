@@ -90,13 +90,13 @@
           <label>Goals workbook<input id="quota-file" type="file" accept=".xlsx,.xlsm" required></label>
           <button id="quota-template" type="button">Download template</button><button id="quota-preview-button" type="submit" class="quota-primary">Preview goals</button>
         </form>
-        <p class="quota-help">Up to 2 MB. Columns: Market, Stores, Voice, BTS, HSI/HINT, Acc. Store ID and MIM are optional. Duplicate store rows are combined.</p>
+        <p class="quota-help">Up to 2 MB. Columns: Market, Stores, Voice, BTS, HSI/HINT, Acc. Acc is not required or used for ARBF. Store ID and MIM are optional. Duplicate store rows are combined.</p>
         <div id="quota-preview" hidden><div class="quota-preview-head"><div><strong id="quota-preview-summary"></strong><p>Applying replaces all goals for this dealer and month. Other dealers and months are preserved.</p></div><div><button id="quota-discard" type="button">Discard</button> <button id="quota-save" type="button" class="quota-primary">Apply goals</button></div></div><div class="quota-scroll"><table id="quota-preview-table"><thead><tr><th>Market</th><th>Store</th><th>Voice</th><th>BTS</th><th>HSI/HINT</th><th>Acc</th><th>MIM</th></tr></thead><tbody></tbody></table></div></div>
       </details>
       <p id="quota-upload-info" class="quota-help"></p>
       <div id="quota-empty" class="sales-empty" hidden>No goals uploaded for this month. An administrator can upload a Goals workbook above.</div>
       <div id="quota-tables"></div>
-      <p class="sales-footnote">Voice actual = new activations + reactivations − BTS − HSI. Upgrades are excluded. MIM goals count toward quota; MIM actuals are 0, as in SPDI.<br>Accessory trend projects the saved month-to-date average across the full month. Per-day goal uses remaining days after today (Central time). Overall average = (quota growth + projected accessory achievement) ÷ 2. Rankings restart within each dealer and market; incomplete data gives provisional results.</p>
+      <p class="sales-footnote">Voice actual = new activations + reactivations − BTS − HSI. Upgrades are excluded. MIM goals count toward quota; MIM actuals are 0, as in SPDI.<br>Accessory trend projects the saved month-to-date average across the full month. Per-day goal uses remaining days after today (Central time). Overall average = (quota growth + projected accessory achievement) ÷ 2. ARBF has no accessory goal: its overall score and ranking use quota growth only. In combined totals, accessory goal calculations exclude ARBF, while accessory sales and trend include all stores. Rankings restart within each dealer and market; incomplete data gives provisional results.</p>
     </section>
     <section id="page-callingtree" hidden>
       <div class="sales-hero"><div><div class="sales-eyebrow">STORE DIRECTORY</div><h1>Calling Tree</h1><p>The store list used by Sales Update, snapshots, and Excel exports.</p></div><button class="subtle" data-page="sales">View sales →</button></div>

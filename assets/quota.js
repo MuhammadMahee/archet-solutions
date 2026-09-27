@@ -112,7 +112,9 @@
       if (id!==previewSequence || !currentUser) return;
       pending = {...payload,roster_version:result.roster_version};
       el('preview-summary').textContent = result.message;
-      el('preview-table').tBodies[0].innerHTML = result.rows.map(r=>'<tr>'+['market','store','voice_goal','bts_goal','hsi_goal','accessory_goal','mim_goal'].map(k=>'<td>'+escapeHTML(format(r[k],k==='market'||k==='store'?'text':k==='accessory_goal'?'money':'number'))+'</td>').join('')+'</tr>').join('');
+      const previewColumns = [['market','Market'],['store','Store'],['voice_goal','Voice'],['bts_goal','BTS'],['hsi_goal','HSI/HINT'],...(payload.dealer==='ARBF'?[]:[['accessory_goal','Acc']]),['mim_goal','MIM']];
+      el('preview-table').tHead.innerHTML = '<tr>'+previewColumns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr>';
+      el('preview-table').tBodies[0].innerHTML = result.rows.map(r=>'<tr>'+previewColumns.map(([k])=>'<td>'+escapeHTML(format(r[k],k==='market'||k==='store'?'text':k==='accessory_goal'?'money':'number'))+'</td>').join('')+'</tr>').join('');
       el('preview').hidden=false;message('Preview ready. Review the goals, then apply them.');
     } catch (error) { if (id===previewSequence) message(error.message); }
     finally { uploadBusy(false); }

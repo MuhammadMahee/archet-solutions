@@ -184,3 +184,56 @@ def test_upload_preview_then_apply_is_scoped_and_rechecks_roster(client,monkeypa
     # The upload route allows workbook-sized JSON, but ordinary writes retain their small limit.
     assert write(client,'quota/upload',{**payload,'content':'x'*40000}).status_code==400
     assert write(client,'password',{'padding':'x'*40000}).status_code==413
+
+
+def test_arbf_accepts_no_acc_column_and_ignores_legacy_acc_values():
+    stores=[{**roster()[0], 'dealer':'ARBF'}]
+    data=workbook([['RENO','STORE 1',100,20,10]], ['Market','Stores','Voice','BTS','HSI/HINT'])
+    assert quota.parse_workbook(data,stores,'ARBF')[0]['accessory_goal']==0
+    with pytest.raises(PortalError, match='Acc'):
+        quota.parse_workbook(data,roster(),'Connect')
+    legacy=workbook([['RENO','STORE 1',100,20,10,'=ignored()',5]])
+    assert quota.parse_workbook(legacy,stores,'ARBF')[0]['accessory_goal']==0
+
+
+def test_arbf_existing_goals_do_not_affect_scores_or_exports():
+    goals=[{**g,'dealer':'ARBF'} for g in fixture_goals()]
+    actuals=[{**r,'dealer':'ARBF'} for r in fixture_actuals()]
+    actuals[1]['accessory']=D(999999)
+    tables,elapsed,days=quota.build_tables(goals,actuals,date(2026,9,1),date(2026,9,15))
+    summary=tables[-1]
+    for row in [*summary['rows'],summary['total']]:
+        assert row['overall']==row['growth']==D(90)/135
+        assert all(row[key] is None for key in quota.ACCESSORY_TARGET_FIELDS)
+    assert [r['rank'] for r in summary['rows']]==[1,1,1]
+    assert all(c['key'] not in quota.ACCESSORY_TARGET_FIELDS for c in summary['columns'])
+    assert summary['total']['acc_actual']==1000999
+    book=quota.report_workbook({'tables':tables,'month':'2026-09','today':'2026-09-15','incomplete':0,'elapsed':elapsed,'days':days})
+    headers=[c.value for c in book['Achievement Summary'][3]]
+    assert 'Acc Goal' not in headers and 'Achieved' not in headers and 'Acc Actual' in headers
+    book.close()
+
+
+def test_mixed_totals_exclude_arbf_from_accessory_targets_only():
+    goals=[fixture_goals()[0],{**fixture_goals()[0],'dealer':'ARBF'}]
+    actuals=[fixture_actuals()[0],{**fixture_actuals()[0],'dealer':'ARBF','accessory':D(999999)}]
+    tables,_,_=quota.build_tables(goals,actuals,date(2026,9,1),date(2026,9,15))
+    summary=tables[-1];total=summary['total']
+    assert total['acc_goal']==1000 and total['acc_remain']==500
+    assert total['achieved']==1 and total['per_day']==D(500)/15
+    assert total['acc_actual']==1000499 and total['trend']==2000998
+    assert total['growth']==D(180)/270
+    arbf=next(r for r in summary['rows'] if r['dealer']=='ARBF')
+    assert arbf['acc_goal'] is None and arbf['overall']==arbf['growth']
+    assert any(c['key']=='acc_goal' for c in summary['columns'])
+
+
+def test_arbf_template_omits_accessory_goal(client,monkeypatch):
+    monkeypatch.setattr(quota.sales,'connect',lambda:UploadDB())
+    monkeypatch.setattr(quota,'active_roster',lambda _:[{**roster()[0],'dealer':'ARBF'}])
+    login(client)
+    result=client.get('/api/internal/quota/template?dealer=ARBF')
+    assert result.status_code==200
+    book=load_workbook(BytesIO(result.data))
+    assert [c.value for c in book.active[1]]==['Store ID','Market','Stores','Voice','BTS','HSI/HINT','MIM']
+    book.close()

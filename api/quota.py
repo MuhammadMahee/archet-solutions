@@ -25,6 +25,7 @@ except ModuleNotFoundError:
     from portal import PortalError, body, require_user
 
 GOALS = ('voice_goal', 'bts_goal', 'hsi_goal', 'accessory_goal', 'mim_goal')
+ACCESSORY_TARGET_FIELDS = ('acc_goal', 'acc_remain', 'per_day', 'achieved')
 MAX_BYTES = 2 * 1024 * 1024
 ALIASES = {
     'market': ('market', 'market id'),
@@ -87,12 +88,14 @@ def parse_workbook(data, roster, dealer):
             for number, cells in enumerate(sheet.iter_rows(max_row=25), 1):
                 headers = {re.sub(r'[^a-z0-9]+', ' ', str(c.value or '').lower()).strip(): i for i, c in enumerate(cells)}
                 mapping = {key: next((headers[a] for a in names if a in headers), None) for key, names in ALIASES.items()}
-                if all(mapping[k] is not None for k in ('market', 'store', *GOALS[:4])):
+                required = ('market', 'store', *GOALS[:3]) + (() if dealer == 'ARBF' else ('accessory_goal',))
+                if all(mapping[k] is not None for k in required):
                     candidates.append((sheet, number, mapping))
                     break
         chosen = next((c for c in candidates if c[0].title.casefold() == 'goals'), candidates[0] if candidates else None)
         if not chosen:
-            raise PortalError('Required columns: Market, Stores, Voice, BTS, HSI/HINT, Acc. MIM and Store ID are optional.')
+            accessory = '' if dealer == 'ARBF' else ', Acc'
+            raise PortalError(f'Required columns: Market, Stores, Voice, BTS, HSI/HINT{accessory}. MIM and Store ID are optional.')
         sheet, header, mapping = chosen
         stores = [s for s in roster if s['dealer'] == dealer]
         if not stores:
@@ -106,6 +109,9 @@ def parse_workbook(data, roster, dealer):
         for number, (cells, cached_cells) in enumerate(zip(sheet.iter_rows(min_row=header + 1), values), header + 1):
             row = {}
             for key, col in mapping.items():
+                if dealer == 'ARBF' and key == 'accessory_goal':
+                    row[key] = None
+                    continue
                 cell = cells[col] if col is not None and col < len(cells) else None
                 value = cell.value if cell else None
                 if cell and cell.data_type == 'f':
@@ -148,15 +154,21 @@ def ratio(actual, goal):
     return actual / goal if goal else Decimal(0)
 
 
-def summary_values(row, elapsed, days):
+def summary_values(row, elapsed, days, accessory_targets=True, target_actual=None):
     actual, quota = Decimal(str(row['actual'])), Decimal(str(row['quota']))
     acc, goal = Decimal(str(row['acc_actual'])), Decimal(str(row['acc_goal']))
     trend = acc * days / elapsed if elapsed else Decimal(0)
     growth = ratio(actual, quota)
-    achieved = ratio(trend, goal)
-    return {**row, 'growth': growth, 'acc_remain': goal - acc,
-            'per_day': (goal - acc) / (days - elapsed) if days > elapsed else Decimal(0),
-            'trend': trend, 'achieved': achieved, 'overall': (growth + achieved) / 2}
+    target_acc = acc if target_actual is None else Decimal(str(target_actual))
+    target_trend = target_acc * days / elapsed if elapsed else Decimal(0)
+    achieved = ratio(target_trend, goal)
+    result = {**row, 'growth': growth, 'acc_remain': goal - target_acc,
+              'per_day': (goal - target_acc) / (days - elapsed) if days > elapsed else Decimal(0),
+              'trend': trend, 'achieved': achieved, 'overall': (growth + achieved) / 2}
+    if not accessory_targets:
+        result.update({key: None for key in ACCESSORY_TARGET_FIELDS})
+        result['overall'] = growth
+    return result
 
 
 def columns(*items):
@@ -194,7 +206,7 @@ def build_tables(goals, actuals, month, current):
         row = summary_values({**location, 'quota': sum(Decimal(str(goal[k])) for k in GOALS if k != 'accessory_goal'),
             'actual': values['voice'] + values['bts'] + values['hsi'],
             'acc_goal': Decimal(str(goal['accessory_goal'])), 'acc_actual': values['accessory'],
-            'incomplete': incomplete}, elapsed, days)
+            'incomplete': incomplete}, elapsed, days, accessory_targets=goal['dealer'] != 'ARBF')
         if missing:
             for key in ('actual', 'growth', 'acc_actual', 'acc_remain', 'per_day', 'trend', 'achieved', 'overall'):
                 row[key] = None
@@ -222,13 +234,18 @@ def build_tables(goals, actuals, month, current):
             previous = row['overall']
         else:
             row['rank'] = None
+    eligible = [r for r in summary if r['dealer'] != 'ARBF']
     total = summary_values({'store': 'TOTAL', **{k: sum(r[k] or 0 for r in summary)
         for k in ('quota', 'actual', 'acc_goal', 'acc_actual')},
-        'incomplete': any(r['incomplete'] for r in summary)}, elapsed, days)
+        'incomplete': any(r['incomplete'] for r in summary)}, elapsed, days,
+        accessory_targets=bool(eligible), target_actual=sum(r['acc_actual'] or 0 for r in eligible))
     if summary and all(r['actual'] is None for r in summary):
         for key in ('actual', 'growth', 'acc_actual', 'acc_remain', 'per_day', 'trend', 'achieved', 'overall'):
             total[key] = None
-    tables.append({'id': 'summary', 'title': 'GOALS ACHIEVEMENT SUMMARY', 'columns': SUMMARY_COLUMNS,
+    summary_columns = [c for c in SUMMARY_COLUMNS if not summary or eligible or c['key'] not in ACCESSORY_TARGET_FIELDS]
+    if summary and not eligible:
+        summary_columns = [{**c, 'label': 'Overall'} if c['key'] == 'overall' else c for c in summary_columns]
+    tables.append({'id': 'summary', 'title': 'GOALS ACHIEVEMENT SUMMARY', 'columns': summary_columns,
                    'rows': summary, 'total': total})
     return tables, elapsed, days
 
@@ -352,9 +369,9 @@ def register_quota(app):
         if not roster:
             raise PortalError('Upload a Calling Tree for this dealer first.')
         book = Workbook(); sheet = book.active; sheet.title = 'Goals'
-        sheet.append(['Store ID', 'Market', 'Stores', 'Voice', 'BTS', 'HSI/HINT', 'Acc', 'MIM'])
+        sheet.append(['Store ID', 'Market', 'Stores', 'Voice', 'BTS', 'HSI/HINT'] + ([] if dealer == 'ARBF' else ['Acc']) + ['MIM'])
         for row in roster:
-            sheet.append([row['store_id'], row['market'], row['store'], 0, 0, 0, 0, 0])
+            sheet.append([row['store_id'], row['market'], row['store'], 0, 0, 0] + ([] if dealer == 'ARBF' else [0]) + [0])
             for cell in sheet[sheet.max_row][:3]:
                 cell.data_type = 's'
         for cell in sheet[1]:
