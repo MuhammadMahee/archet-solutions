@@ -43,7 +43,7 @@ def fixture_report():
 def main():
     fake=FakeStore();db=UploadDB();server=make_server('127.0.0.1',0,index.app,threaded=True)
     origin=f'http://127.0.0.1:{server.server_port}'
-    with patch.object(portal,'db',fake.db),patch.object(portal,'auth',fake.auth),patch.object(quota,'report_data',fixture_report),patch.object(quota.sales,'connect',lambda:db),patch.object(quota.sales,'report_data',sales_fixture),patch.object(quota,'active_roster',lambda _:roster()+[{**s,'dealer':'ARBF'} for s in roster() if s['dealer']=='Connect']):
+    with patch.object(portal,'db',fake.db),patch.object(portal,'auth',fake.auth),patch.object(quota,'report_data',fixture_report),patch.object(quota.sales,'connect',lambda:db),patch.object(quota.sales,'report_data',sales_fixture),patch.object(quota,'active_roster',lambda _:roster()+[{**s,'dealer':'ARBF'} for s in roster() if s['dealer']=='Connect']),patch.object(quota.sales,'run_batch',return_value={'status':'complete','remaining':0}) as refresh:
         Thread(target=server.serve_forever,daemon=True).start()
         try:
             with sync_playwright() as p:
@@ -57,6 +57,18 @@ def main():
                 expect(page.locator('#quota-card-voice tbody tr').first.locator('td').nth(4)).to_have_text('75')
                 page.locator('#quota-dealer-trigger').click();page.locator('#quota-dealer-menu [role=option]').filter(has_text='Connect').click()
                 expect(page.locator('#quota-count')).to_have_text('3 STORES')
+                page.locator('#quota-sync').click()
+                expect(page.locator('#quota-message')).to_have_text('Sources synced. Quota results reloaded.')
+                refresh.assert_called_once_with(force_today=True)
+                expect(page.locator('#quota-dealer-trigger')).to_contain_text('Connect')
+                refresh.return_value={'status':'busy'}
+                page.locator('#quota-sync').click();expect(page.locator('#quota-message')).to_contain_text('already running')
+                refresh.return_value={'status':'partial','remaining':2}
+                page.locator('#quota-sync').click();expect(page.locator('#quota-message')).to_contain_text('still incomplete')
+                refresh.side_effect=portal.PortalError('Source sync unavailable.',503)
+                page.locator('#quota-sync').click();expect(page.locator('#quota-message')).to_have_text('Source sync unavailable.')
+                expect(page.locator('#quota-sync')).to_be_enabled()
+                refresh.side_effect=None
                 connect_color=page.evaluate("getComputedStyle(document.body).getPropertyValue('--sales-accent')")
                 page.locator('#quota-market-trigger').click();page.locator('#quota-market-menu input').fill('reno');page.locator('#quota-market-menu [role=option]').filter(has_text='RENO').click()
                 expect(page.locator('#quota-count')).to_have_text('3 STORES')
@@ -117,7 +129,7 @@ def main():
                 page.locator('#sidebar-toggle').click();page.locator('#logout').click();expect(page.locator('#login')).to_be_visible()
                 assert page.locator('.quota-card').count()==0
                 page.locator('#login-username').fill('Member');page.locator('#login-password').fill('TestPass123');page.locator('#login-form button[type=submit]').click()
-                expect(page.locator('#quota-count')).to_have_text('6 STORES');expect(page.locator('#quota-upload')).to_be_hidden()
+                expect(page.locator('#quota-count')).to_have_text('6 STORES');expect(page.locator('#quota-upload')).to_be_hidden();expect(page.locator('#quota-sync')).to_be_hidden()
                 assert not errors,errors
                 browser.close()
             print('Quota desktop/mobile, filters, upload, permissions, PNG and Excel passed.')

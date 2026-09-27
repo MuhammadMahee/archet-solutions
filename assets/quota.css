@@ -4,6 +4,7 @@
 #page-quota button:disabled{opacity:.5;cursor:wait}
 #page-quota button:focus-visible{outline:2px solid #00a9df;outline-offset:3px}
 .quota-month-card{text-align:right;display:grid;gap:5px;font-size:12px}.quota-month-card strong{color:var(--sales-accent)}.quota-month-card span{font-size:10px;color:#617580}
+#page-quota .sales-toolbar>div{align-items:center;gap:10px}#quota-count{white-space:nowrap}
 .quota-filters{grid-template-columns:140px minmax(100px,1fr) minmax(100px,1fr) minmax(130px,1.4fr) auto}
 .quota-upload{background:#fff;border:1px solid var(--sales-border);border-radius:11px;padding:16px;margin:0 0 18px}.quota-upload summary{font-weight:700;color:var(--sales-accent);cursor:pointer;font-size:12px}.quota-upload p{font-size:11px;line-height:1.7;color:#526b79}
 .quota-upload form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.quota-upload label{font-size:10px;font-weight:700;flex:1;min-width:130px}.quota-upload label:has(input[type=file]){flex:2;min-width:220px}

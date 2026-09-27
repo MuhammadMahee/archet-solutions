@@ -3,7 +3,7 @@
   const el = id => document.getElementById('quota-' + id);
   const colors = {Connect:'#095570',California:'#a92d49',SRH:'#a06118',AMQ:'#365cad',ARM:'#176b56',ARBF:'#7646a5'};
   const dealers = Object.keys(colors);
-  let data = null, sequence = 0, previewSequence = 0, pending = null;
+  let data = null, sequence = 0, previewSequence = 0, pending = null, syncing = false, syncSequence = 0;
   const message = text => { el('message').textContent = text; el('message').hidden = !text; };
   const monthLabel = value => new Date(value + '-01T12:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
   function options(id, items, empty, selected = el(id).value) {
@@ -59,6 +59,7 @@
   async function load() {
     const id = ++sequence; data = null;
     el('upload').hidden = currentUser?.role !== 'admin';
+    el('sync').hidden = currentUser?.role !== 'admin';
     el('tables').replaceChildren(); el('empty').hidden = true; el('excel').disabled = true;
     el('coverage').textContent = 'Loading monthly goals\u2026'; message(''); theme();
     try {
@@ -70,6 +71,7 @@
       options('store',data.stores.map(s=>({id:s.id,name:el('dealer').value?s.name:`${s.name} (${s.dealer})`})),'All Stores');
       if (!el('upload-month').value) el('upload-month').value = data.today.slice(0,7);
       draw();
+      return true;
     } catch (error) { if (id === sequence) { el('coverage').textContent = 'Quota report could not be loaded.'; message(error.message); } }
   }
   for (const key of ['month','dealer','market','store']) el(key).onchange = () => {
@@ -78,6 +80,20 @@
     load();
   };
   el('reload').onclick = load;
+  el('sync').onclick = async () => {
+    if (syncing || currentUser?.role !== 'admin') return;
+    const id = ++syncSequence;
+    syncing = true; el('sync').disabled = true; el('sync').textContent = 'Syncing\u2026';
+    message("Downloading today's sales for all dealers\u2026");
+    try {
+      const result = await api('sales/refresh','POST',{});
+      if (id !== syncSequence || !currentUser) return;
+      const loaded = await load();
+      if (id !== syncSequence || !currentUser || !loaded) return;
+      message(result.status === 'busy' ? 'Another source sync is already running. Reload after it finishes.' : result.remaining ? 'Quota results reloaded. Some source data is still incomplete; scheduled workers will retry.' : 'Sources synced. Quota results reloaded.');
+    } catch (error) { if (id === syncSequence && currentUser) message(error.message); }
+    finally { if (id === syncSequence) { syncing = false; el('sync').disabled = false; el('sync').textContent = 'Sync sources'; } }
+  };
   async function download(path, fallback) {
     const response = await fetch('/api/internal/' + path,{credentials:'same-origin'});
     if (!response.ok) {
@@ -181,5 +197,5 @@
       if(copied)message(table.title+' snapshot copied.');else{saveBlob(await blob,'Quota-'+table.id+'-'+data.month+'.png');message('Snapshot downloaded. Clipboard access is unavailable.');}
     } catch(error){message(error.message);}finally{button.disabled=false;}
   };
-  window.quotaDashboard={load,clear(){sequence++;discard();data=null;el('tables').replaceChildren();el('upload').hidden=true;el('form').reset();el('upload-info').textContent='';options('month',[],null);el('dealer').value='';options('market',[],'All Markets');options('store',[],'All Stores');}};
+  window.quotaDashboard={load,clear(){sequence++;syncSequence++;syncing=false;el('sync').hidden=true;el('sync').disabled=false;el('sync').textContent='Sync sources';discard();data=null;el('tables').replaceChildren();el('upload').hidden=true;el('form').reset();el('upload-info').textContent='';options('month',[],null);el('dealer').value='';options('market',[],'All Markets');options('store',[],'All Stores');}};
 })();
