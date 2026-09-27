@@ -121,19 +121,11 @@
       ctx.strokeStyle=bevel;ctx.lineWidth=1.5;
       ctx.strokeRect(x+.75,y+.75,w-1.5,h-1.5);
     }
-    function label(value,x,y,w,h,font=23,color=ink,align='center',weight=700,fit=true,floating=false){
+    function label(value,x,y,w,h,font=23,color=ink,align='center',weight=700,fit=true){
       ctx.save();ctx.beginPath();ctx.rect(x+8,y,w-16,h);ctx.clip();
       ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
       let size=font;ctx.font=weight+' '+size+'px Arial, sans-serif';
       while(fit&&ctx.measureText(value).width>w-28&&size>12){size--;ctx.font=weight+' '+size+'px Arial, sans-serif';}
-      if(floating){
-        // A soft contact shadow below the glyphs lifts numbers off the cell face.
-        ctx.save();ctx.fillStyle=color==='#fff'?'#00000070':'#183a5040';
-        ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=3*scale;
-        ctx.beginPath();ctx.ellipse(x+w/2,y+h/2+size*.66,Math.min(ctx.measureText(value).width*.36,(w-28)/2),2,0,0,Math.PI*2);ctx.fill();ctx.restore();
-        ctx.shadowColor=color==='#fff'?'#00000099':'#10293e60';
-        ctx.shadowBlur=2*scale;ctx.shadowOffsetX=0;ctx.shadowOffsetY=2*scale;
-      }
       ctx.fillText(value,align==='left'?x+16:x+w/2,y+h/2);ctx.restore();
     }
     ctx.fillStyle='#f0f5f9';ctx.fillRect(0,0,width,height);
@@ -162,7 +154,7 @@
         const fill=head?colors[0]:total?colors[2]:data.metric_fills?.[kind]?.[key] || (key==='total_boxes'&&value!==null?'#d9edf7':kind%2?'#f7fafc':'#fff');
         raisedCell(x+5,y+6,widths[i]-10,(head?headerHeight:h)-12,fill,head||total);
         const valueText=head?heading.toUpperCase():text(key,value)+(key==='store'&&(values.stale||values.incomplete)?' †':'');
-        label(valueText,x,y,widths[i],head?headerHeight:h,tableFont,head||total?'#fff':key==='market'?colors[0]:ink,i===1&&!head?'left':'center',700,false,!head&&i>=2&&value!==null);
+        label(valueText,x,y,widths[i],head?headerHeight:h,tableFont,head||total?'#fff':key==='market'?colors[0]:ink,i===1&&!head?'left':'center',700,false);
         x+=widths[i];
       });
       if(!head&&!total&&(kind===0||rows[kind-1].market!==values.market)){ctx.fillStyle=colors[0];ctx.fillRect(pad,y,4,h);}
