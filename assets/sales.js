@@ -93,15 +93,15 @@
       ctx.save();
       ctx.shadowColor=dark?'#00000045':'#15334f30';
       ctx.shadowBlur=5*scale;ctx.shadowOffsetX=1*scale;ctx.shadowOffsetY=3*scale;
-      rounded(x,y,w,h,7,fill);
+      ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);
       ctx.restore();
       // Beveled edges create depth without changing the performance fill color.
       const bevel=ctx.createLinearGradient(x,y,x,y+h);
       bevel.addColorStop(0,dark?'#ffffff55':'#ffffffee');
       bevel.addColorStop(.45,dark?'#ffffff10':'#ffffff40');
       bevel.addColorStop(1,dark?'#00000055':'#16354a30');
-      ctx.beginPath();ctx.roundRect(x+.75,y+.75,w-1.5,h-1.5,6.5);
-      ctx.strokeStyle=bevel;ctx.lineWidth=1.5;ctx.stroke();
+      ctx.strokeStyle=bevel;ctx.lineWidth=1.5;
+      ctx.strokeRect(x+.75,y+.75,w-1.5,h-1.5);
     }
     function label(value,x,y,w,h,font=23,color=ink,align='center',weight=700){
       ctx.save();ctx.beginPath();ctx.rect(x+8,y,w-16,h);ctx.clip();
