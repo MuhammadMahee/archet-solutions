@@ -89,15 +89,18 @@ def main():
                     try { const c=salesDashboard.snapshot();return {width:c.width,height:c.height,title:labels[0],fonts:[...fonts]}; }
                     finally { CanvasRenderingContext2D.prototype.fillText=orig; }
                 }''')
-                assert snapshot_details['width']==2835
+                assert snapshot_details['width']==1920
+                assert snapshot_details['height']==1080
                 assert 'ALL MARKETS' in snapshot_details['title']
                 assert len(snapshot_details['fonts'])==1
                 colors=page.evaluate('''() => {
                     const rows=[...document.querySelectorAll('#sales-table tbody tr')];
-                    const canvas=salesDashboard.snapshot(),ctx=canvas.getContext('2d'),scale=canvas.width/2112;
+                    const canvas=salesDashboard.snapshot(),ctx=canvas.getContext('2d');
+                    const frameHeight=342+rows.length*52,scale=Math.min(canvas.width/2112,canvas.height/frameHeight);
+                    const offsetX=(canvas.width-2112*scale)/2,offsetY=(canvas.height-frameHeight*scale)/2;
                     return [9,12].map((col,index)=>({
                         table:rows.map(row=>getComputedStyle(row.cells[col]).backgroundColor),
-                        snapshot:[...ctx.getImageData(Math.floor((index?1917:1500)*scale),Math.floor(250*scale),1,1).data].slice(0,3)
+                        snapshot:[...ctx.getImageData(Math.floor(offsetX+(index?1917:1500)*scale),Math.floor(offsetY+250*scale),1,1).data].slice(0,3)
                     }));
                 }''')
                 for column in colors:
@@ -124,6 +127,7 @@ def main():
                 page.locator('#sales-copy').click()
                 expect(page.locator('#sales-message')).to_contain_text('Snapshot copied')
                 assert page.evaluate("async()=> (await navigator.clipboard.read())[0].types.includes('image/png')")
+                assert page.evaluate("async()=> {const item=(await navigator.clipboard.read())[0];const bitmap=await createImageBitmap(await item.getType('image/png'));const size=[bitmap.width,bitmap.height];bitmap.close();return size;}")==[1920,1080]
                 page.locator('#sales-period').select_option('month')
                 expect(page.locator('#sales-range-badge')).to_contain_text('1,')
                 page.locator('#sales-dealer').select_option('ARM')

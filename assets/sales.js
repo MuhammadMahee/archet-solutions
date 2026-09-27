@@ -83,9 +83,13 @@
     const incomplete=data.coverage.complete<data.coverage.expected || rows.some(r=>r.incomplete||r.stale);
     const tableHeight=headerHeight+rows.length*rowHeight+totalHeight;
     const height=tableY+tableHeight+64+(incomplete?30:0);
-    const scale=Math.min(2835/width,15000/height),canvas=document.createElement('canvas');
-    canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
-    const ctx=canvas.getContext('2d');ctx.scale(scale,scale);
+    const canvas=document.createElement('canvas');
+    canvas.width=1920;canvas.height=1080;
+    const scale=Math.min(canvas.width/width,canvas.height/height);
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#f0f5f9';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.translate((canvas.width-width*scale)/2,(canvas.height-height*scale)/2);
+    ctx.scale(scale,scale);
     const colors=themes[el('dealer').value]||themes[''];
     const ink='#16354a',grid='#e0e8ef';
     // Fit the entire table once, so headings, values and totals share one size.
