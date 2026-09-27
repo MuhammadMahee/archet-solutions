@@ -75,48 +75,71 @@
     const period=result.start===result.end?dateLabel(result.start):dateLabel(result.start)+' – '+dateLabel(result.end);
     return ('SALES UPDATE • '+location+' • '+period).toUpperCase();
   }
-  // Match the supplied table layout. Dealer stays on screen and is omitted here.
+  // Draw a crisp vector-style report, then copy it as a high-resolution PNG.
   function snapshot() {
     const cols=columns.filter(([key])=>key!=='dealer'),rows=data.rows;
     const widths=[142,401,241,145,208,80,75,167,126,192,99,172];
-    const width=2048,titleHeight=60,rowHeight=54,headerHeight=54;
+    const width=2112,pad=32,tableWidth=2048,tableY=164,rowHeight=52,headerHeight=54,totalHeight=60;
     const incomplete=data.coverage.complete<data.coverage.expected || rows.some(r=>r.incomplete||r.stale);
-    const height=titleHeight+headerHeight+(rows.length+1)*rowHeight+2+(incomplete?34:0);
+    const tableHeight=headerHeight+rows.length*rowHeight+totalHeight;
+    const height=tableY+tableHeight+64+(incomplete?30:0);
     const scale=Math.min(2835/width,15000/height),canvas=document.createElement('canvas');
     canvas.width=Math.ceil(width*scale);canvas.height=Math.ceil(height*scale);
     const ctx=canvas.getContext('2d');ctx.scale(scale,scale);
     const colors=themes[el('dealer').value]||themes[''];
-    const border=el('dealer').value==='Connect'||!el('dealer').value?'#829aa5':colors[3];
-    ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
-    const gradient=ctx.createLinearGradient(0,0,width,0);gradient.addColorStop(0,colors[2]);gradient.addColorStop(.5,colors[0]);gradient.addColorStop(1,colors[2]);
-    ctx.fillStyle=gradient;ctx.fillRect(0,0,width,titleHeight);ctx.strokeStyle=border;ctx.lineWidth=3;ctx.strokeRect(0,0,width,titleHeight);
-    function label(value,x,y,w,font=24,color='#083c51',align='center',heavy=false){
-      ctx.save();ctx.beginPath();ctx.rect(x+8,y,w-16,rowHeight);ctx.clip();
+    const ink='#16354a',grid='#e0e8ef';
+    function rounded(x,y,w,h,r,fill){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();}
+    function label(value,x,y,w,h,font=23,color=ink,align='center',weight=700){
+      ctx.save();ctx.beginPath();ctx.rect(x+8,y,w-16,h);ctx.clip();
       ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
-      const family=heavy?'"Arial Black", Arial, sans-serif':'Arial, sans-serif';
-      const weight=heavy?'900':'700';
-      let size=font;ctx.font=weight+' '+size+'px '+family;
-      while(ctx.measureText(value).width>w-24&&size>12){size--;ctx.font=weight+' '+size+'px '+family;}
-      ctx.fillText(value,align==='left'?x+16:x+w/2,y+rowHeight/2);ctx.restore();
+      let size=font;ctx.font=weight+' '+size+'px Arial, sans-serif';
+      while(ctx.measureText(value).width>w-28&&size>12){size--;ctx.font=weight+' '+size+'px Arial, sans-serif';}
+      ctx.fillText(value,align==='left'?x+16:x+w/2,y+h/2);ctx.restore();
     }
-    label(reportTitle(data,el('market').value || 'ALL MARKETS'),0,3,width,30,'#fff','center',true);
+    ctx.fillStyle='#f0f5f9';ctx.fillRect(0,0,width,height);
+    // Flat geometric decoration stays away from the text and live figures.
+    rounded(pad,24,tableWidth,116,20,colors[2]);
+    ctx.save();ctx.beginPath();ctx.roundRect(pad,24,tableWidth,116,20);ctx.clip();
+    ctx.fillStyle=colors[0];ctx.beginPath();ctx.moveTo(width-570,24);ctx.lineTo(width-400,140);ctx.lineTo(width,140);ctx.lineTo(width,24);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#ffffff12';ctx.lineWidth=2;
+    for(let n=0;n<4;n++){ctx.beginPath();ctx.moveTo(width-620+n*80,24);ctx.lineTo(width-450+n*80,140);ctx.stroke();}
+    ctx.restore();
+    label(reportTitle(data,el('market').value || 'ALL MARKETS'),pad+16,42,tableWidth-260,48,32,'#fff','left',800);
+    label('STORE PERFORMANCE  /  '+(incomplete?'PARTIAL DATA':'SALES REPORT'),pad+16,90,tableWidth-260,26,14,'#d9e8f0','left',600);
+    rounded(width-pad-190,53,160,56,12,'#ffffff18');
+    label(rows.length+' STORES',width-pad-190,53,160,56,22,'#fff');
+    rounded(pad,tableY,tableWidth,tableHeight,16,'#fff');
+    ctx.save();ctx.beginPath();ctx.roundRect(pad,tableY,tableWidth,tableHeight,16);ctx.clip();
     function drawRow(values,y,kind){
-      let x=0;
+      const head=kind==='head',total=kind==='total',h=total?totalHeight:rowHeight;
+      ctx.fillStyle=head?colors[0]:total?colors[2]:kind%2?'#f7fafc':'#fff';
+      ctx.fillRect(pad,y,tableWidth,head?headerHeight:h);
+      let x=pad;
       cols.forEach(([key,heading],i)=>{
-        if(kind==='total'&&i===0){ctx.fillStyle=colors[2];ctx.fillRect(0,y,widths[0]+widths[1],rowHeight);ctx.strokeStyle=border;ctx.strokeRect(0,y,widths[0]+widths[1],rowHeight);label('TOTAL',0,y,widths[0]+widths[1],24,'#fff','center',true);x+=widths[0];return;}
-        if(kind==='total'&&i===1){x+=widths[1];return;}
-        const value=values[key],cls=cellClass(key,value);
-        ctx.fillStyle=kind==='head'?colors[0]:kind==='total'?colors[2]:data.metric_fills?.[kind]?.[key] || (cls==='metric-boxes'?'#b9e7f5':kind%2?colors[1]:'#fff');
-        ctx.fillRect(x,y,widths[i],rowHeight);ctx.strokeStyle=border;ctx.strokeRect(x,y,widths[i],rowHeight);
-        const valueText=kind==='head'?heading.toUpperCase():text(key,value)+(key==='store'&&(values.stale||values.incomplete)?' †':'');
-        label(valueText,x,y,widths[i],kind==='head'?21:24,kind==='head'||kind==='total'?'#fff':'#083c51',i===1&&kind!=='head'?'left':'center',kind==='head'||kind==='total'||key==='apo'||key==='qpay_conv');
+        if(total&&i===0){label('TOTAL',x,y,widths[0]+widths[1],h,25,'#fff','left',800);x+=widths[0];return;}
+        if(total&&i===1){x+=widths[1];return;}
+        const value=values[key];
+        if(!head&&!total){
+          const fill=data.metric_fills?.[kind]?.[key] || (key==='total_boxes'&&value!==null?'#d9edf7':null);
+          if(fill)rounded(x+8,y+8,widths[i]-16,h-16,8,fill);
+        }
+        if(i>0){ctx.strokeStyle=head||total?'#ffffff20':grid;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+(head?headerHeight:h));ctx.stroke();}
+        const valueText=head?heading.toUpperCase():text(key,value)+(key==='store'&&(values.stale||values.incomplete)?' †':'');
+        label(valueText,x,y,widths[i],head?headerHeight:h,head?19:total?25:23,head||total?'#fff':key==='market'?colors[0]:ink,i===1&&!head?'left':'center',head||total||key==='apo'||key==='qpay_conv'?800:700);
         x+=widths[i];
       });
+      if(!head&&!total){ctx.strokeStyle=grid;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,y+h);ctx.lineTo(pad+tableWidth,y+h);ctx.stroke();}
+      if(!head&&!total&&(kind===0||rows[kind-1].market!==values.market)){ctx.fillStyle=colors[0];ctx.fillRect(pad,y,4,h);}
     }
-    drawRow({},titleHeight,'head');rows.forEach((r,i)=>drawRow(r,titleHeight+headerHeight+i*rowHeight,i));
-    drawRow(data.totals,titleHeight+headerHeight+rows.length*rowHeight,'total');
-    ctx.strokeStyle=border;ctx.strokeRect(1.5,1.5,width-3,height-3);
-    if(incomplete){ctx.fillStyle='#765016';ctx.font='16px Arial';ctx.textAlign='left';ctx.fillText('† Partial or retained source data. Totals reflect available values.',16,height-11);}
+    drawRow({},tableY,'head');rows.forEach((r,i)=>drawRow(r,tableY+headerHeight+i*rowHeight,i));
+    drawRow(data.totals,tableY+headerHeight+rows.length*rowHeight,'total');
+    ctx.restore();ctx.beginPath();ctx.roundRect(pad,tableY,tableWidth,tableHeight,16);ctx.strokeStyle=grid;ctx.lineWidth=1.5;ctx.stroke();
+    const footerY=tableY+tableHeight+14;
+    label('ARCHET  /  SALES UPDATE',pad,footerY,480,30,14,'#61798b','left',700);
+    const legend=ctx.createLinearGradient(width-500,0,width-388,0);legend.addColorStop(0,'#e98181');legend.addColorStop(.5,'#eeee88');legend.addColorStop(1,'#80e77f');
+    rounded(width-500,footerY+10,112,10,5,legend);
+    label('APO / QPAY CONV  ·  LOW → HIGH',width-380,footerY,348,30,14,'#61798b','left',600);
+    if(incomplete)label('† Partial or retained source data. Totals reflect available values.',pad,footerY+30,tableWidth,26,15,'#865c20','left',600);
     return canvas;
   }
   el('copy').onclick = async () => {

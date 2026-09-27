@@ -92,10 +92,10 @@ def main():
                 assert 'ALL MARKETS' in snapshot_details['title']
                 colors=page.evaluate('''() => {
                     const rows=[...document.querySelectorAll('#sales-table tbody tr')];
-                    const canvas=salesDashboard.snapshot(),ctx=canvas.getContext('2d'),scale=canvas.width/2048;
+                    const canvas=salesDashboard.snapshot(),ctx=canvas.getContext('2d'),scale=canvas.width/2112;
                     return [9,12].map((col,index)=>({
                         table:rows.map(row=>getComputedStyle(row.cells[col]).backgroundColor),
-                        snapshot:[...ctx.getImageData(Math.floor((index?1880:1463)*scale),Math.floor(118*scale),1,1).data].slice(0,3)
+                        snapshot:[...ctx.getImageData(Math.floor((index?1927:1510)*scale),Math.floor(230*scale),1,1).data].slice(0,3)
                     }));
                 }''')
                 for column in colors:
