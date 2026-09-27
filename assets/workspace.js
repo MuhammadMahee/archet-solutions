@@ -62,7 +62,7 @@
     opened.menu.style.top = upwards ? 'auto' : rect.bottom + 6 + 'px';
     opened.menu.style.bottom = upwards ? innerHeight - rect.top + 6 + 'px' : 'auto';
   }
-  for (const id of ['sales-dealer','sales-market','sales-store','sales-period','tree-dealer']) {
+  for (const id of ['sales-dealer','sales-market','sales-store','sales-period','tree-dealer','quota-month','quota-dealer','quota-market','quota-store']) {
     const select = document.getElementById(id);
     const label = select.parentElement.firstChild.textContent.trim();
     const trigger = document.createElement('button');
@@ -133,6 +133,7 @@
       }
     };
     select.addEventListener('change', sync);
+    select.addEventListener('picker-sync', sync);
     new MutationObserver(sync).observe(select, {childList:true,subtree:true,attributes:true});
     sync();
   }

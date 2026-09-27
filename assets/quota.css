@@ -1,0 +1,24 @@
+#page-quota{max-width:1800px;margin:auto;color:#163b4b;font-family:Arial,Helvetica,sans-serif}
+#page-quota button{background:#fff;color:var(--sales-accent);border:1px solid var(--sales-border);border-radius:7px;padding:8px 11px;font-size:11px;font-weight:700}
+#page-quota button.quota-primary{background:var(--sales-accent);color:white;border-color:var(--sales-accent)}
+#page-quota button:disabled{opacity:.5;cursor:wait}
+#page-quota button:focus-visible{outline:2px solid #00a9df;outline-offset:3px}
+.quota-month-card{text-align:right;display:grid;gap:5px;font-size:12px}.quota-month-card strong{color:var(--sales-accent)}.quota-month-card span{font-size:10px;color:#617580}
+.quota-filters{grid-template-columns:140px minmax(100px,1fr) minmax(100px,1fr) minmax(130px,1.4fr) auto}
+.quota-upload{background:#fff;border:1px solid var(--sales-border);border-radius:11px;padding:16px;margin:0 0 18px}.quota-upload summary{font-weight:700;color:var(--sales-accent);cursor:pointer;font-size:12px}.quota-upload p{font-size:11px;line-height:1.7;color:#526b79}
+.quota-upload form{display:flex;align-items:end;gap:12px;flex-wrap:wrap}.quota-upload label{font-size:10px;font-weight:700;flex:1;min-width:130px}.quota-upload label:has(input[type=file]){flex:2;min-width:220px}
+#page-quota input,#page-quota select{display:block;background:#f7fbfd;color:#173e50;border:1px solid var(--sales-border);margin-top:6px;width:100%;font-size:11px;border-radius:7px;padding:8px}
+.quota-help{font-size:10px;line-height:1.8;color:#617580;overflow-wrap:anywhere}
+.quota-preview-head{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:15px 0}.quota-preview-head strong{font-size:12px}.quota-preview-head p{margin:6px 0 0}.quota-preview-head>div:last-child{flex-shrink:0}
+.quota-card{margin:18px 0 24px;border:1px solid var(--sales-border);background:white;border-radius:10px;overflow:hidden;box-shadow:0 7px 20px #0a33450b}
+.quota-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px}.quota-card-head h2{font-size:13px;margin:0;color:var(--sales-accent)}.quota-card-head small{display:block;font-size:9px;color:#73838b;margin-top:5px}
+.quota-scroll{overflow:auto;max-height:65vh}.quota-scroll table{width:100%;border-collapse:collapse;white-space:nowrap}
+.quota-scroll th,.quota-scroll td{font-family:Arial,Helvetica,sans-serif!important;border:1px solid var(--sales-border);font-size:10px!important;padding:6px 9px!important;color:#123b4f;text-align:center}
+.quota-scroll th{background:var(--sales-accent);color:white;text-transform:uppercase;position:sticky;top:0;z-index:1;letter-spacing:0}
+.quota-scroll td.quota-text{text-align:left}.quota-scroll td.quota-store{font-weight:700;min-width:180px}
+.quota-scroll tbody tr:nth-child(even){background:var(--sales-tint)}.quota-scroll tbody tr:hover{box-shadow:inset 0 0 0 1px var(--sales-accent)}
+.quota-scroll tfoot td{background:var(--sales-dark);color:white;font-weight:800;position:sticky;bottom:0;z-index:1;padding:8px 9px!important}
+.quota-growth{position:relative;display:block;min-width:75px;height:19px;border-radius:3px;background:#ffffff60;overflow:hidden}.quota-growth i{display:block;position:absolute;inset:0 auto 0 0;background:var(--growth-color);opacity:.85}.quota-growth span{position:relative;line-height:19px;font-size:10px;font-weight:800}
+.quota-provisional{color:#8f6818;font-weight:700;margin-left:4px}.quota-card .quota-partial{padding:7px 15px;background:#fff5df;color:#805e23;font-size:10px}
+@media(max-width:1150px){.quota-filters{grid-template-columns:repeat(4,minmax(100px,1fr))}.quota-filters .sales-actions{grid-column:1/-1}.quota-upload form{gap:10px}}
+@media(max-width:720px){.quota-filters{grid-template-columns:1fr 1fr}.quota-month-card{text-align:left}.quota-card-head{padding:11px}.quota-card-head h2{font-size:11px}.quota-card-head button{white-space:nowrap;font-size:10px!important}.quota-preview-head{align-items:flex-start;flex-direction:column}.quota-upload{padding:12px}.quota-upload form>button{flex:1}.quota-scroll{max-height:60vh}}

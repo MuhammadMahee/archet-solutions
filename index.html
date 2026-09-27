@@ -14,6 +14,7 @@
 @media(max-width:1000px){.main{padding:0 24px 35px}.workspace{grid-template-columns:195px 1fr}.cards{gap:10px}.card{padding:18px}td,th{padding-left:16px;padding-right:16px}}@media(max-width:720px){.login{grid-template-columns:1fr}.login-story{padding:24px 28px;border-right:0;border-bottom:1px solid var(--border)}.login-story h1{font-size:32px;margin:16px 0}.login-story p,.story-bottom{display:none}.login-story .logo{height:45px;width:95px}.login-form-wrap{padding:35px 26px}.workspace{display:block}.sidebar{position:relative;height:auto;padding:12px 18px;border-right:0;border-bottom:1px solid var(--border)}.sidebar .logo{height:45px;width:85px;margin:0}.workspace-label{display:none}.nav{display:flex;gap:4px;margin-top:12px}.nav button{font-size:12px;padding:8px 10px}.nav-icon{display:none}.sidebar-bottom{position:absolute;right:18px;top:14px;margin:0;padding:0}.sidebar-bottom .row{display:none}.logout{margin:0;padding:7px 12px}.main{padding:0 18px 35px}.topbar{height:55px;margin-bottom:26px}.topbar span:last-child{display:none}h1{font-size:27px}.cards{grid-template-columns:1fr;gap:10px}.card.stat-card{display:flex;align-items:center;justify-content:space-between;padding:14px 18px}.stat{margin:0;font-size:29px}.stat-foot{display:none}.page-head .row{align-items:flex-start}.details{grid-template-columns:1fr 1fr}.panel-head{padding:16px}.pager{padding:14px}.nav button.active{border-radius:7px}}
 </style>
 <link rel="stylesheet" href="/assets/workspace.css">
+<link rel="stylesheet" href="/assets/quota.css">
 </head>
 <body>
 <div id="boot" class="boot" role="status">Opening your workspace…</div>
@@ -43,6 +44,7 @@
     <div class="workspace-label">WORKSPACE</div>
     <nav class="nav" aria-label="Workspace navigation">
       <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
+      <button data-page="quota"><span class="nav-icon">◈</span>Quota Update</button>
       <button data-page="callingtree"><span class="nav-icon">▦</span>Calling Tree</button>
       <button data-page="overview" class="active"><span class="nav-icon">◫</span>Overview</button>
       <button data-page="quotes"><span class="nav-icon">▤</span>Quote inbox</button>
@@ -68,6 +70,33 @@
       <div id="sales-message" class="sales-message" role="status" hidden></div>
       <div class="sales-panel"><div class="sales-panel-head"><div><small id="sales-count">0 STORES</small><h2>SALES UPDATE</h2></div><span id="sales-range-badge"></span></div><div class="sales-table-scroll"><table id="sales-table"><caption>Sales Update</caption><thead></thead><tbody></tbody><tfoot></tfoot></table></div><div id="sales-empty" class="sales-empty" hidden>No saved results for this selection.</div></div>
       <p class="sales-footnote">APO / QPay Conv: red (lowest) → yellow → green (highest) within the current selection. Equal values share a color; an all-equal column is red.<br>Only Calling Tree stores are shown. Stores absent from a completed source report show 0; unavailable data shows —. Central time · Scheduled every 20 minutes. <span id="sales-stale-note"></span></p>
+    </section>
+    <section id="page-quota" hidden>
+      <div class="sales-hero"><div><div class="sales-eyebrow">MONTHLY PERFORMANCE</div><h1>Quota Update</h1><p>Goals, progress, and store rankings across your dealers.</p></div><div class="quota-month-card"><strong id="quota-month-label">Monthly goals</strong><span id="quota-days"></span></div></div>
+      <div class="sales-filters quota-filters">
+        <label>Month<select id="quota-month"></select></label>
+        <label>Dealer<select id="quota-dealer"><option value="">All Dealers</option></select></label>
+        <label>Market<select id="quota-market"><option value="">All Markets</option></select></label>
+        <label>Store<select id="quota-store"><option value="">All Stores</option></select></label>
+        <div class="sales-actions"><button id="quota-reload" type="button">Reload</button><button id="quota-excel" type="button" class="quota-primary">Download Excel</button></div>
+      </div>
+      <div class="sales-toolbar"><span id="quota-coverage" role="status">Loading monthly goals…</span><span id="quota-count"></span></div>
+      <div id="quota-message" class="sales-message" role="status" hidden></div>
+      <details id="quota-upload" class="quota-upload" hidden><summary>Manage monthly goals</summary>
+        <p>Upload goals for one dealer and month. Start with a template from the active Calling Tree, or use your SPDI Goals workbook.</p>
+        <form id="quota-form">
+          <label>Dealer<select id="quota-upload-dealer" required></select></label>
+          <label>Goal month<input id="quota-upload-month" type="month" required min="2000-01" max="2100-12"></label>
+          <label>Goals workbook<input id="quota-file" type="file" accept=".xlsx,.xlsm" required></label>
+          <button id="quota-template" type="button">Download template</button><button id="quota-preview-button" type="submit" class="quota-primary">Preview goals</button>
+        </form>
+        <p class="quota-help">Up to 2 MB. Columns: Market, Stores, Voice, BTS, HSI/HINT, Acc. Store ID and MIM are optional. Duplicate store rows are combined.</p>
+        <div id="quota-preview" hidden><div class="quota-preview-head"><div><strong id="quota-preview-summary"></strong><p>Applying replaces all goals for this dealer and month. Other dealers and months are preserved.</p></div><div><button id="quota-discard" type="button">Discard</button> <button id="quota-save" type="button" class="quota-primary">Apply goals</button></div></div><div class="quota-scroll"><table id="quota-preview-table"><thead><tr><th>Market</th><th>Store</th><th>Voice</th><th>BTS</th><th>HSI/HINT</th><th>Acc</th><th>MIM</th></tr></thead><tbody></tbody></table></div></div>
+      </details>
+      <p id="quota-upload-info" class="quota-help"></p>
+      <div id="quota-empty" class="sales-empty" hidden>No goals uploaded for this month. An administrator can upload a Goals workbook above.</div>
+      <div id="quota-tables"></div>
+      <p class="sales-footnote">Voice actual = new activations + reactivations − BTS − HSI. Upgrades are excluded. MIM goals count toward quota; MIM actuals are 0, as in SPDI.<br>Accessory trend projects the saved month-to-date average across the full month. Per-day goal uses remaining days after today (Central time). Overall average = (quota growth + projected accessory achievement) ÷ 2. Rankings restart within each dealer and market; incomplete data gives provisional results.</p>
     </section>
     <section id="page-callingtree" hidden>
       <div class="sales-hero"><div><div class="sales-eyebrow">STORE DIRECTORY</div><h1>Calling Tree</h1><p>The store list used by Sales Update, snapshots, and Excel exports.</p></div><button class="subtle" data-page="sales">View sales →</button></div>
@@ -135,6 +164,7 @@ function notice(message, error = false) { $('notice').textContent = message; $('
 function signedOut(message = '') {
   if (window.salesDashboard) window.salesDashboard.clear();
   if (window.callingTree) window.callingTree.clear();
+  if (window.quotaDashboard) window.quotaDashboard.clear();
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   currentUser = null; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
   ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
@@ -163,16 +193,16 @@ function enterWorkspace(user) {
   $('identity-name').textContent = user.display_name; $('identity-role').textContent = user.is_owner ? 'Workspace owner' : user.role === 'admin' ? 'Administrator' : 'Team member';
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
   $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice('');
-  const initial=location.hash.slice(1);showPage(['sales','callingtree','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')?initial:'sales');
+  const initial=location.hash.slice(1);showPage(['sales','quota','callingtree','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')?initial:'sales');
 }
 async function showPage(name) {
   if (name === 'users' && currentUser?.role !== 'admin') return;
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
-  document.body.classList.toggle('sales-mode', name === 'sales' || name === 'callingtree');
+  document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
   notice('');
-  try { if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
+  try { if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
   catch (error) { notice(error.message, true); }
 }
 function quoteTable(rows) {
@@ -239,6 +269,7 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
 </script>
 <script src="/assets/sales.js"></script>
 <script src="/assets/calling-tree.js"></script>
+<script src="/assets/quota.js"></script>
 <script src="/assets/workspace.js"></script>
 <script>api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));</script>
 </body>

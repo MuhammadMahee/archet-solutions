@@ -145,7 +145,7 @@ No separate domain purchase or wildcard DNS record is needed. Flask chooses the 
 
 ```powershell
 python -m pip install -r requirements-dev.txt
-python -m pytest -q
+python -m pytest tests -q
 ```
 
 For the optional real-browser checks:
@@ -153,8 +153,21 @@ For the optional real-browser checks:
 ```powershell
 python -m playwright install chromium
 python tests/browser_smoke.py
+python tests/browser_quota.py
 ```
 
 The browser check exercises the real frontend and Flask backend against fake Supabase data, including desktop/mobile layout, account creation, follow-ups, disabling accounts, password changes, and logout. Screenshots are saved under the ignored `test-results/` directory.
 
 The automated tests use a fake Supabase service to check authentication, account authorization, session revocation, CSRF protection, validation, and durable quote handling. They do not prove the hosted migration or DNS configuration. After deployment, verify both hostnames, owner login, member permissions, logout, disable/reset behavior, and persistence of a public quote submission.
+
+## Quota Update
+
+Open **Quota Update** in the sidebar. An administrator can expand **Manage monthly goals**, select a dealer and month, and download a template populated with that dealer's active Calling Tree stores. Enter goals, upload the workbook, review the preview, and click **Apply goals**. This replaces only that dealer's goals for the selected month. Members can view and export reports, but cannot upload goals.
+
+The importer accepts the `spdi-ca` Goals layout (`Market`, `Stores`, `Voice`, `BTS`, `HSI/HINT`, `Acc`, optional `MIM`) and the new template with `Store ID`. Files must be `.xlsx` or `.xlsm`, at most 2 MB, with up to 5,000 rows. Macros are never executed. Formulas require cached results saved by Excel; otherwise replace formulas with values. Duplicate store rows are combined. Legacy files match market and store name within the selected dealer; Store ID is preferred and survives store renames. Unmatched or ambiguous stores are rejected before any data changes. Reports always follow the current Calling Tree, including after a replacement.
+
+Migration `006_quota_update.sql` creates the private monthly goals tables automatically on production deployment. Actuals use the existing saved RT-POS imports, so the scheduled sales sync also updates quota progress without another download worker. Upload goals separately for each dealer; old SPDI portal goal data is not copied automatically.
+
+Calculations follow `spdi-ca`: Voice actual = new activations + reactivations - BTS - HSI; upgrades are excluded. Total quota includes Voice, BTS, HSI and optional MIM goals; MIM actual is zero. Growth is actual / goal. Accessory trend is actual / elapsed days * days in month; per-day goal is remaining accessories / remaining days after today. Projected accessory achievement is trend / accessory goal. Overall average is the average of quota growth and projected accessory achievement. Zero denominators produce zero. Central time determines elapsed days. Past months use all their days, while future months have zero actuals and elapsed days. Rankings restart per dealer and market with competition ties (1, 1, 3). Totals use aggregate goals and actuals, not an average of store percentages.
+
+The page includes Voice, BTS, HSI/HINT and achievement-summary tables, month/dealer/market/store filters, four-sheet Excel export and individual PNG snapshots. Snapshot images are 1920 pixels wide with height fitted to their contents, and omit the Dealer column. Select at most 350 stores per snapshot; Excel includes all filtered stores. Missing sales show a dash; partial or stale actuals, totals and rankings are labeled provisional.

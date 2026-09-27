@@ -131,7 +131,7 @@ def register_portal(app):
 
     @app.before_request
     def guard_portal():
-        limit=3*1024*1024 if request.path=='/api/internal/calling-tree/preview' else 32*1024
+        limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload') else 32*1024
         if request.content_length and request.content_length>limit:
             raise PortalError('The upload or request is too large.',413)
         if not request.path.startswith("/api/internal/"):
