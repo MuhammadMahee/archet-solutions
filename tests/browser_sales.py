@@ -82,12 +82,20 @@ def main():
                 assert len(set(backgrounds))==6
                 page.locator('#sales-dealer').select_option('California')
                 expect(page.locator('#sales-table tbody tr').first).to_contain_text('CALIFORNIA STORE')
+                snapshot_details=page.evaluate('''() => {
+                    const labels=[],orig=CanvasRenderingContext2D.prototype.fillText;
+                    CanvasRenderingContext2D.prototype.fillText=function(text,...args){labels.push(text);return orig.call(this,text,...args)};
+                    try { const c=salesDashboard.snapshot();return {width:c.width,height:c.height,title:labels[0]}; }
+                    finally { CanvasRenderingContext2D.prototype.fillText=orig; }
+                }''')
+                assert snapshot_details['width']==2835
+                assert 'ALL MARKETS' in snapshot_details['title']
                 colors=page.evaluate('''() => {
                     const rows=[...document.querySelectorAll('#sales-table tbody tr')];
                     const canvas=salesDashboard.snapshot(),ctx=canvas.getContext('2d'),scale=canvas.width/2048;
                     return [9,12].map((col,index)=>({
                         table:rows.map(row=>getComputedStyle(row.cells[col]).backgroundColor),
-                        snapshot:[...ctx.getImageData(Math.floor((index?1871:1456)*scale),Math.floor(118*scale),1,1).data].slice(0,3)
+                        snapshot:[...ctx.getImageData(Math.floor((index?1880:1463)*scale),Math.floor(118*scale),1,1).data].slice(0,3)
                     }));
                 }''')
                 for column in colors:
@@ -110,6 +118,7 @@ def main():
                     CanvasRenderingContext2D.prototype.fillText=function(text,...rest){labels.push(text);return orig.call(this,text,...rest)};
                     salesDashboard.snapshot();CanvasRenderingContext2D.prototype.fillText=orig;return labels;}''')
                 assert 'DEALER' not in labels and 'MARKET' in labels
+                assert 'CALIFORNIA 1' in labels[0]
                 page.locator('#sales-copy').click()
                 expect(page.locator('#sales-message')).to_contain_text('Snapshot copied')
                 assert page.evaluate("async()=> (await navigator.clipboard.read())[0].types.includes('image/png')")
