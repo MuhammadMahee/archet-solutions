@@ -89,6 +89,20 @@
     const colors=themes[el('dealer').value]||themes[''];
     const ink='#16354a',grid='#e0e8ef';
     function rounded(x,y,w,h,r,fill){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();}
+    function raisedCell(x,y,w,h,fill,dark=false){
+      ctx.save();
+      ctx.shadowColor=dark?'#00000045':'#15334f30';
+      ctx.shadowBlur=5*scale;ctx.shadowOffsetX=1*scale;ctx.shadowOffsetY=3*scale;
+      rounded(x,y,w,h,7,fill);
+      ctx.restore();
+      // Beveled edges create depth without changing the performance fill color.
+      const bevel=ctx.createLinearGradient(x,y,x,y+h);
+      bevel.addColorStop(0,dark?'#ffffff55':'#ffffffee');
+      bevel.addColorStop(.45,dark?'#ffffff10':'#ffffff40');
+      bevel.addColorStop(1,dark?'#00000055':'#16354a30');
+      ctx.beginPath();ctx.roundRect(x+.75,y+.75,w-1.5,h-1.5,6.5);
+      ctx.strokeStyle=bevel;ctx.lineWidth=1.5;ctx.stroke();
+    }
     function label(value,x,y,w,h,font=23,color=ink,align='center',weight=700){
       ctx.save();ctx.beginPath();ctx.rect(x+8,y,w-16,h);ctx.clip();
       ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
@@ -116,19 +130,15 @@
       ctx.fillRect(pad,y,tableWidth,head?headerHeight:h);
       let x=pad;
       cols.forEach(([key,heading],i)=>{
-        if(total&&i===0){label('TOTAL',x,y,widths[0]+widths[1],h,25,'#fff','left',800);x+=widths[0];return;}
+        if(total&&i===0){raisedCell(x+5,y+6,widths[0]+widths[1]-10,h-12,colors[2],true);label('TOTAL',x,y,widths[0]+widths[1],h,25,'#fff','left',800);x+=widths[0];return;}
         if(total&&i===1){x+=widths[1];return;}
         const value=values[key];
-        if(!head&&!total){
-          const fill=data.metric_fills?.[kind]?.[key] || (key==='total_boxes'&&value!==null?'#d9edf7':null);
-          if(fill)rounded(x+8,y+8,widths[i]-16,h-16,8,fill);
-        }
-        if(i>0){ctx.strokeStyle=head||total?'#ffffff20':grid;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+(head?headerHeight:h));ctx.stroke();}
+        const fill=head?colors[0]:total?colors[2]:data.metric_fills?.[kind]?.[key] || (key==='total_boxes'&&value!==null?'#d9edf7':kind%2?'#f7fafc':'#fff');
+        raisedCell(x+5,y+6,widths[i]-10,(head?headerHeight:h)-12,fill,head||total);
         const valueText=head?heading.toUpperCase():text(key,value)+(key==='store'&&(values.stale||values.incomplete)?' †':'');
         label(valueText,x,y,widths[i],head?headerHeight:h,head?19:total?25:23,head||total?'#fff':key==='market'?colors[0]:ink,i===1&&!head?'left':'center',head||total||key==='apo'||key==='qpay_conv'?800:700);
         x+=widths[i];
       });
-      if(!head&&!total){ctx.strokeStyle=grid;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,y+h);ctx.lineTo(pad+tableWidth,y+h);ctx.stroke();}
       if(!head&&!total&&(kind===0||rows[kind-1].market!==values.market)){ctx.fillStyle=colors[0];ctx.fillRect(pad,y,4,h);}
     }
     drawRow({},tableY,'head');rows.forEach((r,i)=>drawRow(r,tableY+headerHeight+i*rowHeight,i));
