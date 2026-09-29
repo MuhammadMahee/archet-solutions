@@ -28,6 +28,14 @@ def main():
                 button=admin.locator('[data-rest-user="'+fake.member['id']+'"]')
                 expect(button).to_have_text('Take a Rest')
                 expect(admin.locator('[data-rest-user="'+fake.owner['id']+'"]')).to_be_disabled()
+                other=browser.new_page();other.goto(origin+'/internal#users')
+                other.locator('#login-username').fill('OtherAdmin');other.locator('#login-password').fill('TestPass123');other.locator('#login-form button[type=submit]').click()
+                expect(other.locator('#user-list [data-user]').first).to_be_visible()
+                expect(other.locator('[data-rest-user]')).to_have_count(0)
+                for rest in (True,False):
+                    status=other.evaluate('''async ({uid,rest}) => (await fetch('/api/internal/users/'+uid+'/rest',{method:'PATCH',headers:{'Content-Type':'application/json','X-Archet-Request':'1'},body:JSON.stringify({rest_mode:rest})})).status''',{'uid':fake.member['id'],'rest':rest})
+                    assert status==403
+                other.close()
                 expect(member.locator('#sales-count')).to_have_text('72 STORES')
                 button.click();expect(button).to_have_text('Back to Work')
                 expect(member.locator('#account-rest')).to_be_visible(timeout=10000)

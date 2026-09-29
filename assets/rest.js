@@ -45,7 +45,7 @@
   };
   document.addEventListener('click', async event => {
     const button = event.target.closest('[data-rest-user]');
-    if (!button || currentUser?.role !== 'admin' || currentUser.rest_mode) return;
+    if (!button || !currentUser?.is_owner || currentUser.username !== 'Mahee' || currentUser.rest_mode) return;
     const target = users.find(user => user.id === button.dataset.restUser);
     if (!target) return;
     button.disabled = true;

@@ -221,8 +221,13 @@ def test_rest_admin_authorization_validation_and_owner_protection(client, store)
     login(client,'Member')
     assert write(client,path,{'rest_mode':False},'PATCH').status_code==403
     login(client,'OtherAdmin')
+    for rest in (True, False):
+        response = write(client,path,{'rest_mode':rest},'PATCH')
+        assert response.status_code == 403 and 'Only Mahee' in response.json['message']
+    assert not client.get('/api/internal/users').json['users'][1]['rest_mode']
     for uid in (store.owner['id'],store.admin['id']):
         assert write(client,'users/'+uid+'/rest',{'rest_mode':True},'PATCH').status_code==403
+    login(client)
     for value in ('true',1,None,[]):
         assert write(client,path,{'rest_mode':value},'PATCH').status_code==400
     assert client.patch('/api/internal/'+path,json={'rest_mode':True}).status_code==403

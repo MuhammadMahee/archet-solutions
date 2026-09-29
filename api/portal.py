@@ -292,6 +292,8 @@ def register_portal(app):
     @app.patch('/api/internal/users/<uid>/rest')
     @require_user(admin=True)
     def users_rest(uid):
+        if not g.portal_user['is_owner'] or g.portal_user['username'] != 'Mahee':
+            raise PortalError('Only Mahee can change account rest status.', 403)
         uid = valid_id(uid)
         rest = body().get('rest_mode')
         if not isinstance(rest, bool):

@@ -162,7 +162,7 @@ The automated tests use a fake Supabase service to check authentication, account
 
 ## Account rest mode
 
-On **Accounts**, administrators can click **Take a Rest** to pause an account and **Back to Work** to restore it. The permanent owner and the acting administrator's own account are protected. Rest differs from disabling: the user can authenticate, but only their session status and sign-out remain available; all protected report, export, account, upload and editing APIs reject access. Existing sessions detect changes every five seconds while visible, and when the tab regains focus. Returning to work restores access without another login.
+On **Accounts**, only the permanent owner **Mahee** can click **Take a Rest** to pause an account and **Back to Work** to restore it. The permanent owner and the acting administrator's own account are protected. Rest differs from disabling: the user can authenticate, but only their session status and sign-out remain available; all protected report, export, account, upload and editing APIs reject access. Existing sessions detect changes every five seconds while visible, and when the tab regains focus. Returning to work restores access without another login.
 
 The rest screen replaces the workspace, clears loaded report data and hides navigation. It shows the configured first-login message, then the reload message on a page reload in the same tab. A new rest episode resets that behavior. Migration `007_account_rest.sql` adds the persistent rest state; all accounts start with rest off. Run `python tests/browser_rest.py` to check the admin/user flow with simulated authentication.
 
