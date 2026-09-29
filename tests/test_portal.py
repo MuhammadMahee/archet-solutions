@@ -34,7 +34,7 @@ class FakeStore:
         if method == "POST":
             row = {"id": str(uuid4()), "created_at": datetime.now(timezone.utc).isoformat(), **deepcopy(data)}
             if table == "portal_users":
-                row = {"active": True, "is_owner": False, "role": "member", "session_version": str(uuid4()), **row}
+                row = {"active": True, "is_owner": False, "role": "member", "session_version": str(uuid4()), "rest_mode": False, "rest_version": str(uuid4()), **row}
                 row["username_key"] = row["username"].lower()
             if table == "quote_requests":
                 row = {"status": "new", "notes": "", "notification_status": "pending", **row}
@@ -190,6 +190,47 @@ def test_members_cannot_manage_accounts(client, store):
     assert client.get("/api/internal/users").status_code == 403
     assert write(client, "users", {}).status_code == 403
     assert write(client, "users/" + store.owner["id"], {"active": False}, "PATCH").status_code == 403
+
+
+def test_rest_blocks_existing_sessions_and_restores_without_login(client, store):
+    member = index.app.test_client()
+    login(member, 'Member'); login(client)
+    path = 'users/' + store.member['id'] + '/rest'
+    result = write(client, path, {'rest_mode':True}, 'PATCH')
+    assert result.status_code == 200 and result.json['user']['rest_mode']
+    version = result.json['user']['rest_version']
+    assert member.get('/api/internal/me').json['user']['rest_mode']
+    for route in ('users', 'quotes', 'sales', 'sales/export', 'quota', 'quota/excel', 'quota/template', 'calling-tree'):
+        response = member.get('/api/internal/' + route)
+        assert response.status_code == 403 and response.json['code'] == 'account_rest'
+    for route in ('sales/refresh','quota/upload','calling-tree/preview','calling-tree/activate','password','users'):
+        assert write(member, route, {}).json['code'] == 'account_rest'
+    assert write(member, 'users/' + store.admin['id'] + '/rest', {'rest_mode':False}, 'PATCH').status_code == 403
+    assert write(client, path, {'rest_mode':False}, 'PATCH').status_code == 200
+    assert member.get('/api/internal/quotes').status_code == 200
+    next_rest = write(client, path, {'rest_mode':True}, 'PATCH').json['user']
+    assert next_rest['rest_version'] != version
+    assert login(member, 'Member').json['user']['rest_mode']
+    assert write(member, 'logout', {}).status_code == 200
+    assert member.get('/api/internal/me').status_code == 401
+
+
+def test_rest_admin_authorization_validation_and_owner_protection(client, store):
+    path = 'users/' + store.member['id'] + '/rest'
+    assert write(client,path,{'rest_mode':True},'PATCH').status_code==401
+    login(client,'Member')
+    assert write(client,path,{'rest_mode':False},'PATCH').status_code==403
+    login(client,'OtherAdmin')
+    for uid in (store.owner['id'],store.admin['id']):
+        assert write(client,'users/'+uid+'/rest',{'rest_mode':True},'PATCH').status_code==403
+    for value in ('true',1,None,[]):
+        assert write(client,path,{'rest_mode':value},'PATCH').status_code==400
+    assert client.patch('/api/internal/'+path,json={'rest_mode':True}).status_code==403
+    assert write(client,'users/'+str(uuid4())+'/rest',{'rest_mode':True},'PATCH').status_code==404
+    login(client)
+    assert write(client,'users/'+store.admin['id']+'/rest',{'rest_mode':True},'PATCH').status_code==200
+    admin=index.app.test_client();assert login(admin,'OtherAdmin').json['user']['rest_mode']
+    assert admin.get('/api/internal/users').json['code']=='account_rest'
 
 
 def test_admin_create_and_owner_protection(client, store):

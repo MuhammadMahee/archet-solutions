@@ -15,9 +15,11 @@
 </style>
 <link rel="stylesheet" href="/assets/workspace.css">
 <link rel="stylesheet" href="/assets/quota.css">
+<link rel="stylesheet" href="/assets/rest.css">
 </head>
 <body>
 <div id="boot" class="boot" role="status">Opening your workspace…</div>
+<section id="account-rest" class="rest-screen" aria-label="Rest mode" hidden><button id="rest-logout" type="button">Sign out</button><div id="rest-emoji" class="rest-emoji" aria-hidden="true"></div><p id="rest-message" role="status"></p></section>
 <section id="login" class="login" hidden>
   <div class="login-story">
     <img class="logo" src="/archet-logo-dark.png" alt="Archet Solutions">
@@ -162,6 +164,7 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const date = value => new Date(value).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
 function notice(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = !message; }
 function signedOut(message = '') {
+  window.accountRest?.hide();
   if (window.salesDashboard) window.salesDashboard.clear();
   if (window.callingTree) window.callingTree.clear();
   if (window.quotaDashboard) window.quotaDashboard.clear();
@@ -173,10 +176,14 @@ function signedOut(message = '') {
   $('login-password').value = ''; $('login-username').focus();
 }
 async function api(path, method = 'GET', data) {
+  const restAllowed = ['me','login','logout'].includes(path);
+  if (currentUser?.rest_mode && !restAllowed) throw new Error('Your account is on rest.');
   let response;
   try { response = await fetch('/api/internal/' + path, {method, credentials:'same-origin', headers:{'Content-Type':'application/json','X-Archet-Request':'1'}, ...(data !== undefined ? {body:JSON.stringify(data)} : {})}); }
   catch { throw new Error('Unable to connect. Check your connection and try again.'); }
   const result = await response.json().catch(() => ({}));
+  if (result.code === 'account_rest' && result.user) window.accountRest.show(result.user);
+  if (currentUser?.rest_mode && !restAllowed) throw new Error('Your account is on rest.');
   if (!response.ok) {
     const message = result.message || 'The request could not be completed.';
     if (response.status === 401 && currentUser) signedOut('Your session has ended. Please sign in again.');
@@ -188,7 +195,9 @@ async function submit(form, errorId, action) {
   const button = form.querySelector('[type=submit]'); button.disabled = true; $(errorId).textContent = '';
   try { await action(); } catch (error) { $(errorId).textContent = error.message; } finally { button.disabled = false; }
 }
-function enterWorkspace(user) {
+function enterWorkspace(user, freshLogin = false) {
+  if (user.rest_mode) { window.accountRest.show(user, freshLogin); return; }
+  window.accountRest?.hide();
   currentUser = user; $('boot').hidden = true; $('login').hidden = true; $('workspace').hidden = false;
   $('identity-name').textContent = user.display_name; $('identity-role').textContent = user.is_owner ? 'Workspace owner' : user.role === 'admin' ? 'Administrator' : 'Team member';
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
@@ -196,6 +205,7 @@ function enterWorkspace(user) {
   const initial=location.hash.slice(1);showPage(['sales','quota','callingtree','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')?initial:'sales');
 }
 async function showPage(name) {
+  if (!currentUser || currentUser.rest_mode) return;
   if (name === 'users' && currentUser?.role !== 'admin') return;
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
@@ -224,7 +234,7 @@ async function loadQuotes() {
 async function loadUsers() {
   $('user-list').innerHTML = '<div class="empty">Loading accounts…</div>';
   const data = await api('users'); if (!currentUser || page !== 'users') return; users = data.users;
-  $('user-list').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Team member</th><th>Username</th><th>Role</th><th>Access</th><th>Manage</th></tr></thead><tbody>' + users.map(u => '<tr><td><strong>' + escapeHTML(u.display_name) + '</strong><small>Added ' + escapeHTML(date(u.created_at)) + '</small></td><td>' + escapeHTML(u.username) + '</td><td>' + (u.is_owner ? 'Owner' : escapeHTML(u.role)) + '</td><td><span class="badge ' + (u.active ? 'new' : 'closed') + '">' + (u.active ? 'Active' : 'Disabled') + '</span></td><td>' + (u.is_owner ? '<span class="muted small">Permanent owner</span>' : u.id === currentUser.id ? '<span class="muted small">Your account</span>' : '<button class="subtle table-button" data-user="' + escapeHTML(u.id) + '">Manage</button>') + '</td></tr>').join('') + '</tbody></table></div>';
+  $('user-list').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Team member</th><th>Username</th><th>Role</th><th>Access</th><th>Manage</th></tr></thead><tbody>' + users.map(u => '<tr><td><strong>' + escapeHTML(u.display_name) + '</strong><small>Added ' + escapeHTML(date(u.created_at)) + '</small></td><td>' + escapeHTML(u.username) + '</td><td>' + (u.is_owner ? 'Owner' : escapeHTML(u.role)) + '</td><td><span class="badge ' + (!u.active ? 'closed' : u.rest_mode ? 'resting' : 'new') + '">' + (!u.active ? 'Disabled' : u.rest_mode ? 'On rest' : 'Active') + '</span></td><td>' + (u.is_owner ? '<span class="muted small">Permanent owner</span>' : u.id === currentUser.id ? '<span class="muted small">Your account</span>' : '<button class="subtle table-button" data-user="' + escapeHTML(u.id) + '">Manage</button>') + ' <button class="subtle table-button rest-toggle" data-rest-user="' + escapeHTML(u.id) + '"' + (u.is_owner || u.id === currentUser.id ? ' disabled title="The permanent owner and your own account are protected"' : '') + '>' + (u.rest_mode ? 'Back to Work' : 'Take a Rest') + '</button></td></tr>').join('') + '</tbody></table></div>';
 }
 function userDialog(user = null) {
   editingUser = user; $('user-form').reset(); $('user-error').textContent = '';
@@ -242,7 +252,7 @@ function quoteDialog(quote) {
   $('quote-message').textContent = quote.message || 'No message provided.'; $('quote-status').value = quote.status; $('quote-notes').value = quote.notes; $('quote-dialog').showModal();
 }
 $('show-password').onclick = () => { const visible = $('login-password').type === 'password'; $('login-password').type = visible ? 'text' : 'password'; $('show-password').textContent = visible ? 'Hide' : 'Show'; $('show-password').setAttribute('aria-pressed', String(visible)); };
-$('login-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'login-error', async () => { const data = await api('login', 'POST', {username:$('login-username').value.trim(), password:$('login-password').value, remember:$('remember').checked}); enterWorkspace(data.user); }); };
+$('login-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'login-error', async () => { const data = await api('login', 'POST', {username:$('login-username').value.trim(), password:$('login-password').value, remember:$('remember').checked}); enterWorkspace(data.user, true); }); };
 $('logout').onclick = async () => { $('logout').disabled = true; try { await api('logout','POST',{}); signedOut(); } catch (error) { notice(error.message,true); } finally { $('logout').disabled = false; } };
 document.addEventListener('click', event => {
   const nav = event.target.closest('[data-page]'); if (nav) showPage(nav.dataset.page);
@@ -271,6 +281,7 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
 <script src="/assets/calling-tree.js"></script>
 <script src="/assets/quota.js"></script>
 <script src="/assets/workspace.js"></script>
+<script src="/assets/rest.js"></script>
 <script>api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));</script>
 </body>
 </html>

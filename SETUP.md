@@ -160,6 +160,12 @@ The browser check exercises the real frontend and Flask backend against fake Sup
 
 The automated tests use a fake Supabase service to check authentication, account authorization, session revocation, CSRF protection, validation, and durable quote handling. They do not prove the hosted migration or DNS configuration. After deployment, verify both hostnames, owner login, member permissions, logout, disable/reset behavior, and persistence of a public quote submission.
 
+## Account rest mode
+
+On **Accounts**, administrators can click **Take a Rest** to pause an account and **Back to Work** to restore it. The permanent owner and the acting administrator's own account are protected. Rest differs from disabling: the user can authenticate, but only their session status and sign-out remain available; all protected report, export, account, upload and editing APIs reject access. Existing sessions detect changes every five seconds while visible, and when the tab regains focus. Returning to work restores access without another login.
+
+The rest screen replaces the workspace, clears loaded report data and hides navigation. It shows the configured first-login message, then the reload message on a page reload in the same tab. A new rest episode resets that behavior. Migration `007_account_rest.sql` adds the persistent rest state; all accounts start with rest off. Run `python tests/browser_rest.py` to check the admin/user flow with simulated authentication.
+
 ## Quota Update
 
 Open **Quota Update** in the sidebar. An administrator can expand **Manage monthly goals**, select a dealer and month, and download a template populated with that dealer's active Calling Tree stores. Enter goals, upload the workbook, review the preview, and click **Apply goals**. This replaces only that dealer's goals for the selected month. Members can view and export reports, but cannot upload goals.

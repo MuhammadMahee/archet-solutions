@@ -16,7 +16,7 @@ except ModuleNotFoundError:
 
 INTERNAL_HOST = os.getenv("INTERNAL_HOST", "internal.archetsolutions.com")
 USERNAME = re.compile(r"^[A-Za-z0-9_]{3,32}$")
-PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at"
+PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,rest_mode,rest_version"
 
 
 def local_request():
@@ -92,7 +92,7 @@ def user_view(user):
     return {key: user[key] for key in PUBLIC_USER_FIELDS.split(",")}
 
 
-def require_user(admin=False):
+def require_user(admin=False, allow_rest=False):
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
@@ -109,6 +109,9 @@ def require_user(admin=False):
                 raise PortalError("Please sign in again.", 401)
             g.portal_user = users[0]
             g.session_hash = digest(token)
+            if g.portal_user.get('rest_mode') and not allow_rest:
+                return jsonify(status='error', code='account_rest', message='Your account is on rest.',
+                               user=user_view(g.portal_user)), 403
             if admin and g.portal_user["role"] != "admin":
                 raise PortalError("Administrator access is required.", 403)
             return fn(*args, **kwargs)
@@ -196,7 +199,7 @@ def register_portal(app):
         return response
 
     @app.get("/api/internal/me")
-    @require_user()
+    @require_user(allow_rest=True)
     def me():
         return jsonify(user=user_view(g.portal_user))
 
@@ -285,6 +288,22 @@ def register_portal(app):
             # Revoke logins which started while the Auth update was in flight.
             db("portal_users", "PATCH", {"session_version": str(uuid4())}, id="eq." + uid)
         return jsonify(status="success")
+
+    @app.patch('/api/internal/users/<uid>/rest')
+    @require_user(admin=True)
+    def users_rest(uid):
+        uid = valid_id(uid)
+        rest = body().get('rest_mode')
+        if not isinstance(rest, bool):
+            raise PortalError('Choose a valid rest status.')
+        users = db('portal_users', id='eq.' + uid, limit=1)
+        if not users:
+            raise PortalError('Account not found.', 404)
+        if users[0]['is_owner'] or uid == g.portal_user['id']:
+            raise PortalError('The permanent owner and your own account cannot be put on rest here.', 403)
+        # Keep login sessions usable for the rest screen and automatic restoration.
+        changed = db('portal_users', 'PATCH', {'rest_mode': rest, 'rest_version': str(uuid4())}, id='eq.' + uid)
+        return jsonify(user=user_view(changed[0]))
 
     @app.post("/api/internal/password")
     @require_user()
