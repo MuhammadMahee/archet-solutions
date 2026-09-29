@@ -5,8 +5,15 @@
   function show(user, freshLogin = false) {
     const version = user.id + ':' + user.rest_version;
     if (shownVersion === version && !$('account-rest').hidden) return;
-    let seen = false;
-    try { seen = sessionStorage.getItem('archet.rest.seen') === version; sessionStorage.setItem('archet.rest.seen', version); } catch (_) {}
+    let stage = 0;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('archet.rest.stage') || 'null');
+      const previous = saved?.version === version && Number.isInteger(saved.stage) && saved.stage >= 0 && saved.stage <= 4
+        ? saved.stage : sessionStorage.getItem('archet.rest.seen') === version ? 0 : null;
+      if (reload && !freshLogin && previous !== null) stage = Math.min(previous + 1, 4);
+      sessionStorage.setItem('archet.rest.stage', JSON.stringify({version,stage}));
+      sessionStorage.setItem('archet.rest.seen', version);
+    } catch (_) {}
     shownVersion = version;
     window.salesDashboard?.clear(); window.callingTree?.clear(); window.quotaDashboard?.clear();
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
@@ -16,14 +23,26 @@
     currentUser = user; page = 'rest';
     $('workspace').hidden = true; $('workspace').inert = true; $('boot').hidden = true; $('login').hidden = true;
     $('login-password').value = '';
-    const reloaded = reload && seen && !freshLogin;
-    $('rest-emoji').textContent = reloaded ? '🍆' : '🖕🏻';
-    $('rest-message').textContent = reloaded ? 'Chal Bey Dalley' : "Now it's time to have Tui wich Lund " + user.username;
+    const picture = stage >= 2;
+    $('rest-image').hidden = !picture;
+    $('rest-emoji').hidden = picture;
+    $('rest-message').hidden = picture;
+    if (picture) {
+      $('rest-image').src = '/assets/rest-image-' + (stage - 1) + '.png';
+      $('rest-image').alt = 'Rest image ' + (stage - 1);
+      $('rest-emoji').textContent = ''; $('rest-message').textContent = '';
+    } else {
+      $('rest-image').removeAttribute('src');
+      $('rest-emoji').textContent = stage === 1 ? '🍆' : '🖕🏻';
+      $('rest-message').textContent = stage === 1 ? 'Chal Bey Dalley' : "Now it's time to have Tui wich Lund " + user.username;
+    }
     $('account-rest').hidden = false;
   }
   function hide() {
     shownVersion = null; $('account-rest').hidden = true; $('workspace').inert = false;
     $('rest-emoji').textContent = ''; $('rest-message').textContent = '';
+    $('rest-image').hidden = true; $('rest-image').removeAttribute('src');
+    $('rest-emoji').hidden = false; $('rest-message').hidden = false;
   }
   async function check() {
     if (!currentUser || checking || document.hidden) return;
@@ -40,7 +59,7 @@
   $('rest-logout').onclick = async () => {
     $('rest-logout').disabled = true;
     try { await api('logout','POST',{}); signedOut(); }
-    catch (_) { $('rest-message').textContent = 'Unable to sign out. Please try again.'; }
+    catch (_) { $('rest-message').hidden = false; $('rest-message').textContent = 'Unable to sign out. Please try again.'; }
     finally { $('rest-logout').disabled = false; }
   };
   document.addEventListener('click', async event => {

@@ -47,6 +47,17 @@ def main():
                 member.screenshot(path=str(ROOT/'test-results/rest-desktop.png'))
                 member.reload();expect(member.locator('#rest-message')).to_have_text('Chal Bey Dalley')
                 expect(member.locator('#rest-emoji')).to_have_text('\U0001f346')
+                for picture in (1,2,3,3):
+                    member.reload()
+                    expect(member.locator('#rest-image')).to_be_visible()
+                    expect(member.locator('#rest-image')).to_have_attribute('src',f'/assets/rest-image-{picture}.png')
+                    member.wait_for_function("document.getElementById('rest-image').naturalWidth > 0")
+                    expect(member.locator('#rest-emoji')).to_be_hidden()
+                    expect(member.locator('#rest-message')).to_be_hidden()
+                    expect(member.locator('#workspace')).to_be_hidden()
+                with member.expect_response('**/api/internal/me'):
+                    member.evaluate("window.dispatchEvent(new Event('focus'))")
+                expect(member.locator('#rest-image')).to_have_attribute('src','/assets/rest-image-3.png')
                 member.evaluate("location.hash='users';showPage('users')")
                 expect(member.locator('#workspace')).to_be_hidden()
                 member.set_viewport_size({'width':390,'height':844})
@@ -57,6 +68,7 @@ def main():
                 expect(member.locator('#account-rest')).to_be_hidden()
                 # A new rest episode shows the initial message even in a reloaded document.
                 button.click();expect(member.locator('#rest-emoji')).to_have_text('\U0001f595\U0001f3fb',timeout=10000)
+                expect(member.locator('#rest-image')).to_be_hidden()
                 member.locator('#rest-logout').click();expect(member.locator('#login')).to_be_visible()
                 member.locator('#login-username').fill('Member');member.locator('#login-password').fill('TestPass123');member.locator('#login-form button[type=submit]').click()
                 expect(member.locator('#rest-message')).to_have_text("Now it's time to have Tui wich Lund Member")

@@ -1,5 +1,7 @@
 .rest-screen{position:fixed;inset:0;z-index:2000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:35px 20px;background:radial-gradient(ellipse at center,#441c36,#0b101b 75%);color:#fff;text-align:center;overflow:auto}
 .rest-screen[hidden]{display:none}
+.rest-image{width:min(92vw,1400px);height:calc(100svh - 110px);object-fit:contain;flex-shrink:0}
+.rest-image[hidden],.rest-emoji[hidden],.rest-screen p[hidden]{display:none}
 .rest-emoji{font-family:'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif;font-size:min(72svh,80vw);line-height:1.1;flex-shrink:0;user-select:none}
 .rest-screen p{font:bold clamp(18px,2.5vw,34px)/1.35 Arial,sans-serif;max-width:1100px;margin:0;overflow-wrap:anywhere}
 .rest-screen button{position:absolute;top:14px;right:16px;background:#ffffff12;color:#fff;border:1px solid #ffffff50;padding:9px 15px;font-size:12px}

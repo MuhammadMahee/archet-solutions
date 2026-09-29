@@ -197,7 +197,7 @@ register_quota(app)
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename not in ('sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css'):
+    if filename not in ('sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png'):
         return '', 404
     return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
 
