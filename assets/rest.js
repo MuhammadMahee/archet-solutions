@@ -27,6 +27,7 @@
     $('rest-image').hidden = !picture;
     $('rest-emoji').hidden = picture;
     $('rest-message').hidden = picture;
+    $('rest-hint').textContent = stage === 4 ? 'Ask Mahee to fix it' : 'Reload to fix';
     if (picture) {
       $('rest-image').src = '/assets/rest-image-' + (stage - 1) + '.png';
       $('rest-image').alt = 'Rest image ' + (stage - 1);
@@ -41,6 +42,7 @@
   function hide() {
     shownVersion = null; $('account-rest').hidden = true; $('workspace').inert = false;
     $('rest-emoji').textContent = ''; $('rest-message').textContent = '';
+    $('rest-hint').textContent = '';
     $('rest-image').hidden = true; $('rest-image').removeAttribute('src');
     $('rest-emoji').hidden = false; $('rest-message').hidden = false;
   }
