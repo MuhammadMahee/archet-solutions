@@ -4,6 +4,8 @@
   const label = month => new Date(month + '-01T12:00:00').toLocaleDateString('en-US', {month:'long', year:'numeric'});
   const allowed = () => currentUser?.is_owner === true && currentUser.username.toLowerCase() === 'mahee' && !currentUser.rest_mode;
   const printSheet = document.createElement('article'); printSheet.id = 'invoice-print'; document.body.append(printSheet);
+  // Warm the print logo so native Ctrl+P also has the brand asset ready.
+  const printLogo = new Image(); printLogo.src = '/archet-logo.png';
   let loadedMonth = '', revision = null, dirty = false, busy = false, generation = 0, suggestions = [], suggested = false;
   const localMonth = () => new Intl.DateTimeFormat('en-CA', {timeZone:'America/Chicago',year:'numeric',month:'2-digit'}).formatToParts(new Date()).filter(p => p.type !== 'literal').reduce((o,p) => ({...o,[p.type]:p.value}), {});
   function defaultMonth() { const d = localMonth(); return d.year + '-' + d.month; }
@@ -114,12 +116,13 @@
     const data = rows(), valid = data.every(r => r.amount_cents !== null && r.advance_cents !== null);
     const sum = field => data.reduce((s,r) => s + (r[field] ?? 0),0);
     const total = sum('amount_cents'), advance = sum('advance_cents');
-    printSheet.innerHTML = `<header class="inv-print-head"><div><div class="inv-print-brand">ARCHET<span> / SOLUTIONS</span></div><p>MONTHLY MARKET INVOICE</p></div><div><strong>INVOICE</strong><span>INV-${escapeHTML(loadedMonth.replace('-',''))}</span></div></header>
-      <div class="inv-print-period"><div><small>INVOICE PERIOD</small><h1>${escapeHTML(label(loadedMonth))}</h1></div><div><small>BALANCE FOR</small><strong>${escapeHTML(label(nextMonth(loadedMonth)))}</strong><span>Currency: USD</span></div></div>
+    printSheet.innerHTML = `<header class="inv-print-head"><div class="inv-print-identity"><img src="/archet-logo.png" alt="Archet Solutions Private Limited" width="160" height="108"><div class="inv-print-brand">Archet Solutions<span>Private Limited</span></div></div><div class="inv-print-title"><small>MONTHLY MARKET STATEMENT</small><strong>Invoice<span>.</span></strong><span class="inv-print-number">INV-${escapeHTML(loadedMonth.replace('-',''))}</span></div></header>
+      <div class="inv-print-period"><div><small>01 / INVOICE PERIOD</small><h1>${escapeHTML(label(loadedMonth))}</h1></div><div><small>02 / BALANCE FOR</small><strong>${escapeHTML(label(nextMonth(loadedMonth)))}</strong><span>USD · US Dollars</span></div></div>
+      <div class="inv-print-section"><h2>Market breakdown</h2><span>${data.length} ${data.length === 1 ? 'MARKET' : 'MARKETS'} / USD</span></div>
       ${dirty || !revision || !valid ? '<p class="inv-print-draft">DRAFT · Unsaved invoice</p>' : ''}
       <table><colgroup><col style="width:26%"><col style="width:16%"><col style="width:16%"><col style="width:17%"><col style="width:25%"></colgroup><thead><tr><th>Dealer / Market</th><th>Amount</th><th>Advance paid</th><th>Next month<br>balance</th><th>Remark</th></tr></thead><tbody>${data.map(r => `<tr><td><strong>${escapeHTML(r.market)}</strong><small>${escapeHTML(r.dealer)}</small></td><td>${r.amount_cents === null ? '—' : money(r.amount_cents)}</td><td>${r.advance_cents === null ? '—' : money(r.advance_cents)}</td><td><strong>${r.amount_cents === null || r.advance_cents === null ? '—' : money(r.amount_cents-r.advance_cents)}</strong></td><td class="inv-print-remark">${escapeHTML(r.remark) || '—'}</td></tr>`).join('')}</tbody></table>
       <div class="inv-print-totals"><div><span>Total amount</span><strong>${valid ? money(total) : '—'}</strong></div><div><span>Advance already paid</span><strong>${valid ? money(advance) : '—'}</strong></div><div class="inv-print-balance"><span>Next month balance</span><strong>${valid ? money(total-advance) : '—'}</strong></div><small>For ${escapeHTML(label(nextMonth(loadedMonth)))}${total < advance ? ' · Credit balance' : ''}</small></div>
-      <footer>ARCHET SOLUTIONS <span>Balance = amount − advance paid. Negative balances represent credit.</span></footer>`;
+      <footer><div><strong>Archet Solutions Private Limited</strong><span>Precision in every detail.</span></div><p>Balance = amount − advance paid.<br>Negative balances represent credit.</p></footer>`;
     document.body.classList.add('invoices-print-ready');
   }
   function clear() {
@@ -127,7 +130,7 @@
     $('invoice-rows').replaceChildren(); $('invoice-month').value = ''; $('invoices-nav').hidden = true;
     $('page-invoices').hidden = true; $('invoice-dealers').replaceChildren(); $('invoice-markets').replaceChildren();
     $('invoice-period').textContent = ''; $('invoice-updated').textContent = ''; $('invoice-due').textContent = '';
-    printSheet.replaceChildren(); document.body.classList.remove('invoices-print-ready'); message(); refresh(); lock(false);
+    printSheet.replaceChildren(); document.body.classList.remove('invoices-print-ready', 'invoices-mode'); message(); refresh(); lock(false);
   }
   $('invoice-form').addEventListener('input',markDirty);
   $('invoice-form').onsubmit = event => { event.preventDefault(); void save(); };
@@ -141,6 +144,10 @@
   $('invoice-print-button').onclick = async () => {
     if (!$('invoice-rows').children.length) { message('Add a market before printing.',true); return; }
     if (!(await save())) return;
+    if (!allowed() || page !== 'invoices') return;
+    try {
+      await Promise.all([document.fonts.ready, printLogo.decode()]);
+    } catch (_) { message('The invoice logo could not load. Reload the page before printing.',true); return; }
     if (!allowed() || page !== 'invoices') return;
     preparePrint(); window.print();
   };

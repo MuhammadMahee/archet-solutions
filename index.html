@@ -62,8 +62,8 @@
     <div id="notice" class="notice" role="status" hidden></div>
     <section id="page-invoices" hidden>
       <div class="inv-hero">
-        <div><div class="inv-eyebrow">FINANCE / PRIVATE WORKSPACE</div><h1>Invoices<span>.</span></h1><p>Every market. Every advance. All accounted for.</p></div>
-        <div class="inv-access"><span aria-hidden="true">◆</span> Mahee only</div>
+        <div class="inv-hero-copy"><div class="inv-eyebrow">ARCHET SOLUTIONS PRIVATE LIMITED</div><h1>Invoices<span>.</span></h1><p>Your markets. Your numbers. One clear picture.</p><div class="inv-access"><span aria-hidden="true">◆</span> Mahee’s private workspace</div></div>
+        <div class="inv-hero-brand"><img src="/archet-logo-dark.png" alt="Archet Solutions Private Limited" width="190" height="128"><span>PRECISION IN EVERY DETAIL</span></div>
       </div>
       <div class="inv-toolbar">
         <label for="invoice-month">Invoice month<input id="invoice-month" type="month" min="2000-01" max="2099-12" required></label>
@@ -244,6 +244,7 @@ async function showPage(name) {
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
   document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
+  document.body.classList.toggle('invoices-mode', name === 'invoices');
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
   notice('');
   try { if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
