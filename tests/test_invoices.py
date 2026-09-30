@@ -270,3 +270,80 @@ def test_library_validation_and_missing_invoice(client, ledger):
         assert client.get('/api/internal/invoices?' + query).status_code == 400
     assert client.get('/api/internal/invoices/' + str(uuid4())).status_code == 404
     assert save_named(client,month=None).status_code == 400
+
+
+@pytest.mark.parametrize('month,days,rate,expected', [
+    ('2026-09',15,30000,15000), ('2026-09',30,30000,30000),
+    ('2026-10',15,31000,15000), ('2026-10',31,31000,31000),
+    ('2026-02',14,28000,14000), ('2026-02',28,28000,28000),
+    ('2028-02',14,29000,14000), ('2028-02',29,29000,29000),
+    ('2026-09',0,30000,0), ('2026-09',15,1,1),
+    ('2026-10',1,100,3), ('2026-10',16,1,1),
+])
+def test_prorated_potential_pay_uses_actual_calendar_month(client, ledger, month, days, rate, expected):
+    login(client)
+    result = save(client,[row(days_worked=days,amount_cents=rate,advance_cents=0)],month=month)
+    assert result.status_code == 200
+    invoice = result.json['invoice']
+    assert invoice['rows'][0]['potential_pay_cents'] == expected
+    assert invoice['totals']['amount_cents'] == expected
+    assert invoice['rows'][0]['days_worked'] == days
+
+
+def test_invoice_advance_deducted_once_and_summary_remark_persists(client, ledger):
+    login(client)
+    uid = str(uuid4())
+    data = {'name':'Partial month','month':'2026-09','rows':[
+        row(store_count=5,amount_cents=250005,days_worked=15,advance_cents=0),
+        row(market='Austin',amount_cents=10000,days_worked=30,advance_cents=0)],
+        'advance_cents':20000,'remark':'Advance received by bank transfer.'}
+    result = write(client,'invoices/' + uid,data,'PUT')
+    assert result.status_code == 200
+    invoice = result.json['invoice']
+    assert invoice['totals'] == {'amount_cents':635013,'advance_cents':20000,'balance_cents':615013}
+    assert invoice['remark'] == data['remark']
+    assert client.get('/api/internal/invoices/' + uid).json['invoice'] == invoice
+    data.update(revision=invoice['revision'],advance_cents=700000)
+    assert write(client,'invoices/' + uid,data,'PUT').json['invoice']['totals']['balance_cents'] == -64987
+
+
+@pytest.mark.parametrize('days', [-1,31,1.5,True,'15',None])
+def test_invalid_days_worked(client, ledger, days):
+    login(client)
+    assert save(client,[row(days_worked=days)]).status_code == 400
+    assert not ledger.records
+
+
+def test_days_exceeding_february_rejected_and_each_line_rounded_once(client, ledger):
+    login(client)
+    assert save(client,[row(days_worked=29)],month='2026-02').status_code == 400
+    assert save(client,[row(days_worked=30)],month='2028-02').status_code == 400
+    result = save(client,[row(amount_cents=1,days_worked=15,advance_cents=0),
+                          row(market='Austin',amount_cents=1,days_worked=15,advance_cents=0)])
+    assert result.json['invoice']['totals']['amount_cents'] == 2
+
+
+@pytest.mark.parametrize('advance', [-1,True,None,'500',1.1,10000000000000])
+def test_invalid_invoice_advance(client, ledger, advance):
+    login(client)
+    assert write(client,'invoices/' + str(uuid4()),{'name':'Bad advance','month':'2026-09',
+        'rows':[row()], 'advance_cents':advance},'PUT').status_code == 400
+
+
+def test_old_invoice_defaults_full_month_and_combines_advances(client, ledger):
+    login(client)
+    invoice = save(client,[row(advance_cents=1000),row(market='Austin',advance_cents=2000)]).json['invoice']
+    old = ledger.records['2026-09']
+    old.pop('advance_cents'); old.pop('remark')
+    for item in old['rows']:
+        item.pop('days_worked')
+    result = client.get('/api/internal/invoices/2026-09').json['invoice']
+    assert result['totals'] == invoice['totals']
+    assert result['advance_cents'] == 3000 and result['remark'] == ''
+    assert all(r['days_worked'] == 30 for r in result['rows'])
+    # The new editor moves the advance to the footer without deducting it twice.
+    for item in result['rows']:
+        item.pop('advance_cents')
+    result['name'] = 'Migrated invoice'
+    saved = write(client,'invoices/' + result['id'],result,'PUT').json['invoice']
+    assert saved['totals'] == invoice['totals']
