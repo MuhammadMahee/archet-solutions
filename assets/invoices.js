@@ -7,13 +7,14 @@
   // Warm the print logo so native Ctrl+P also has the brand asset ready.
   const printLogo = new Image(); printLogo.src = '/archet-logo.png';
   let loadedMonth = '', revision = null, dirty = false, busy = false, generation = 0, suggestions = [], suggested = false;
+  let invoiceId = '', listGeneration = 0, listOffset = 0, listMore = false, searchTimer;
   const localMonth = () => new Intl.DateTimeFormat('en-CA', {timeZone:'America/Chicago',year:'numeric',month:'2-digit'}).formatToParts(new Date()).filter(p => p.type !== 'literal').reduce((o,p) => ({...o,[p.type]:p.value}), {});
   function defaultMonth() { const d = localMonth(); return d.year + '-' + d.month; }
   function nextMonth(month) { const [y,m] = month.split('-').map(Number); return `${y + (m === 12 ? 1 : 0)}-${String(m % 12 + 1).padStart(2,'0')}`; }
   function message(value = '', error = false) { $('invoice-message').textContent = value; $('invoice-message').hidden = !value; $('invoice-message').classList.toggle('is-error',error); }
   function lock(value) {
     busy = value; $('invoice-fields').disabled = value || !loadedMonth;
-    ['invoice-save','invoice-print-button','invoice-reload','invoice-month'].forEach(id => $(id).disabled = value);
+    ['invoice-save','invoice-print-button','invoice-reload','invoice-month','invoice-name','invoice-new'].forEach(id => $(id).disabled = value);
     $('invoice-save').disabled = value || !loadedMonth;
     $('invoice-print-button').disabled = value || !loadedMonth;
   }
@@ -77,39 +78,77 @@
       suggestions = result.rows; suggested = true; options('invoice-dealers',suggestions.map(r => r.dealer));
     } catch (_) { /* Manual dealer and market entry remains available. */ }
   }
+  function rememberInvoice(id = '') {
+    const url = new URL(location.href);
+    if (id) url.searchParams.set('invoice',id); else url.searchParams.delete('invoice');
+    history.replaceState(null,'',url);
+  }
+  function newInvoice() {
+    generation++; invoiceId = crypto.randomUUID(); loadedMonth = defaultMonth(); revision = null; dirty = false;
+    $('invoice-name').value = ''; $('invoice-month').value = loadedMonth; $('invoice-rows').replaceChildren();
+    $('invoice-state').textContent = 'New invoice'; $('invoice-updated').textContent = 'Name your invoice, then save it to the database';
+    rememberInvoice(); message(); refresh(); lock(false); void loadSuggestions(generation);
+  }
   async function load(force = false) {
+    if (!allowed() || busy || (!force && loadedMonth)) return;
+    void loadLibrary();
+    const id = force ? (revision ? invoiceId : '') : new URL(location.href).searchParams.get('invoice');
+    if (id) await openInvoice(id); else newInvoice();
+  }
+  async function openInvoice(id) {
     if (!allowed() || busy) return;
-    if (!force && loadedMonth) return;
-    const month = $('invoice-month').value || defaultMonth();
-    if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(month)) { $('invoice-month').value = loadedMonth || defaultMonth(); return; }
     const token = ++generation; lock(true); message(); $('invoice-state').textContent = 'Loading invoice…';
     try {
-      const result = await api('invoices/' + month);
+      const result = await api('invoices/' + encodeURIComponent(id));
       if (token !== generation || !allowed()) return;
-      loadedMonth = month; revision = result.invoice.revision; dirty = false; $('invoice-month').value = month;
+      invoiceId = result.invoice.id; loadedMonth = result.invoice.month; revision = result.invoice.revision; dirty = false;
+      $('invoice-month').value = loadedMonth; $('invoice-name').value = result.invoice.name;
       $('invoice-rows').replaceChildren(); result.invoice.rows.forEach(r => addRow(r));
-      $('invoice-state').textContent = revision ? 'All changes saved' : 'New monthly invoice';
+      $('invoice-state').textContent = 'All changes saved';
       $('invoice-updated').textContent = result.invoice.updated_at ? 'Saved ' + new Date(result.invoice.updated_at).toLocaleString() : 'Ready for your first market';
-      refresh(); void loadSuggestions(token);
+      rememberInvoice(invoiceId); refresh(); void loadSuggestions(token);
     } catch (error) {
       if (token !== generation || !allowed()) return;
-      $('invoice-month').value = loadedMonth || month;
       $('invoice-state').textContent = dirty ? 'Unsaved changes' : 'Could not load invoice'; message(error.message,true);
     } finally { if (token === generation) lock(false); }
   }
+  async function loadLibrary() {
+    if (!allowed()) return;
+    const token = ++listGeneration;
+    const params = new URLSearchParams({q:$('invoice-search').value.trim(),month:$('invoice-filter-month').value,offset:String(listOffset)});
+    $('invoice-library-message').textContent = 'Loading saved invoices…';
+    $('invoice-library-prev').disabled = true; $('invoice-library-next').disabled = true;
+    try {
+      const result = await api('invoices?' + params);
+      if (token !== listGeneration || !allowed()) return;
+      listMore = result.has_more;
+      $('invoice-saved-list').innerHTML = result.invoices.map(item => `<div class="inv-saved-item"><div><strong>${escapeHTML(item.name)}</strong><small>${escapeHTML(label(item.month))} · Saved ${escapeHTML(new Date(item.updated_at).toLocaleString())}</small></div><button type="button" data-invoice-open="${escapeHTML(item.id)}">Open →</button></div>`).join('');
+      $('invoice-library-message').textContent = result.invoices.length ? '' : params.get('q') || params.get('month') ? 'No saved invoices match these filters.' : 'No invoices saved yet. Name your first invoice and click Save changes.';
+      $('invoice-library-page').textContent = 'Page ' + (listOffset / 20 + 1);
+      $('invoice-library-prev').disabled = listOffset === 0; $('invoice-library-next').disabled = !listMore;
+    } catch (error) {
+      if (token !== listGeneration || !allowed()) return;
+      $('invoice-saved-list').replaceChildren(); $('invoice-library-message').textContent = error.message;
+    }
+  }
   async function save() {
     if (!allowed() || busy || !loadedMonth || !$('invoice-form').reportValidity()) return false;
+    if (!$('invoice-name').reportValidity() || !$('invoice-month').reportValidity()) return false;
+    const name = $('invoice-name').value.trim();
+    if (!name) { message('Give this invoice a name before saving.',true); $('invoice-name').focus(); return false; }
     const data = rows();
     if (!data.every(validRow)) { message('Enter a whole store count from 1 to 10,000 and valid amounts. Count × amount must be below 1 billion USD per market.',true); return false; }
     const keys = data.map(r => JSON.stringify([r.dealer.toLowerCase(),r.market.toLowerCase()]));
-    if (new Set(keys).size !== keys.length) { message('Each dealer and market can appear only once per month.',true); return false; }
+    if (new Set(keys).size !== keys.length) { message('Each dealer and market can appear only once per invoice.',true); return false; }
     if (data.some(r => !r.dealer || !r.market)) { message('Enter a dealer and market for every row.',true); return false; }
     const token = generation; lock(true); message(); $('invoice-state').textContent = 'Saving…';
     try {
-      const result = await api('invoices/' + loadedMonth, 'PUT', {revision,rows:data});
+      const result = await api('invoices/' + invoiceId, 'PUT', {name,month:loadedMonth,revision,rows:data});
       if (token !== generation || !allowed()) return false;
       revision = result.invoice.revision; dirty = false; $('invoice-state').textContent = 'All changes saved';
-      $('invoice-updated').textContent = 'Saved ' + new Date(result.invoice.updated_at).toLocaleString(); return true;
+      $('invoice-name').value = result.invoice.name;
+      rememberInvoice(invoiceId); listOffset = 0; void loadLibrary();
+      $('invoice-updated').textContent = 'Saved to database · ' + new Date(result.invoice.updated_at).toLocaleString(); return true;
     } catch (error) {
       if (token === generation && allowed()) { message(error.message,true); $('invoice-state').textContent = 'Changes not saved'; }
       return false;
@@ -121,7 +160,8 @@
     const data = rows(), valid = data.every(validRow);
     const sum = field => data.reduce((s,r) => s + (r[field] ?? 0),0);
     const total = data.reduce((s,r) => s + subtotal(r),0), advance = sum('advance_cents');
-    printSheet.innerHTML = `<header class="inv-print-head"><div class="inv-print-identity"><img src="/archet-logo.png" alt="Archet Solutions Private Limited" width="160" height="108"><div class="inv-print-brand">Archet Solutions<span>Private Limited</span></div></div><div class="inv-print-title"><small>MONTHLY MARKET STATEMENT</small><strong>Invoice<span>.</span></strong><span class="inv-print-number">INV-${escapeHTML(loadedMonth.replace('-',''))}</span></div></header>
+    printSheet.innerHTML = `<header class="inv-print-head"><div class="inv-print-identity"><img src="/archet-logo.png" alt="Archet Solutions Private Limited" width="160" height="108"><div class="inv-print-brand">Archet Solutions<span>Private Limited</span></div></div><div class="inv-print-title"><small>MONTHLY MARKET STATEMENT</small><strong>Invoice<span>.</span></strong><span class="inv-print-number">INV-${escapeHTML(loadedMonth.replace('-',''))}-${escapeHTML(invoiceId.slice(0,8).toUpperCase())}</span></div></header>
+      <h2 class="inv-print-name">${escapeHTML($('invoice-name').value.trim() || 'Untitled invoice')}</h2>
       <div class="inv-print-period"><div><small>01 / INVOICE PERIOD</small><h1>${escapeHTML(label(loadedMonth))}</h1></div><div><small>02 / BALANCE FOR</small><strong>${escapeHTML(label(nextMonth(loadedMonth)))}</strong><span>USD · US Dollars</span></div></div>
       <div class="inv-print-section"><h2>Market breakdown</h2><span>${data.length} ${data.length === 1 ? 'MARKET' : 'MARKETS'} / USD</span></div>
       ${dirty || !revision || !valid ? '<p class="inv-print-draft">DRAFT · Unsaved invoice</p>' : ''}
@@ -132,6 +172,9 @@
   }
   function clear() {
     generation++; loadedMonth = ''; revision = null; dirty = false; busy = false; suggestions = []; suggested = false;
+    invoiceId = ''; listGeneration++; listOffset = 0; listMore = false; clearTimeout(searchTimer);
+    ['invoice-name','invoice-search','invoice-filter-month'].forEach(id => $(id).value = '');
+    ['invoice-saved-list','invoice-library-message','invoice-library-page'].forEach(id => $(id).replaceChildren());
     $('invoice-rows').replaceChildren(); $('invoice-month').value = ''; $('invoices-nav').hidden = true;
     $('page-invoices').hidden = true; $('invoice-dealers').replaceChildren(); $('invoice-markets').replaceChildren();
     $('invoice-period').textContent = ''; $('invoice-updated').textContent = ''; $('invoice-due').textContent = '';
@@ -141,11 +184,26 @@
   $('invoice-form').onsubmit = event => { event.preventDefault(); void save(); };
   $('invoice-add').onclick = () => { if ($('invoice-rows').children.length < 100) { addRow(undefined,true); markDirty(); } };
   $('invoice-save').onclick = () => void save();
-  $('invoice-reload').onclick = () => { if (!dirty || confirm('Discard unsaved changes and reload this month?')) void load(true); };
+  $('invoice-reload').onclick = () => { if (!dirty || confirm('Discard unsaved changes and reload this invoice?')) void load(true); };
   $('invoice-month').onchange = () => {
-    if (dirty && !confirm('Discard unsaved changes and open another month?')) { $('invoice-month').value = loadedMonth; return; }
-    void load(true);
+    if (!$('invoice-month').validity.valid || !$('invoice-month').value) { $('invoice-month').value = loadedMonth; return; }
+    loadedMonth = $('invoice-month').value; markDirty();
   };
+  $('invoice-name').addEventListener('input',markDirty);
+  $('invoice-new').onclick = () => { if (!busy && (!dirty || confirm('Discard unsaved changes and start a new invoice?'))) { newInvoice(); $('invoice-name').focus(); } };
+  $('invoice-saved-list').onclick = event => {
+    const button = event.target.closest('[data-invoice-open]');
+    if (button && !busy && (!dirty || confirm('Discard unsaved changes and open this invoice?'))) void openInvoice(button.dataset.invoiceOpen);
+  };
+  function filterLibrary() {
+    listGeneration++; listOffset = 0; clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => void loadLibrary(),250);
+  }
+  $('invoice-search').addEventListener('input',filterLibrary);
+  $('invoice-filter-month').addEventListener('change',filterLibrary);
+  $('invoice-library-refresh').onclick = () => { listOffset = 0; void loadLibrary(); };
+  $('invoice-library-prev').onclick = () => { listOffset = Math.max(0,listOffset - 20); void loadLibrary(); };
+  $('invoice-library-next').onclick = () => { if (listMore) { listOffset += 20; void loadLibrary(); } };
   $('invoice-print-button').onclick = async () => {
     if (!$('invoice-rows').children.length) { message('Add a market before printing.',true); return; }
     if (!(await save())) return;

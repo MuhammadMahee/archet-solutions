@@ -36,6 +36,7 @@ def main():
                 page.locator('#login-form button[type=submit]').click()
                 expect(page.locator('#invoice-fields')).to_be_enabled()
                 page.locator('#invoice-month').fill('2026-09')
+                page.locator('#invoice-name').fill('September market services')
                 expect(page.locator('#invoice-period')).to_contain_text('September 2026')
                 expect(page.locator('#invoices-nav')).to_be_visible()
                 for dealer,market,count,amount,advance,remark in [('Connect','Dallas','5','2500.05','4000.10','September operations. Balance due next month.'),('ARBF','Houston','7','1250','2500','Advance received on September 12.'),('California','Los Angeles','2','1600','4000','Credit toward next month.')]:
@@ -56,9 +57,12 @@ def main():
                 assert not ledger.records
                 count_input.fill('5')
                 page.locator('#invoice-save').click(); expect(page.locator('#invoice-state')).to_have_text('All changes saved')
-                assert len(ledger.records['2026-09']['rows']) == 3
+                saved_id = next(iter(ledger.records))
+                assert len(ledger.records[saved_id]['rows']) == 3
+                expect(page.locator('#invoice-saved-list')).to_contain_text('September market services')
                 page.reload(); expect(page.locator('#invoice-rows tr')).to_have_count(3)
                 expect(page.locator('#invoice-rows tr').first.locator('[data-field=store_count]')).to_have_value('5')
+                expect(page.locator('#invoice-name')).to_have_value('September market services')
                 page.evaluate('document.fonts.ready')
                 expect(page.locator('.inv-hero-brand img')).to_be_visible()
                 assert page.locator('.inv-hero-brand img').evaluate('(img) => img.complete && img.naturalWidth > 0')
@@ -69,6 +73,7 @@ def main():
                 page.locator('#invoice-print-button').click()
                 page.wait_for_function('window.printed === true')
                 expect(page.locator('#invoice-print')).to_contain_text('October 2026')
+                expect(page.locator('#invoice-print .inv-print-name')).to_have_text('September market services')
                 expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(1)).to_have_text('5')
                 expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(2)).to_have_text('$2,500.05')
                 expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(4)).to_have_text('$8,500.15')
@@ -97,24 +102,24 @@ def main():
                 assert page.locator('#invoice-print img').count() == 1
                 assert page.locator('#invoice-print img').get_attribute('src') == '/archet-logo.png'
                 page.evaluate("window.dispatchEvent(new Event('afterprint'))")
-                # Pending changes survive navigation and cancellation of a month switch.
+                # Month edits belong to this invoice; pending changes survive navigation.
                 page.locator('#invoice-rows tr').first.locator('[data-field=amount]').fill('13000')
-                page.once('dialog',lambda dialog:dialog.dismiss())
                 page.locator('#invoice-month').fill('2026-10')
-                expect(page.locator('#invoice-month')).to_have_value('2026-09')
+                expect(page.locator('#invoice-month')).to_have_value('2026-10')
+                page.locator('#invoice-month').fill('2026-09')
                 page.evaluate("showPage('settings')"); page.evaluate("showPage('invoices')")
                 expect(page.locator('#invoice-rows tr').first.locator('[data-field=amount]')).to_have_value('13000')
                 page.locator('#invoice-save').click(); expect(page.locator('#invoice-state')).to_have_text('All changes saved')
                 # A conflicting tab cannot overwrite an invoice; a failed save cannot print.
-                ledger.records['2026-09']['revision'] = '00000000-0000-0000-0000-000000000001'
+                ledger.records[saved_id]['revision'] = '00000000-0000-0000-0000-000000000001'
                 page.evaluate('window.printed = false')
                 page.locator('#invoice-print-button').click()
                 expect(page.locator('#invoice-message')).to_contain_text('another tab')
                 assert page.evaluate('window.printed') is False
                 page.locator('#invoice-reload').click(); expect(page.locator('#invoice-state')).to_have_text('All changes saved')
                 # Longer ledgers repeat table headings across multiple A4 pages.
-                saved_rows = ledger.records['2026-09']['rows']
-                ledger.records['2026-09']['rows'] = [{**saved_rows[0],'market':f'Market {i+1:02}','remark':'Monthly service and advance payment. '*8} for i in range(40)]
+                saved_rows = ledger.records[saved_id]['rows']
+                ledger.records[saved_id]['rows'] = [{**saved_rows[0],'market':f'Market {i+1:02}','remark':'Monthly service and advance payment. '*8} for i in range(40)]
                 page.locator('#invoice-reload').click(); expect(page.locator('#invoice-rows tr')).to_have_count(40)
                 page.evaluate("window.dispatchEvent(new Event('beforeprint'))")
                 page.emulate_media(media='print')
@@ -123,11 +128,52 @@ def main():
                 pdf = page.pdf(path=str(artifacts/'invoices-multipage-a4.pdf'),prefer_css_page_size=True,print_background=True)
                 assert len(re.findall(rb'/Type /Page\b',pdf)) > 1
                 page.emulate_media(media='screen')
-                ledger.records['2026-09']['rows'] = saved_rows
+                ledger.records[saved_id]['rows'] = saved_rows
+                # Independent named invoices in the same month, persisted and searchable.
+                page.locator('#invoice-new').click()
+                expect(page.locator('#invoice-name')).to_have_value('')
+                expect(page.locator('#invoice-rows tr')).to_have_count(0)
+                page.locator('#invoice-name').fill('Connect special services')
+                page.locator('#invoice-month').fill('2026-09')
+                page.locator('#invoice-add').click()
+                tr = page.locator('#invoice-rows tr').first
+                for field,value in [('dealer','Connect'),('market','Dallas'),('store_count','2'),('amount','150'),('advance','50')]:
+                    tr.locator(f'[data-field={field}]').fill(value)
+                page.locator('#invoice-save').click(); expect(page.locator('#invoice-state')).to_have_text('All changes saved')
+                assert len(ledger.records) == 2
+                expect(page.locator('#invoice-saved-list .inv-saved-item')).to_have_count(2)
+                page.locator('#invoice-save').click(); expect(page.locator('#invoice-state')).to_have_text('All changes saved')
+                assert len(ledger.records) == 2
+                page.locator('#invoice-search').fill('SPECIAL')
+                expect(page.locator('#invoice-saved-list .inv-saved-item')).to_have_count(1)
+                expect(page.locator('#invoice-saved-list')).to_contain_text('Connect special services')
+                page.locator('#invoice-filter-month').fill('2026-10')
+                expect(page.locator('#invoice-library-message')).to_have_text('No saved invoices match these filters.')
+                page.locator('#invoice-filter-month').fill('2026-09')
+                expect(page.locator('#invoice-saved-list .inv-saved-item')).to_have_count(1)
+                # Cancelling an open protects unsaved edits.
+                page.locator('#invoice-name').fill('Unsaved rename')
+                page.once('dialog',lambda dialog:dialog.dismiss())
+                page.locator('#invoice-saved-list button').click()
+                expect(page.locator('#invoice-name')).to_have_value('Unsaved rename')
+                page.locator('#invoice-name').fill('Connect revised services')
+                page.locator('#invoice-save').click(); expect(page.locator('#invoice-state')).to_have_text('All changes saved')
+                assert len(ledger.records) == 2
+                page.locator('#invoice-search').fill('september')
+                expect(page.locator('#invoice-saved-list .inv-saved-item')).to_have_count(1)
+                page.locator('#invoice-saved-list button').click()
+                expect(page.locator('#invoice-name')).to_have_value('September market services')
+                expect(page.locator('#invoice-rows tr')).to_have_count(3)
+                page.reload()
+                expect(page.locator('#invoice-name')).to_have_value('September market services')
+                expect(page.locator('#invoice-saved-list .inv-saved-item')).to_have_count(2)
+                page.set_viewport_size({'width':1440,'height':1050})
+                page.screenshot(path=str(artifacts/'invoices-saved-library.png'),full_page=True)
                 page.set_viewport_size({'width':1440,'height':1050})
                 page.locator('#logout').click(); expect(page.locator('#login')).to_be_visible()
                 assert page.locator('#invoice-rows tr').count() == 0
                 assert page.locator('#invoice-print').inner_text() == ''
+                assert page.locator('#invoice-saved-list').inner_text() == ''
                 for username in ['OtherAdmin','Member']:
                     page.locator('#login-username').fill(username); page.locator('#login-password').fill('TestPass123')
                     page.locator('#login-form button[type=submit]').click()

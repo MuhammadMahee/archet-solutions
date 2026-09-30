@@ -1,5 +1,6 @@
 """Invoice permissions, exact arithmetic, persistence and concurrent updates."""
 from copy import deepcopy
+from uuid import uuid4
 
 import pytest
 
@@ -14,20 +15,29 @@ class InvoiceStore:
         self.calls = 0
 
     def db(self, table, method='GET', data=None, **params):
-        assert table == 'invoice_months'
         self.calls += 1
-        month = data['month'] if data else params['month'][3:]
-        existing = self.records.get(month)
+        if table == 'rpc/list_saved_invoices':
+            records = [r for r in self.records.values()
+                       if data['p_query'].lower() in r['name'].lower()
+                       and (not data['p_month'] or r['month'] == data['p_month'])]
+            records.sort(key=lambda r:(r['updated_at'],r['id']),reverse=True)
+            return [{key:r[key] for key in ('id','name','month','updated_at')}
+                    for r in records[data['p_offset']:data['p_offset']+21]]
+        assert table == 'invoice_months'
+        matched = [(key,r) for key,r in self.records.items()
+                   if all(str(r.get(field,'')) == value[3:] for field,value in params.items() if field != 'limit')]
         if method == 'POST':
-            if existing:
+            if any(r['id'] == data['id'] or (data.get('legacy_month') and r.get('legacy_month') == data['legacy_month']) for r in self.records.values()):
                 raise StoreError(409, '23505')
-            self.records[month] = deepcopy(data)
+            self.records[data.get('legacy_month') or data['id']] = deepcopy(data)
+            return [deepcopy(data)]
         elif method == 'PATCH':
-            if not existing or params['revision'] != 'eq.' + existing['revision']:
+            if not matched:
                 return []
-            self.records[month] = deepcopy(data)
-        result = self.records.get(month)
-        return [deepcopy(result)] if result else []
+            key, existing = matched[0]
+            self.records[key].update(deepcopy(data))
+            return [deepcopy(self.records[key])]
+        return [deepcopy(r) for _,r in matched][:int(params.get('limit',1000))]
 
 
 @pytest.fixture
@@ -190,3 +200,73 @@ def test_legacy_invoice_defaults_to_one_store_without_changing_totals(client, le
     assert invoice['rows'][0]['balance_cents'] == 7000
     assert save(client, invoice['rows'], invoice['revision']).status_code == 200
     assert ledger.records['2026-09']['rows'][0]['store_count'] == 1
+
+
+def save_named(client, name='Connect September', uid=None, revision=None, month='2026-09'):
+    return write(client, 'invoices/' + (uid or str(uuid4())),
+                 {'name':name,'month':month,'rows':[row(store_count=3)],'revision':revision}, 'PUT')
+
+
+def test_multiple_named_invoices_same_month_and_rename(client, ledger):
+    login(client)
+    first = save_named(client).json['invoice']
+    second = save_named(client, 'ARBF September').json['invoice']
+    assert first['id'] != second['id'] and len(ledger.records) == 2
+    updated = save_named(client, 'Connect revised', first['id'], first['revision'], '2026-10').json['invoice']
+    assert len(ledger.records) == 2
+    assert updated['name'] == 'Connect revised' and updated['month'] == '2026-10'
+    assert client.get('/api/internal/invoices/' + first['id']).json['invoice'] == updated
+    assert client.get('/api/internal/invoices/' + second['id']).json['invoice'] == second
+    assert save_named(client, uid=first['id'],revision=first['revision']).status_code == 409
+    assert save_named(client, uid=first['id']).status_code == 409
+
+
+def test_search_by_name_month_and_paginate(client, ledger):
+    login(client)
+    for i in range(22):
+        save_named(client, f'Connect {i:02}')
+    save_named(client, 'ARBF October',month='2026-10')
+    page1 = client.get('/api/internal/invoices?q=connect').json
+    page2 = client.get('/api/internal/invoices?q=CONNECT&offset=20').json
+    assert len(page1['invoices']) == 20 and page1['has_more']
+    assert len(page2['invoices']) == 2 and not page2['has_more']
+    assert not {i['id'] for i in page1['invoices']} & {i['id'] for i in page2['invoices']}
+    assert all('rows' not in i for i in page1['invoices'])
+    assert client.get('/api/internal/invoices?q=Connect&month=2026-10').json['invoices'] == []
+    assert len(client.get('/api/internal/invoices?month=2026-10').json['invoices']) == 1
+
+
+def test_old_monthly_invoices_visible_and_editable_in_library(client, ledger):
+    login(client)
+    original = save(client).json['invoice']
+    listed = client.get('/api/internal/invoices').json['invoices']
+    assert listed[0]['id'] == original['id']
+    updated = save_named(client,'Old invoice renamed',original['id'],original['revision']).json['invoice']
+    assert len(ledger.records) == 1 and updated['id'] == original['id']
+    assert client.get('/api/internal/invoices/2026-09').json['invoice']['name'] == 'Old invoice renamed'
+
+
+@pytest.mark.parametrize('name', ['', '   ', 'x'*121, None, 123])
+def test_invalid_names(client, ledger, name):
+    login(client)
+    assert save_named(client,name).status_code == 400
+    assert not ledger.records
+
+
+@pytest.mark.parametrize('username', [None,'Member','OtherAdmin'])
+def test_library_and_named_invoice_access_is_mahee_only(client, ledger, username):
+    if username:
+        login(client,username)
+    status = 403 if username else 401
+    assert client.get('/api/internal/invoices').status_code == status
+    assert client.get('/api/internal/invoices/' + str(uuid4())).status_code == status
+    assert save_named(client).status_code == status
+    assert ledger.calls == 0
+
+
+def test_library_validation_and_missing_invoice(client, ledger):
+    login(client)
+    for query in ('offset=-1','offset=abc','month=2026-13','q=' + 'x'*121):
+        assert client.get('/api/internal/invoices?' + query).status_code == 400
+    assert client.get('/api/internal/invoices/' + str(uuid4())).status_code == 404
+    assert save_named(client,month=None).status_code == 400

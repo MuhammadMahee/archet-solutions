@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from flask import g, jsonify
+from flask import g, jsonify, request
 
 try:
     from api.portal import PortalError, body, require_user, text_field, valid_id
@@ -13,12 +13,23 @@ except ModuleNotFoundError:
     from supabase_store import StoreError, db
 
 
-def check_access(month):
+def check_access():
     user = g.portal_user
     if not user.get('is_owner') or user.get('username', '').lower() != 'mahee':
         raise PortalError('Invoices are only available to Mahee.', 403)
-    if not re.fullmatch(r'20\d{2}-(0[1-9]|1[0-2])', month):
+
+
+def validate_month(month):
+    if not isinstance(month, str) or not re.fullmatch(r'20\d{2}-(0[1-9]|1[0-2])', month):
         raise PortalError('Choose a month between January 2000 and December 2099.')
+    return month
+
+
+def invoice_selector(key):
+    # Older open tabs still address the original monthly invoice only.
+    if re.fullmatch(r'\d{4}-\d{1,2}', key):
+        return {'legacy_month': 'eq.' + validate_month(key)}
+    return {'id': 'eq.' + valid_id(key)}
 
 
 def validate_rows(rows):
@@ -32,7 +43,7 @@ def validate_rows(rows):
                    for key, size in [('dealer', 100), ('market', 100), ('remark', 500)]}
         key = (cleaned['dealer'].casefold(), cleaned['market'].casefold())
         if key in seen:
-            raise PortalError('Each dealer and market can appear only once per month.')
+            raise PortalError('Each dealer and market can appear only once per invoice.')
         seen.add(key)
         # Older saved invoices and clients represent one market amount.
         count = row.get('store_count', 1)
@@ -64,19 +75,43 @@ def invoice_view(record):
 
 
 def register_invoices(app):
-    @app.get('/api/internal/invoices/<month>')
+    @app.get('/api/internal/invoices')
     @require_user()
-    def get_invoice(month):
-        check_access(month)
-        records = db('invoice_months', month='eq.' + month, limit=1)
-        record = records[0] if records else {'month': month, 'rows': [], 'revision': None, 'updated_at': None}
+    def list_invoices():
+        check_access()
+        query = text_field(request.args, 'q', 120, required=False)
+        month = request.args.get('month', '')
+        if month:
+            validate_month(month)
+        offset = request.args.get('offset', '0')
+        if not re.fullmatch(r'\d{1,7}', offset):
+            raise PortalError('Invalid invoice list offset.')
+        records = db('rpc/list_saved_invoices', 'POST', {
+            'p_query': query, 'p_month': month, 'p_offset': int(offset),
+        })
+        return jsonify(invoices=records[:20], has_more=len(records) > 20)
+
+    @app.get('/api/internal/invoices/<key>')
+    @require_user()
+    def get_invoice(key):
+        check_access()
+        selector = invoice_selector(key)
+        records = db('invoice_months', **selector, limit=1)
+        if not records and 'id' in selector:
+            raise PortalError('Saved invoice not found.', 404)
+        record = records[0] if records else {'month': key, 'name': 'Invoice - ' + key,
+                                            'rows': [], 'revision': None, 'updated_at': None}
         return jsonify(invoice=invoice_view(record))
 
-    @app.put('/api/internal/invoices/<month>')
+    @app.put('/api/internal/invoices/<key>')
     @require_user()
-    def save_invoice(month):
-        check_access(month)
+    def save_invoice(key):
+        check_access()
+        selector = invoice_selector(key)
         payload = body()
+        legacy = 'legacy_month' in selector
+        month = validate_month(key if legacy else payload.get('month'))
+        name = text_field(payload, 'name', 120) if not legacy or 'name' in payload else None
         rows = validate_rows(payload.get('rows'))
         revision = payload.get('revision')
         if revision is not None:
@@ -85,11 +120,17 @@ def register_invoices(app):
             revision = valid_id(revision)
         record = {'month': month, 'rows': rows, 'revision': str(uuid4()),
                   'updated_at': datetime.now(timezone.utc).isoformat()}
+        if name is not None:
+            record['name'] = name
+        if legacy and revision is None:
+            record.update(id=str(uuid4()), legacy_month=month, name=name or 'Invoice - ' + month)
+        elif not legacy:
+            record['id'] = selector['id'][3:]
         try:
             if revision is None:
                 saved = db('invoice_months', 'POST', record)
             else:
-                saved = db('invoice_months', 'PATCH', record, month='eq.' + month, revision='eq.' + revision)
+                saved = db('invoice_months', 'PATCH', record, **selector, revision='eq.' + revision)
         except StoreError as exc:
             if exc.code != '23505':
                 raise
