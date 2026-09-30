@@ -38,7 +38,7 @@ def ledger(monkeypatch):
 
 
 def row(**changes):
-    return {'dealer':'Connect', 'market':'Dallas', 'amount_cents':10010,
+    return {'dealer':'Connect', 'market':'Dallas', 'store_count':1, 'amount_cents':10010,
             'advance_cents':3010, 'remark':'Pay balance next month', **changes}
 
 
@@ -150,3 +150,43 @@ def test_upstream_failure_is_not_reported_as_save_success(client, ledger, monkey
 def test_invalid_revision_returns_validation_error(client, ledger, revision):
     login(client)
     assert save(client, revision=revision).status_code == 400
+
+
+def test_store_count_multiplies_rate_before_deducting_advance(client, ledger):
+    login(client)
+    result = save(client, [row(store_count=5, amount_cents=250005, advance_cents=400010,
+                               subtotal_cents=1, balance_cents=1),
+                           row(market='Austin', store_count=2, amount_cents=160000, advance_cents=400000)])
+    assert result.status_code == 200
+    invoice = result.json['invoice']
+    assert invoice['rows'][0]['subtotal_cents'] == 1250025
+    assert invoice['rows'][0]['balance_cents'] == 850015
+    assert invoice['rows'][1]['balance_cents'] == -80000
+    assert invoice['totals'] == {'amount_cents':1570025, 'advance_cents':800010, 'balance_cents':770015}
+    assert client.get('/api/internal/invoices/2026-09').json['invoice'] == invoice
+    assert ledger.records['2026-09']['rows'][0]['store_count'] == 5
+    assert 'subtotal_cents' not in ledger.records['2026-09']['rows'][0]
+
+
+@pytest.mark.parametrize('count', [0, -1, 1.5, True, '5', None, 10001])
+def test_invalid_store_counts(client, ledger, count):
+    login(client)
+    assert save(client, [row(store_count=count)]).status_code == 400
+    assert not ledger.records
+
+
+def test_subtotal_limit_keeps_cent_arithmetic_exact(client, ledger):
+    login(client)
+    assert save(client, [row(store_count=10000, amount_cents=99999999999)]).status_code == 400
+    assert save(client, [row(store_count=10000, amount_cents=1)]).json['invoice']['rows'][0]['subtotal_cents'] == 10000
+
+
+def test_legacy_invoice_defaults_to_one_store_without_changing_totals(client, ledger):
+    login(client)
+    save(client)
+    del ledger.records['2026-09']['rows'][0]['store_count']
+    invoice = client.get('/api/internal/invoices/2026-09').json['invoice']
+    assert invoice['rows'][0]['store_count'] == 1
+    assert invoice['rows'][0]['balance_cents'] == 7000
+    assert save(client, invoice['rows'], invoice['revision']).status_code == 200
+    assert ledger.records['2026-09']['rows'][0]['store_count'] == 1

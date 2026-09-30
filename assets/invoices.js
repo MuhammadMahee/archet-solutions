@@ -23,16 +23,19 @@
   }
   function rowValues(tr) {
     const get = field => tr.querySelector(`[data-field="${field}"]`).value;
-    return {dealer:get('dealer').trim(),market:get('market').trim(),amount_cents:cents(get('amount')),advance_cents:cents(get('advance')),remark:get('remark').trim()};
+    const count = Number(get('store_count'));
+    return {dealer:get('dealer').trim(),market:get('market').trim(),store_count:Number.isInteger(count) && count >= 1 && count <= 10000 ? count : null,amount_cents:cents(get('amount')),advance_cents:cents(get('advance')),remark:get('remark').trim()};
   }
+  const subtotal = row => row.store_count * row.amount_cents;
+  const validRow = row => row.store_count !== null && row.amount_cents !== null && row.advance_cents !== null && subtotal(row) <= 99999999999;
   function rows() { return [...$('invoice-rows').children].map(rowValues); }
   function refresh() {
     let total = 0, advance = 0, invalid = false;
     [...$('invoice-rows').children].forEach(tr => {
-      const r = rowValues(tr), valid = r.amount_cents !== null && r.advance_cents !== null;
-      invalid ||= !valid; total += r.amount_cents ?? 0; advance += r.advance_cents ?? 0;
-      tr.querySelector('output').textContent = valid ? money(r.amount_cents-r.advance_cents) : '—';
-      tr.querySelector('output').classList.toggle('is-credit', valid && r.advance_cents > r.amount_cents);
+      const r = rowValues(tr), valid = validRow(r);
+      invalid ||= !valid; total += subtotal(r); advance += r.advance_cents ?? 0;
+      tr.querySelector('output').textContent = valid ? money(subtotal(r)-r.advance_cents) : '—';
+      tr.querySelector('output').classList.toggle('is-credit', valid && r.advance_cents > subtotal(r));
     });
     const count = $('invoice-rows').children.length;
     $('invoice-total').textContent = invalid ? '—' : money(total); $('invoice-advance').textContent = invalid ? '—' : money(advance);
@@ -46,15 +49,16 @@
     if (dirty) $('invoice-state').textContent = 'Unsaved changes';
   }
   function markDirty() { dirty = true; message(); refresh(); }
-  function addRow(row = {dealer:'',market:'',amount_cents:0,advance_cents:0,remark:''}, focus = false) {
+  function addRow(row = {dealer:'',market:'',store_count:1,amount_cents:0,advance_cents:0,remark:''}, focus = false) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td data-label="Dealer / Market"><input data-field="dealer" aria-label="Dealer" list="invoice-dealers" placeholder="Dealer" maxlength="100" required><input data-field="market" aria-label="Market" list="invoice-markets" placeholder="Market name" maxlength="100" required></td>
-      <td data-label="Amount"><div class="inv-money-input"><span>$</span><input data-field="amount" aria-label="Amount in USD" inputmode="decimal" pattern="[0-9]{1,9}([.][0-9]{1,2})?" title="Enter an amount with up to two decimal places" required></div></td>
+      <td data-label="Store count"><input data-field="store_count" aria-label="Store count" type="number" inputmode="numeric" min="1" max="10000" step="1" required></td>
+      <td data-label="Amount / store"><div class="inv-money-input"><span>$</span><input data-field="amount" aria-label="Amount per store in USD" inputmode="decimal" pattern="[0-9]{1,9}([.][0-9]{1,2})?" title="Enter the per-store amount with up to two decimal places" required></div></td>
       <td data-label="Advance paid"><div class="inv-money-input"><span>$</span><input data-field="advance" aria-label="Advance paid in USD" inputmode="decimal" pattern="[0-9]{1,9}([.][0-9]{1,2})?" title="Enter an amount with up to two decimal places" required></div></td>
-      <td data-label="Next month balance"><output aria-label="Next month balance"></output></td>
+      <td data-label="Total amount"><output aria-label="Total amount after advance"></output></td>
       <td data-label="Remark"><textarea data-field="remark" aria-label="Remark" placeholder="Add a note…" maxlength="500" rows="2"></textarea></td>
       <td class="inv-remove-cell"><button type="button" class="inv-remove" aria-label="Remove market">×</button></td>`;
-    for (const [key,value] of Object.entries({dealer:row.dealer,market:row.market,amount:(row.amount_cents/100).toFixed(2),advance:(row.advance_cents/100).toFixed(2),remark:row.remark})) tr.querySelector(`[data-field="${key}"]`).value = value;
+    for (const [key,value] of Object.entries({dealer:row.dealer,market:row.market,store_count:row.store_count ?? 1,amount:(row.amount_cents/100).toFixed(2),advance:(row.advance_cents/100).toFixed(2),remark:row.remark})) tr.querySelector(`[data-field="${key}"]`).value = value;
     tr.querySelector('.inv-remove').onclick = () => { tr.remove(); markDirty(); $('invoice-add').focus(); };
     tr.querySelector('[data-field="dealer"]').addEventListener('input', () => marketOptions(tr));
     tr.querySelector('[data-field="market"]').addEventListener('focus', () => marketOptions(tr));
@@ -96,6 +100,7 @@
   async function save() {
     if (!allowed() || busy || !loadedMonth || !$('invoice-form').reportValidity()) return false;
     const data = rows();
+    if (!data.every(validRow)) { message('Enter a whole store count from 1 to 10,000 and valid amounts. Count × amount must be below 1 billion USD per market.',true); return false; }
     const keys = data.map(r => JSON.stringify([r.dealer.toLowerCase(),r.market.toLowerCase()]));
     if (new Set(keys).size !== keys.length) { message('Each dealer and market can appear only once per month.',true); return false; }
     if (data.some(r => !r.dealer || !r.market)) { message('Enter a dealer and market for every row.',true); return false; }
@@ -113,16 +118,16 @@
   function preparePrint() {
     printSheet.replaceChildren(); document.body.classList.remove('invoices-print-ready');
     if (!allowed() || page !== 'invoices' || !loadedMonth) return;
-    const data = rows(), valid = data.every(r => r.amount_cents !== null && r.advance_cents !== null);
+    const data = rows(), valid = data.every(validRow);
     const sum = field => data.reduce((s,r) => s + (r[field] ?? 0),0);
-    const total = sum('amount_cents'), advance = sum('advance_cents');
+    const total = data.reduce((s,r) => s + subtotal(r),0), advance = sum('advance_cents');
     printSheet.innerHTML = `<header class="inv-print-head"><div class="inv-print-identity"><img src="/archet-logo.png" alt="Archet Solutions Private Limited" width="160" height="108"><div class="inv-print-brand">Archet Solutions<span>Private Limited</span></div></div><div class="inv-print-title"><small>MONTHLY MARKET STATEMENT</small><strong>Invoice<span>.</span></strong><span class="inv-print-number">INV-${escapeHTML(loadedMonth.replace('-',''))}</span></div></header>
       <div class="inv-print-period"><div><small>01 / INVOICE PERIOD</small><h1>${escapeHTML(label(loadedMonth))}</h1></div><div><small>02 / BALANCE FOR</small><strong>${escapeHTML(label(nextMonth(loadedMonth)))}</strong><span>USD · US Dollars</span></div></div>
       <div class="inv-print-section"><h2>Market breakdown</h2><span>${data.length} ${data.length === 1 ? 'MARKET' : 'MARKETS'} / USD</span></div>
       ${dirty || !revision || !valid ? '<p class="inv-print-draft">DRAFT · Unsaved invoice</p>' : ''}
-      <table><colgroup><col style="width:26%"><col style="width:16%"><col style="width:16%"><col style="width:17%"><col style="width:25%"></colgroup><thead><tr><th>Dealer / Market</th><th>Amount</th><th>Advance paid</th><th>Next month<br>balance</th><th>Remark</th></tr></thead><tbody>${data.map(r => `<tr><td><strong>${escapeHTML(r.market)}</strong><small>${escapeHTML(r.dealer)}</small></td><td>${r.amount_cents === null ? '—' : money(r.amount_cents)}</td><td>${r.advance_cents === null ? '—' : money(r.advance_cents)}</td><td><strong>${r.amount_cents === null || r.advance_cents === null ? '—' : money(r.amount_cents-r.advance_cents)}</strong></td><td class="inv-print-remark">${escapeHTML(r.remark) || '—'}</td></tr>`).join('')}</tbody></table>
-      <div class="inv-print-totals"><div><span>Total amount</span><strong>${valid ? money(total) : '—'}</strong></div><div><span>Advance already paid</span><strong>${valid ? money(advance) : '—'}</strong></div><div class="inv-print-balance"><span>Next month balance</span><strong>${valid ? money(total-advance) : '—'}</strong></div><small>For ${escapeHTML(label(nextMonth(loadedMonth)))}${total < advance ? ' · Credit balance' : ''}</small></div>
-      <footer><div><strong>Archet Solutions Private Limited</strong><span>Precision in every detail.</span></div><p>Balance = amount − advance paid.<br>Negative balances represent credit.</p></footer>`;
+      <table><colgroup><col style="width:21%"><col style="width:8%"><col style="width:16%"><col style="width:16%"><col style="width:18%"><col style="width:21%"></colgroup><thead><tr><th>Dealer / Market</th><th>Stores</th><th>Amount /<br>store</th><th>Advance<br>paid</th><th>Total<br>amount</th><th>Remark</th></tr></thead><tbody>${data.map(r => `<tr><td><strong>${escapeHTML(r.market)}</strong><small>${escapeHTML(r.dealer)}</small></td><td>${r.store_count ?? '—'}</td><td>${r.amount_cents === null ? '—' : money(r.amount_cents)}</td><td>${r.advance_cents === null ? '—' : money(r.advance_cents)}</td><td><strong>${!validRow(r) ? '—' : money(subtotal(r)-r.advance_cents)}</strong></td><td class="inv-print-remark">${escapeHTML(r.remark) || '—'}</td></tr>`).join('')}</tbody></table>
+      <div class="inv-print-totals"><div><span>Subtotal · stores × amount</span><strong>${valid ? money(total) : '—'}</strong></div><div><span>Advance already paid</span><strong>${valid ? money(advance) : '—'}</strong></div><div class="inv-print-balance"><span>Total amount</span><strong>${valid ? money(total-advance) : '—'}</strong></div><small>For ${escapeHTML(label(nextMonth(loadedMonth)))}${total < advance ? ' · Credit balance' : ''}</small></div>
+      <footer><div><strong>Archet Solutions Private Limited</strong><span>Precision in every detail.</span></div><p>Total = stores × amount − advance paid.<br>Negative balances represent credit.</p></footer>`;
     document.body.classList.add('invoices-print-ready');
   }
   function clear() {

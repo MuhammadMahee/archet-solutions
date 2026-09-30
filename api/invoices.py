@@ -34,20 +34,30 @@ def validate_rows(rows):
         if key in seen:
             raise PortalError('Each dealer and market can appear only once per month.')
         seen.add(key)
+        # Older saved invoices and clients represent one market amount.
+        count = row.get('store_count', 1)
+        if type(count) is not int or not 1 <= count <= 10000:
+            raise PortalError('Store count must be a whole number from 1 to 10,000.')
+        cleaned['store_count'] = count
         for field in ('amount_cents', 'advance_cents'):
             value = row.get(field)
             if type(value) is not int or not 0 <= value <= 99999999999:
                 raise PortalError('Amounts must be nonnegative, with at most two decimal places and below 1 billion USD.')
             cleaned[field] = value
+        if count * cleaned['amount_cents'] > 99999999999:
+            raise PortalError('Store count times amount must be below 1 billion USD per market.')
         result.append(cleaned)
     return result
 
 
 def invoice_view(record):
-    rows = [{**row, 'balance_cents': row['amount_cents'] - row['advance_cents']}
+    rows = [{**row, 'store_count': row.get('store_count', 1),
+             'subtotal_cents': row.get('store_count', 1) * row['amount_cents'],
+             'balance_cents': row.get('store_count', 1) * row['amount_cents'] - row['advance_cents']}
             for row in record['rows']]
-    totals = {key: sum(row[key] for row in rows)
-              for key in ('amount_cents', 'advance_cents', 'balance_cents')}
+    totals = {'amount_cents': sum(row['subtotal_cents'] for row in rows),
+              'advance_cents': sum(row['advance_cents'] for row in rows),
+              'balance_cents': sum(row['balance_cents'] for row in rows)}
     year, month = map(int, record['month'].split('-'))
     return {**record, 'rows': rows, 'totals': totals, 'currency': 'USD',
             'balance_month': f'{year + (month == 12):04d}-{month % 12 + 1:02d}'}

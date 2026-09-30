@@ -38,17 +38,27 @@ def main():
                 page.locator('#invoice-month').fill('2026-09')
                 expect(page.locator('#invoice-period')).to_contain_text('September 2026')
                 expect(page.locator('#invoices-nav')).to_be_visible()
-                for dealer,market,amount,advance,remark in [('Connect','Dallas','12500.25','4000.10','September operations. Balance due next month.'),('ARBF','Houston','8750','2500','Advance received on September 12.'),('California','Los Angeles','3200','4000','Credit toward next month.')]:
+                for dealer,market,count,amount,advance,remark in [('Connect','Dallas','5','2500.05','4000.10','September operations. Balance due next month.'),('ARBF','Houston','7','1250','2500','Advance received on September 12.'),('California','Los Angeles','2','1600','4000','Credit toward next month.')]:
                     page.locator('#invoice-add').click()
                     tr = page.locator('#invoice-rows tr').last
-                    for field,value in [('dealer',dealer),('market',market),('amount',amount),('advance',advance),('remark',remark)]:
+                    for field,value in [('dealer',dealer),('market',market),('store_count',count),('amount',amount),('advance',advance),('remark',remark)]:
                         tr.locator(f'[data-field={field}]').fill(value)
                 expect(page.locator('#invoice-total')).to_have_text('$24,450.25')
                 expect(page.locator('#invoice-advance')).to_have_text('$10,500.10')
                 expect(page.locator('#invoice-balance')).to_have_text('$13,950.15')
+                count_input = page.locator('#invoice-rows tr').first.locator('[data-field=store_count]')
+                count_input.fill('6')
+                expect(page.locator('#invoice-rows tr').first.locator('output')).to_have_text('$11,000.20')
+                expect(page.locator('#invoice-balance')).to_have_text('$16,450.20')
+                count_input.fill('0')
+                expect(page.locator('#invoice-balance')).to_have_text('—')
+                page.locator('#invoice-save').click()
+                assert not ledger.records
+                count_input.fill('5')
                 page.locator('#invoice-save').click(); expect(page.locator('#invoice-state')).to_have_text('All changes saved')
                 assert len(ledger.records['2026-09']['rows']) == 3
                 page.reload(); expect(page.locator('#invoice-rows tr')).to_have_count(3)
+                expect(page.locator('#invoice-rows tr').first.locator('[data-field=store_count]')).to_have_value('5')
                 page.evaluate('document.fonts.ready')
                 expect(page.locator('.inv-hero-brand img')).to_be_visible()
                 assert page.locator('.inv-hero-brand img').evaluate('(img) => img.complete && img.naturalWidth > 0')
@@ -59,6 +69,9 @@ def main():
                 page.locator('#invoice-print-button').click()
                 page.wait_for_function('window.printed === true')
                 expect(page.locator('#invoice-print')).to_contain_text('October 2026')
+                expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(1)).to_have_text('5')
+                expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(2)).to_have_text('$2,500.05')
+                expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(4)).to_have_text('$8,500.15')
                 expect(page.locator('#invoice-print footer')).to_contain_text('Archet Solutions Private Limited')
                 assert page.locator('#invoice-print img').evaluate('(img) => img.complete && img.naturalWidth > 0')
                 page.emulate_media(media='print')

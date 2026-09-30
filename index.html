@@ -72,17 +72,17 @@
       </div>
       <div id="invoice-message" class="inv-message" role="status" hidden></div>
       <div class="inv-stats">
-        <div><span class="inv-stat-label">01 / TOTAL AMOUNT</span><strong id="invoice-total">$0.00</strong><small>Across <span id="invoice-market-count">0 markets</span></small></div>
+        <div><span class="inv-stat-label">01 / SUBTOTAL / STORES × AMOUNT</span><strong id="invoice-total">$0.00</strong><small>Across <span id="invoice-market-count">0 markets</span></small></div>
         <div><span class="inv-stat-label">02 / ADVANCE PAID</span><strong id="invoice-advance">$0.00</strong><small>Payments already received</small></div>
-        <div class="inv-balance-card"><span class="inv-stat-label">03 / NEXT MONTH BALANCE</span><strong id="invoice-balance">$0.00</strong><small id="invoice-due">Balance carried to next month</small></div>
+        <div class="inv-balance-card"><span class="inv-stat-label">03 / TOTAL AMOUNT / NEXT MONTH</span><strong id="invoice-balance">$0.00</strong><small id="invoice-due">Balance carried to next month</small></div>
       </div>
       <form id="invoice-form">
         <fieldset id="invoice-fields" disabled>
           <div class="inv-sheet">
             <div class="inv-sheet-head"><div><span class="inv-eyebrow">THE MONTHLY BREAKDOWN</span><h2>Market ledger</h2><p id="invoice-period">Choose a month to get started.</p></div><span class="inv-currency">USD <span>•</span> US DOLLARS</span></div>
-            <div class="inv-table-wrap"><table class="inv-table"><caption class="inv-sr-only">Market invoice amounts, advances, balances, and remarks</caption><thead><tr><th>Dealer / Market</th><th>Amount</th><th>Advance paid</th><th>Next month balance</th><th>Remark</th><th><span class="inv-sr-only">Remove market</span></th></tr></thead><tbody id="invoice-rows"></tbody></table></div>
+            <div class="inv-table-wrap"><table class="inv-table"><caption class="inv-sr-only">Market store counts, per-store amounts, advances, totals, and remarks</caption><thead><tr><th>Dealer / Market</th><th>Stores</th><th>Amount / store</th><th>Advance paid</th><th>Total amount</th><th>Remark</th><th><span class="inv-sr-only">Remove market</span></th></tr></thead><tbody id="invoice-rows"></tbody></table></div>
             <div id="invoice-empty" class="inv-empty"><span aria-hidden="true">▧</span><h3>A fresh month. A clear picture.</h3><p>Add your first market to start tracking amounts and advances.</p></div>
-            <div class="inv-sheet-foot"><button id="invoice-add" type="button">＋ Add market</button><span>Balance = amount − advance paid</span></div>
+            <div class="inv-sheet-foot"><button id="invoice-add" type="button">＋ Add market</button><span>Total = stores × amount − advance paid</span></div>
           </div>
         </fieldset>
       </form>
