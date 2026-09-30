@@ -154,11 +154,20 @@ For the optional real-browser checks:
 python -m playwright install chromium
 python tests/browser_smoke.py
 python tests/browser_quota.py
+python tests/browser_invoices.py
 ```
 
 The browser check exercises the real frontend and Flask backend against fake Supabase data, including desktop/mobile layout, account creation, follow-ups, disabling accounts, password changes, and logout. Screenshots are saved under the ignored `test-results/` directory.
 
 The automated tests use a fake Supabase service to check authentication, account authorization, session revocation, CSRF protection, validation, and durable quote handling. They do not prove the hosted migration or DNS configuration. After deployment, verify both hostnames, owner login, member permissions, logout, disable/reset behavior, and persistence of a public quote submission.
+
+## Invoices
+
+Only the permanent **Mahee** owner can open **Invoices** or read/write its API. Other administrators and members cannot access invoice data. Migration `008_invoices.sql` creates the private ledger table through the existing production build migration command; for local development, apply pending migrations with `python scripts/migrate.py` against the intended database.
+
+Choose a month, add each dealer/market, and enter the amount, advance already paid, and optional remark. Calling Tree names are suggested, and manual names are also supported. Amounts are in USD; the next month's balance is calculated as amount minus advance, with negative balances shown as credits. Each month is independent: balances do not automatically create entries in the next month. Click **Save changes** to persist the ledger. A stale tab cannot overwrite a newer save.
+
+**Print / PDF** saves the invoice first, then opens an A4 portrait print layout. Select **Save as PDF** in the browser print dialog; turn off browser headers and footers for a clean document. Longer invoices continue across pages with repeated table headings. The printout includes all markets, remarks, advances, totals, and the balance month. Browser tests use fake data and save desktop/mobile screenshots and sample PDFs under `test-results/`.
 
 ## Account rest mode
 

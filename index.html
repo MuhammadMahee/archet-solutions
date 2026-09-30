@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="/assets/workspace.css">
 <link rel="stylesheet" href="/assets/quota.css">
 <link rel="stylesheet" href="/assets/rest.css">
+<link rel="stylesheet" href="/assets/invoices.css">
 </head>
 <body>
 <div id="boot" class="boot" role="status">Opening your workspace…</div>
@@ -48,6 +49,7 @@
       <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
       <button data-page="quota"><span class="nav-icon">◈</span>Quota Update</button>
       <button data-page="callingtree"><span class="nav-icon">▦</span>Calling Tree</button>
+      <button data-page="invoices" id="invoices-nav" hidden><span class="nav-icon">▧</span>Invoices</button>
       <button data-page="overview" class="active"><span class="nav-icon">◫</span>Overview</button>
       <button data-page="quotes"><span class="nav-icon">▤</span>Quote inbox</button>
       <button data-page="users" id="users-nav" hidden><span class="nav-icon">♧</span>Accounts</button>
@@ -58,6 +60,35 @@
   <main class="main">
     <header class="topbar"><div class="topbar-start"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Hide sidebar">☰</button><span>ARCHET &nbsp; / &nbsp; INTERNAL</span></div><span><i class="live-dot"></i>Team workspace</span></header>
     <div id="notice" class="notice" role="status" hidden></div>
+    <section id="page-invoices" hidden>
+      <div class="inv-hero">
+        <div><div class="inv-eyebrow">FINANCE / PRIVATE WORKSPACE</div><h1>Invoices<span>.</span></h1><p>Every market. Every advance. All accounted for.</p></div>
+        <div class="inv-access"><span aria-hidden="true">◆</span> Mahee only</div>
+      </div>
+      <div class="inv-toolbar">
+        <label for="invoice-month">Invoice month<input id="invoice-month" type="month" min="2000-01" max="2099-12" required></label>
+        <div class="inv-save-state"><span id="invoice-state" role="status">Loading invoice…</span><small id="invoice-updated">Your monthly market ledger</small></div>
+        <div class="inv-actions"><button id="invoice-reload" type="button">↻ Reload</button><button id="invoice-save" type="button">Save changes</button><button id="invoice-print-button" class="inv-primary" type="button">↗ Print / PDF</button></div>
+      </div>
+      <div id="invoice-message" class="inv-message" role="status" hidden></div>
+      <div class="inv-stats">
+        <div><span class="inv-stat-label">01 / TOTAL AMOUNT</span><strong id="invoice-total">$0.00</strong><small>Across <span id="invoice-market-count">0 markets</span></small></div>
+        <div><span class="inv-stat-label">02 / ADVANCE PAID</span><strong id="invoice-advance">$0.00</strong><small>Payments already received</small></div>
+        <div class="inv-balance-card"><span class="inv-stat-label">03 / NEXT MONTH BALANCE</span><strong id="invoice-balance">$0.00</strong><small id="invoice-due">Balance carried to next month</small></div>
+      </div>
+      <form id="invoice-form">
+        <fieldset id="invoice-fields" disabled>
+          <div class="inv-sheet">
+            <div class="inv-sheet-head"><div><span class="inv-eyebrow">THE MONTHLY BREAKDOWN</span><h2>Market ledger</h2><p id="invoice-period">Choose a month to get started.</p></div><span class="inv-currency">USD <span>•</span> US DOLLARS</span></div>
+            <div class="inv-table-wrap"><table class="inv-table"><caption class="inv-sr-only">Market invoice amounts, advances, balances, and remarks</caption><thead><tr><th>Dealer / Market</th><th>Amount</th><th>Advance paid</th><th>Next month balance</th><th>Remark</th><th><span class="inv-sr-only">Remove market</span></th></tr></thead><tbody id="invoice-rows"></tbody></table></div>
+            <div id="invoice-empty" class="inv-empty"><span aria-hidden="true">▧</span><h3>A fresh month. A clear picture.</h3><p>Add your first market to start tracking amounts and advances.</p></div>
+            <div class="inv-sheet-foot"><button id="invoice-add" type="button">＋ Add market</button><span>Balance = amount − advance paid</span></div>
+          </div>
+        </fieldset>
+      </form>
+      <datalist id="invoice-dealers"></datalist><datalist id="invoice-markets"></datalist>
+      <div class="inv-footnote"><span>Negative balances are credits. Each month is saved separately.</span><span>A4 ready · Choose “Save as PDF” in the print dialog.</span></div>
+    </section>
     <section id="page-sales" hidden>
       <div class="sales-hero"><div><div class="sales-eyebrow">STORE PERFORMANCE</div><h1>Sales Update</h1><p id="sales-period-label">Daily performance across your dealers</p></div><div class="sales-freshness"><span class="sales-status-dot"></span><div><small>OLDEST SOURCE REFRESH</small><strong id="sales-updated">Loading…</strong></div></div></div>
       <div class="sales-filters">
@@ -168,6 +199,7 @@ function signedOut(message = '') {
   if (window.salesDashboard) window.salesDashboard.clear();
   if (window.callingTree) window.callingTree.clear();
   if (window.quotaDashboard) window.quotaDashboard.clear();
+  window.invoiceDashboard?.clear();
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   currentUser = null; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
   ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
@@ -202,17 +234,19 @@ function enterWorkspace(user, freshLogin = false) {
   $('identity-name').textContent = user.display_name; $('identity-role').textContent = user.is_owner ? 'Workspace owner' : user.role === 'admin' ? 'Administrator' : 'Team member';
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
   $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice('');
-  const initial=location.hash.slice(1);showPage(['sales','quota','callingtree','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')?initial:'sales');
+  $('invoices-nav').hidden = !window.invoiceDashboard.allowed();
+  const initial=location.hash.slice(1);showPage(['sales','quota','callingtree','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')||(initial==='invoices'&&window.invoiceDashboard.allowed())?initial:'sales');
 }
 async function showPage(name) {
   if (!currentUser || currentUser.rest_mode) return;
   if (name === 'users' && currentUser?.role !== 'admin') return;
+  if (name === 'invoices' && !window.invoiceDashboard.allowed()) return;
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
   document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
   notice('');
-  try { if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
+  try { if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
   catch (error) { notice(error.message, true); }
 }
 function quoteTable(rows) {
@@ -282,6 +316,7 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
 <script src="/assets/quota.js"></script>
 <script src="/assets/workspace.js"></script>
 <script src="/assets/rest.js"></script>
+<script src="/assets/invoices.js"></script>
 <script>api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));</script>
 </body>
 </html>

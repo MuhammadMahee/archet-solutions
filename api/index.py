@@ -186,18 +186,21 @@ try:
     from api.sales import register_sales, connect as sales_connect
     from api.calling_tree import register_calling_tree
     from api.quota import register_quota
+    from api.invoices import register_invoices
 except ModuleNotFoundError:
     from sales import register_sales, connect as sales_connect
     from calling_tree import register_calling_tree
     from quota import register_quota
+    from invoices import register_invoices
 register_sales(app)
 register_calling_tree(app,lambda: sales_connect())
 register_quota(app)
+register_invoices(app)
 
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename not in ('sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png'):
+    if filename not in ('sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png', 'invoices.js', 'invoices.css'):
         return '', 404
     return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
 
