@@ -1,5 +1,6 @@
 """Private monthly invoice ledger for the permanent Mahee account."""
 import re
+from calendar import monthrange
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -32,7 +33,18 @@ def invoice_selector(key):
     return {'id': 'eq.' + valid_id(key)}
 
 
-def validate_rows(rows):
+def days_in_month(month):
+    year, number = map(int, month.split('-'))
+    return monthrange(year, number)[1]
+
+
+def potential_pay(row, month_days):
+    # Round the market's prorated pay once, to the nearest cent (half up).
+    numerator = row.get('store_count', 1) * row['amount_cents'] * row.get('days_worked', month_days)
+    return (2 * numerator + month_days) // (2 * month_days)
+
+
+def validate_rows(rows, month):
     if not isinstance(rows, list) or len(rows) > 100:
         raise PortalError('An invoice can contain up to 100 markets.')
     result, seen = [], set()
@@ -50,8 +62,12 @@ def validate_rows(rows):
         if type(count) is not int or not 1 <= count <= 10000:
             raise PortalError('Store count must be a whole number from 1 to 10,000.')
         cleaned['store_count'] = count
+        days = row.get('days_worked', days_in_month(month))
+        if type(days) is not int or not 0 <= days <= days_in_month(month):
+            raise PortalError(f'Days worked must be a whole number from 0 to {days_in_month(month)} for this month.')
+        cleaned['days_worked'] = days
         for field in ('amount_cents', 'advance_cents'):
-            value = row.get(field)
+            value = row.get(field, 0) if field == 'advance_cents' else row.get(field)
             if type(value) is not int or not 0 <= value <= 99999999999:
                 raise PortalError('Amounts must be nonnegative, with at most two decimal places and below 1 billion USD.')
             cleaned[field] = value
@@ -62,15 +78,19 @@ def validate_rows(rows):
 
 
 def invoice_view(record):
+    month_days = days_in_month(record['month'])
     rows = [{**row, 'store_count': row.get('store_count', 1),
-             'subtotal_cents': row.get('store_count', 1) * row['amount_cents'],
-             'balance_cents': row.get('store_count', 1) * row['amount_cents'] - row['advance_cents']}
+             'days_worked': row.get('days_worked', month_days),
+             'potential_pay_cents': potential_pay(row, month_days),
+             'subtotal_cents': potential_pay(row, month_days),
+             'balance_cents': potential_pay(row, month_days) - row.get('advance_cents', 0)}
             for row in record['rows']]
-    totals = {'amount_cents': sum(row['subtotal_cents'] for row in rows),
-              'advance_cents': sum(row['advance_cents'] for row in rows),
-              'balance_cents': sum(row['balance_cents'] for row in rows)}
+    advance = record.get('advance_cents', sum(row.get('advance_cents', 0) for row in rows))
+    potential = sum(row['potential_pay_cents'] for row in rows)
+    totals = {'amount_cents': potential, 'advance_cents': advance, 'balance_cents': potential - advance}
     year, month = map(int, record['month'].split('-'))
     return {**record, 'rows': rows, 'totals': totals, 'currency': 'USD',
+            'days_in_month': month_days, 'advance_cents': advance, 'remark': record.get('remark', ''),
             'balance_month': f'{year + (month == 12):04d}-{month % 12 + 1:02d}'}
 
 
@@ -112,13 +132,17 @@ def register_invoices(app):
         legacy = 'legacy_month' in selector
         month = validate_month(key if legacy else payload.get('month'))
         name = text_field(payload, 'name', 120) if not legacy or 'name' in payload else None
-        rows = validate_rows(payload.get('rows'))
+        rows = validate_rows(payload.get('rows'), month)
+        advance = payload.get('advance_cents', sum(row['advance_cents'] for row in rows))
+        if type(advance) is not int or not 0 <= advance <= 9999999999999:
+            raise PortalError('Invalid invoice advance. Enter a nonnegative amount with at most two decimal places.')
+        remark = text_field(payload, 'remark', 1000, required=False)
         revision = payload.get('revision')
         if revision is not None:
             if not isinstance(revision, str):
                 raise PortalError('Invalid invoice revision.')
             revision = valid_id(revision)
-        record = {'month': month, 'rows': rows, 'revision': str(uuid4()),
+        record = {'month': month, 'rows': rows, 'advance_cents': advance, 'remark': remark, 'revision': str(uuid4()),
                   'updated_at': datetime.now(timezone.utc).isoformat()}
         if name is not None:
             record['name'] = name
