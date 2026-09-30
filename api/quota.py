@@ -292,7 +292,7 @@ def report_data():
             'markets': markets, 'stores': stores, 'dealers': list(sales.COLORS), 'count': len(goals),
             'elapsed': elapsed, 'days': days, 'calling_tree_active': bool(roster),
             'incomplete': sum(r['incomplete'] for r in tables[0]['rows']),
-            'updated_at': min(times).isoformat() if times else None}
+            'updated_at': max(times).isoformat() if times else None}
 
 
 def growth_color(value):

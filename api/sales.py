@@ -404,7 +404,7 @@ def report_data(start, end):
             'coverage': {'complete': complete, 'expected': expected,
                          'retained': sum(i['retained_count'] for i in relevant),
                          'errors': sorted({SOURCES[i['source_id']] for i in relevant if i['status'] == 'error'})},
-            'updated_at': min(times).isoformat() if times else None}
+            'updated_at': max(times).isoformat() if times else None}
 
 
 def workbook_bytes(data):
@@ -454,7 +454,8 @@ def workbook_bytes(data):
     meta.append(['Completed source-days', data['coverage']['complete']])
     meta.append(['Expected source-days', data['coverage']['expected']])
     meta.append(['Retained source rows', data['coverage']['retained']])
-    meta.append(['Oldest successful refresh', data['updated_at'] or 'Not available'])
+    refreshed = datetime.fromisoformat(data['updated_at']).astimezone(CENTRAL).strftime('%b %d, %Y %I:%M %p %Z') if data['updated_at'] else 'Not available'
+    meta.append(['Latest refresh', refreshed])
     meta.append(['Calling Tree', data.get('calling_tree',{}).get('filename') or 'Not provided'])
     for row in meta:
         for cell in row:

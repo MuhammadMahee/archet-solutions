@@ -53,7 +53,7 @@
     el('empty').textContent = !data.calling_tree_active ? 'Upload a Calling Tree first, then upload monthly goals for its stores.' : data.uploads.length ? 'No goals match these filters and the active Calling Tree.' : 'No goals uploaded for this month. An administrator can upload a Goals workbook above.';
     el('upload-info').textContent = data.uploads.map(u=>`${u.dealer}: ${u.filename} (${u.row_count} stores)`).join(' \u00b7 ');
     el('coverage').textContent = data.incomplete ? `${data.incomplete} stores have incomplete or stale saved actuals. Rankings and projections are provisional.` : data.count ? (data.elapsed ? 'Saved sales through '+(data.month < data.today.slice(0,7) ? data.month+'-'+data.days : data.today)+'.' : 'This month has not started yet.') : 'Upload monthly goals to begin.';
-    if (data.updated_at) el('coverage').textContent += ' Oldest source refresh: '+new Date(data.updated_at).toLocaleString()+'.';
+    if (data.updated_at) el('coverage').textContent += ' Latest refresh: '+new Date(data.updated_at).toLocaleString('en-US',{timeZone:'America/Chicago',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'})+'.';
     el('excel').disabled = !data.count;
   }
   async function load() {

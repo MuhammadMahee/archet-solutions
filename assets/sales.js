@@ -40,7 +40,7 @@
     const label = result.start === result.end ? dateLabel(result.start) : dateLabel(result.start) + ' – ' + dateLabel(result.end);
     el('period-label').textContent = (el('dealer').value || 'All dealers') + ' / ' + label;
     el('range-badge').textContent = label; el('count').textContent = result.rows.length + ' STORES';
-    el('updated').textContent = result.updated_at ? new Date(result.updated_at).toLocaleString('en-US',{timeZone:'America/Chicago',month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}) : 'Awaiting first import';
+    el('updated').textContent = result.updated_at ? new Date(result.updated_at).toLocaleString('en-US',{timeZone:'America/Chicago',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}) : 'Awaiting first import';
     const c = result.coverage, incomplete = c.complete < c.expected;
     document.querySelector('.sales-freshness').classList.toggle('incomplete',incomplete || c.retained>0);
     el('coverage').textContent = incomplete ? `Import in progress or incomplete: ${c.complete} of ${c.expected} account-days loaded.` : `${c.complete} of ${c.expected} account-days loaded.`;
