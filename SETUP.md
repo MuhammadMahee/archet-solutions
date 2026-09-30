@@ -169,7 +169,7 @@ Enter an **Invoice name**, choose a month, add each dealer/market, and enter the
 
 Expand **Saved invoices** to search invoice names (case-insensitive), filter by month, or browse pages of 20 results ordered by last save. **Open** restores the name, month, and all market entries for viewing, editing, or printing. The URL retains the opened invoice ID so a reload reopens it after authentication. Names can be changed without creating a duplicate. Invoice names and references also appear on the A4 printout. Leaving a modified invoice for another invoice prompts before discarding changes.
 
-**Print / PDF** saves the invoice first, then opens an A4 portrait print layout. Select **Save as PDF** in the browser print dialog; turn off browser headers and footers for a clean document. Longer invoices continue across pages with repeated table headings. The printout includes all markets, remarks, advances, totals, and the balance month. Browser tests use fake data and save desktop/mobile screenshots and sample PDFs under `test-results/`.
+**Print / PDF** saves the invoice first, then opens an A4 portrait print layout. Select **Save as PDF** in the browser print dialog; turn off browser headers and footers for a clean document. Longer invoices continue across pages with repeated table headings. The printout includes all markets, remarks, advances, totals, and the invoice period. Browser tests use fake data and save desktop/mobile screenshots and sample PDFs under `test-results/`.
 
 ## Account rest mode
 

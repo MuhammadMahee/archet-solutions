@@ -72,7 +72,7 @@ def main():
                 page.evaluate("window.print = () => { window.printed = true; window.dispatchEvent(new Event('beforeprint')); }")
                 page.locator('#invoice-print-button').click()
                 page.wait_for_function('window.printed === true')
-                expect(page.locator('#invoice-print')).to_contain_text('October 2026')
+                expect(page.locator('#invoice-print')).not_to_contain_text('October 2026')
                 expect(page.locator('#invoice-print .inv-print-name')).to_have_text('September market services')
                 expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(1)).to_have_text('5')
                 expect(page.locator('#invoice-print tbody tr').first.locator('td').nth(2)).to_have_text('$2,500.05')
