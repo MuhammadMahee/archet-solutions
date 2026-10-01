@@ -3,7 +3,7 @@
   const el = id => document.getElementById('sales-' + id);
   const columns = [['dealer','Dealer'],['market','Market'],['store','Store'],['new_activation','New activation'],['upgrade','Upgrade'],['reactivation','Reactivation'],['bts','BTS'],['hsi','HSI'],['accessory','Accessory'],['apo','APO'],['total_boxes','Total boxes'],['qpay','QPay'],['qpay_conv','QPay conv']];
   const themes = {'': ['#095570','#f3f8fa','#083c51','#829aa5'],Connect:['#095570','#f3f8fa','#083c51','#829aa5'],California:['#a92d49','#faf0f2','#491c2c','#ecd8de'],SRH:['#a06118','#fbf5ea','#503718','#e8dcc9'],AMQ:['#365cad','#eef2fa','#20335b','#d6dfef'],ARM:['#176b56','#edf8f3','#104735','#cee7dc'],ARBF:['#7646a5','#f5effa','#3d2652','#e4d7ed']};
-  let data = null, revision = 0, syncing = false;
+  let data = null, revision = 0, syncing = false, syncSequence = 0;
   const localToday = () => new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const dateLabel = day => new Date(day + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   const text = (key,value) => value === null ? '—' : ['accessory','apo'].includes(key) ? '$' + Number(value || 0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : key === 'qpay_conv' ? Number(value || 0).toFixed(0) + '%' : String(value ?? '');
@@ -187,10 +187,19 @@
   el('period').onchange=()=>{el('custom').hidden=el('period').value!=='custom';if(el('period').value!=='custom')load();};
   el('apply').onclick=()=>{if(!el('start').value||!el('end').value){message('Choose both dates.');return;}load();};el('reload').onclick=load;
   el('sync').onclick=async()=>{
-    if(syncing)return;syncing=true;el('sync').disabled=true;el('sync').textContent='Syncing…';
-    try{const result=await api('sales/refresh','POST',{});await load();message(result.status==='busy'?'Another refresh is already running.':result.remaining?`${result.remaining} account-days remain. Scheduled workers will continue the import.`:'Sources are up to date.');}catch(error){message(error.message);}finally{syncing=false;el('sync').disabled=false;el('sync').textContent='Sync sources';}
+    if(syncing || currentUser?.role !== 'admin')return;
+    const id=++syncSequence, isCurrent=()=>id===syncSequence && !!currentUser;
+    syncing=true;el('sync').disabled=true;el('sync').textContent='Syncing…';
+    message("Downloading today's sales and retrying pending imports…");
+    try {
+      const result=await syncSalesSources(message,isCurrent);
+      if(!result || !isCurrent())return;
+      await load();
+      if(isCurrent())message(sourceSyncMessage(result));
+    } catch(error){if(isCurrent())message(error.message);}
+    finally{if(id===syncSequence){syncing=false;el('sync').disabled=false;el('sync').textContent='Sync sources';}}
   };
   for(const id of ['start','end']){el(id).value=localToday();el(id).max=localToday();}
-  window.salesDashboard={load,clear(){revision++;data=null;document.body.classList.remove('sales-mode');el('table').tBodies[0].replaceChildren();el('table').tFoot.replaceChildren();},snapshot};
+  window.salesDashboard={load,clear(){revision++;syncSequence++;syncing=false;el('sync').disabled=false;el('sync').textContent='Sync sources';data=null;document.body.classList.remove('sales-mode');el('table').tBodies[0].replaceChildren();el('table').tFoot.replaceChildren();},snapshot};
   setInterval(()=>{if(currentUser && page==='sales' && !syncing && !document.hidden)load();},60000);
 })();

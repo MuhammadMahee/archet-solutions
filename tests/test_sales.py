@@ -6,6 +6,7 @@ from contextlib import nullcontext
 from http.client import IncompleteRead
 from urllib.error import HTTPError, URLError
 import ssl
+import sqlite3
 
 import pytest
 from openpyxl import load_workbook
@@ -221,8 +222,40 @@ def test_member_can_read_but_only_admin_can_refresh(client, monkeypatch):
     assert write(client, 'sales/refresh', {}).status_code == 403
     login(client)
     assert write(client, 'sales/refresh', {}).status_code == 200
+    assert write(client, 'sales/refresh', {'continue': True}).status_code == 200
+    assert write(client, 'sales/refresh', {'continue': 'true'}).status_code == 400
     assert client.post('/api/internal/sales/refresh', json={}).status_code == 403
-    assert calls == [{'force_today': True}]
+    assert calls == [{'force_today': True}, {'force_today': False}]
+
+
+@pytest.mark.parametrize('force', [False, True])
+def test_manual_sync_retries_backlog_without_requeueing_completed_history(force):
+    statements = []
+    class Conn:
+        def transaction(self): return nullcontext()
+        def cursor(self): return nullcontext(self)
+        def executemany(self, *args): pass
+        def execute(self, sql, params): statements.append((sql, params))
+    sales.seed_jobs(Conn(), date(2026, 10, 1), force_today=force)
+    assert len(statements) == (2 if force else 1)
+    if not force:
+        return
+    # Execute the manual reset predicate against fresh, failed, historical and
+    # future jobs to verify exactly which dates become eligible immediately.
+    with sqlite3.connect(':memory:') as conn:
+        conn.execute("attach database ':memory:' as public")
+        conn.create_function('now', 0, lambda: '2026-10-01T12:00:00')
+        conn.execute('create table public.sales_imports (report_date text, status text, retry_at text)')
+        jobs = [('2026-10-01', 'complete'), ('2026-10-01', 'error'),
+                ('2026-09-30', 'error'), ('2026-09-01', 'pending'),
+                ('2026-09-29', 'complete'), ('2026-10-02', 'error')]
+        conn.executemany('insert into public.sales_imports values (?, ?, ?)',
+                         [(day, status, '2026-10-02T00:00:00') for day, status in jobs])
+        sql, params = statements[-1]
+        conn.execute(sql.replace('%s', '?'), tuple(day.isoformat() for day in params))
+        results = conn.execute('select status, retry_at from public.sales_imports order by rowid').fetchall()
+        assert results[:4] == [('pending', '2026-10-01T12:00:00')] * 4
+        assert results[4:] == [('complete', '2026-10-02T00:00:00'), ('error', '2026-10-02T00:00:00')]
 
 
 def test_scheduler_fails_closed_and_blocks_preview(client, monkeypatch):

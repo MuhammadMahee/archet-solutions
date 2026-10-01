@@ -84,13 +84,13 @@
     if (syncing || currentUser?.role !== 'admin') return;
     const id = ++syncSequence;
     syncing = true; el('sync').disabled = true; el('sync').textContent = 'Syncing\u2026';
-    message("Downloading today's sales for all dealers\u2026");
+    message("Downloading today's sales and retrying pending imports\u2026");
     try {
-      const result = await api('sales/refresh','POST',{});
-      if (id !== syncSequence || !currentUser) return;
+      const result = await syncSalesSources(message, () => id === syncSequence && !!currentUser);
+      if (!result || id !== syncSequence || !currentUser) return;
       const loaded = await load();
       if (id !== syncSequence || !currentUser || !loaded) return;
-      message(result.status === 'busy' ? 'Another source sync is already running. Reload after it finishes.' : result.remaining ? 'Quota results reloaded. Some source data is still incomplete; scheduled workers will retry.' : 'Sources synced. Quota results reloaded.');
+      message(result.status === 'busy' || result.remaining ? sourceSyncMessage(result) : 'Sources synced. Quota results reloaded.');
     } catch (error) { if (id === syncSequence && currentUser) message(error.message); }
     finally { if (id === syncSequence) { syncing = false; el('sync').disabled = false; el('sync').textContent = 'Sync sources'; } }
   };

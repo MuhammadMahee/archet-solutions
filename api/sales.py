@@ -205,7 +205,8 @@ def seed_jobs(conn, current, *, force_today=False):
                      (current, current - timedelta(days=1), datetime.combine(current, datetime.min.time(), CENTRAL)))
         if force_today:
             conn.execute('''update public.sales_imports set status='pending', retry_at=now()
-                where report_date=%s''', (current,))
+                where report_date=%s or (report_date<=%s and status<>'complete')''',
+                         (current, current))
 
 
 def save_rows(conn, source, report_date, rows):
@@ -487,7 +488,12 @@ def register_sales(app):
     @app.post('/api/internal/sales/refresh')
     @require_user(admin=True)
     def sales_refresh():
-        return jsonify(run_batch(force_today=True))
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict) or type(payload.get('continue', False)) is not bool:
+            raise PortalError('Invalid sync request.', 400)
+        # Only the first batch resets freshness and error delays. Continuing must
+        # not requeue successful downloads or repeatedly retry failing sources.
+        return jsonify(run_batch(force_today=not payload.get('continue', False)))
 
     @app.post('/api/jobs/sales')
     def scheduled_sales():

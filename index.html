@@ -322,6 +322,7 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
   await api('password','POST',{current_password:$('current-password').value,new_password:$('new-password').value}); signedOut('Password updated. Sign in with your new password.');
 }); };
 </script>
+<script src="/assets/source-sync.js"></script>
 <script src="/assets/sales.js"></script>
 <script src="/assets/calling-tree.js"></script>
 <script src="/assets/quota.js"></script>

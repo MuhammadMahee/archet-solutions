@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 import sys
 from threading import Thread
-from unittest.mock import patch
+from unittest.mock import patch, call
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
@@ -61,10 +61,18 @@ def main():
                 expect(page.locator('#quota-message')).to_have_text('Sources synced. Quota results reloaded.')
                 refresh.assert_called_once_with(force_today=True)
                 expect(page.locator('#quota-dealer-trigger')).to_contain_text('Connect')
+                refresh.reset_mock()
+                refresh.side_effect=[
+                    {'status':'partial','remaining':6,'due':6,'workers':[{'completed':24}]},
+                    {'status':'complete','remaining':0,'due':0}]
+                page.locator('#quota-sync').click()
+                expect(page.locator('#quota-message')).to_have_text('Sources synced. Quota results reloaded.')
+                assert refresh.call_args_list == [call(force_today=True),call(force_today=False)]
+                refresh.side_effect=None
                 refresh.return_value={'status':'busy'}
                 page.locator('#quota-sync').click();expect(page.locator('#quota-message')).to_contain_text('already running')
                 refresh.return_value={'status':'partial','remaining':2}
-                page.locator('#quota-sync').click();expect(page.locator('#quota-message')).to_contain_text('still incomplete')
+                page.locator('#quota-sync').click();expect(page.locator('#quota-message')).to_contain_text('Click Sync sources to retry now')
                 refresh.side_effect=portal.PortalError('Source sync unavailable.',503)
                 page.locator('#quota-sync').click();expect(page.locator('#quota-message')).to_have_text('Source sync unavailable.')
                 expect(page.locator('#quota-sync')).to_be_enabled()
@@ -91,6 +99,20 @@ def main():
                 expect(page.locator('#quota-count')).to_have_text('3 STORES')
                 assert page.evaluate("getComputedStyle(document.body).getPropertyValue('--sales-accent')")!=connect_color
                 page.locator('nav [data-page=sales]').click();expect(page.locator('#sales-count')).to_have_text('72 STORES')
+                refresh.reset_mock()
+                refresh.side_effect=[
+                    {'status':'partial','remaining':6,'due':6,'workers':[{'completed':24}]},
+                    {'status':'complete','remaining':0,'due':0}]
+                page.locator('#sales-sync').click()
+                expect(page.locator('#sales-message')).to_have_text('Sources are up to date.')
+                assert refresh.call_args_list == [call(force_today=True),call(force_today=False)]
+                refresh.side_effect=None
+                refresh.return_value={'status':'partial','remaining':6,'due':0,'workers':[{'completed':0,'error':'cookies_expired'}]}
+                refresh.reset_mock()
+                page.locator('#sales-sync').click()
+                expect(page.locator('#sales-message')).to_contain_text('cookies_expired')
+                expect(page.locator('#sales-sync')).to_be_enabled()
+                refresh.assert_called_once_with(force_today=True)
                 assert page.evaluate("getComputedStyle(document.body).getPropertyValue('--sales-accent')").strip()=='#095570'
                 page.locator('nav [data-page=quota]').click();expect(page.locator('#quota-count')).to_have_text('3 STORES')
                 assert page.evaluate("getComputedStyle(document.body).getPropertyValue('--sales-accent')").strip()=='#a92d49'
