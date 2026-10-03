@@ -24,8 +24,8 @@ except ModuleNotFoundError:
     from calling_tree import active_roster, source_catalog
     from portal import PortalError, body, require_user
 
-GOALS = ('voice_goal', 'bts_goal', 'hsi_goal', 'accessory_goal', 'mim_goal')
-ACCESSORY_TARGET_FIELDS = ('acc_goal', 'acc_remain', 'per_day', 'achieved')
+GOALS = ('voice_goal', 'bts_goal', 'hsi_goal', 'accessory_goal', 'mim_goal', 'upgrade_goal')
+ACCESSORY_TARGET_FIELDS = ('acc_remain', 'per_day', 'achieved')
 MAX_BYTES = 2 * 1024 * 1024
 ALIASES = {
     'market': ('market', 'market id'),
@@ -34,8 +34,9 @@ ALIASES = {
     'voice_goal': ('voice', 'voice goal', 'voice goals'),
     'bts_goal': ('bts', 'bts goal', 'bts goals'),
     'hsi_goal': ('hsi', 'hint', 'hsi hint', 'hsi goal', 'hsi goals'),
-    'accessory_goal': ('acc', 'acc goal', 'accessory', 'accessories', 'accessory goal'),
+    'accessory_goal': ('acc', 'acc goal', 'acc goals', 'accessory', 'accessories', 'accessory goal'),
     'mim_goal': ('mim', 'mim goal', 'mim goals'),
+    'upgrade_goal': ('upgrade', 'upgrades', 'upgrade goal', 'upgrade goals', 'upgsor'),
 }
 
 
@@ -95,7 +96,7 @@ def parse_workbook(data, roster, dealer):
         chosen = next((c for c in candidates if c[0].title.casefold() == 'goals'), candidates[0] if candidates else None)
         if not chosen:
             accessory = '' if dealer == 'ARBF' else ', Acc'
-            raise PortalError(f'Required columns: Market, Stores, Voice, BTS, HSI/HINT{accessory}. MIM and Store ID are optional.')
+            raise PortalError(f'Required columns: Market, Stores, Voice, BTS, HSI/HINT{accessory}. Upgrade, MIM and Store ID are optional.')
         sheet, header, mapping = chosen
         stores = [s for s in roster if s['dealer'] == dealer]
         if not stores:
@@ -109,9 +110,6 @@ def parse_workbook(data, roster, dealer):
         for number, (cells, cached_cells) in enumerate(zip(sheet.iter_rows(min_row=header + 1), values), header + 1):
             row = {}
             for key, col in mapping.items():
-                if dealer == 'ARBF' and key == 'accessory_goal':
-                    row[key] = None
-                    continue
                 cell = cells[col] if col is not None and col < len(cells) else None
                 value = cell.value if cell else None
                 if cell and cell.data_type == 'f':
@@ -154,9 +152,11 @@ def ratio(actual, goal):
     return actual / goal if goal else Decimal(0)
 
 
-def summary_values(row, elapsed, days, accessory_targets=True, target_actual=None):
+def summary_values(row, elapsed, days, accessory_targets=True, target_actual=None, target_goal=None):
     actual, quota = Decimal(str(row['actual'])), Decimal(str(row['quota']))
     acc, goal = Decimal(str(row['acc_actual'])), Decimal(str(row['acc_goal']))
+    if target_goal is not None:
+        goal = Decimal(str(target_goal))
     trend = acc * days / elapsed if elapsed else Decimal(0)
     growth = ratio(actual, quota)
     target_acc = acc if target_actual is None else Decimal(str(target_actual))
@@ -178,7 +178,7 @@ def columns(*items):
 LOCATION_COLUMNS = columns(('dealer', 'Dealer', 'text'), ('market', 'Market', 'text'), ('store', 'Store', 'text'))
 SUMMARY_COLUMNS = columns(('rank', 'Rank', 'number')) + LOCATION_COLUMNS + columns(
     ('quota', 'Quota', 'number'), ('actual', 'Actual', 'number'), ('growth', 'Growth %', 'percent'),
-    ('acc_goal', 'Acc Goal', 'money'), ('acc_actual', 'Acc Actual', 'money'), ('acc_remain', 'Acc Remain', 'money'),
+    ('acc_goal', 'ACC GOALS', 'money'), ('acc_actual', 'Acc Actual', 'money'), ('acc_remain', 'Acc Remain', 'money'),
     ('per_day', 'Per Day Goal', 'money'), ('trend', 'Acc Trend', 'money'),
     ('achieved', 'Achieved', 'percent'), ('overall', 'Overall Average', 'percent'))
 
@@ -189,21 +189,21 @@ def build_tables(goals, actuals, month, current):
     by_store = {(r['dealer'], r['store_id']): r for r in actuals}
     tables = []
     summary = []
-    metrics = {k: [] for k in ('voice', 'bts', 'hsi')}
+    metrics = {k: [] for k in ('voice', 'bts', 'hsi', 'upgrade')}
     for goal in goals:
         source = by_store.get((goal['dealer'], goal['store_id']), {})
         location = {k: goal[k] for k in ('dealer', 'market', 'store', 'store_id')}
         missing = elapsed > 0 and source.get('new_activation') is None
         incomplete = elapsed > 0 and (missing or source.get('incomplete', False) or source.get('stale', False))
-        values = {k: Decimal(str(source.get(k) or 0)) for k in ('new_activation', 'reactivation', 'bts', 'hsi', 'accessory')}
+        values = {k: Decimal(str(source.get(k) or 0)) for k in ('new_activation', 'reactivation', 'bts', 'hsi', 'accessory', 'upgrade')}
         values['voice'] = values['new_activation'] + values['reactivation'] - values['bts'] - values['hsi']
         for metric in metrics:
-            target = Decimal(str(goal[metric + '_goal']))
+            target = Decimal(str(goal.get(metric + '_goal', 0)))
             actual = values[metric]
             metrics[metric].append({**location, 'goal': target, 'actual': None if missing else actual,
                 'remaining': None if missing else target - actual, 'growth': None if missing else ratio(actual, target),
                 'incomplete': incomplete})
-        row = summary_values({**location, 'quota': sum(Decimal(str(goal[k])) for k in GOALS if k != 'accessory_goal'),
+        row = summary_values({**location, 'quota': sum(Decimal(str(goal[k])) for k in ('voice_goal', 'bts_goal', 'hsi_goal', 'mim_goal')),
             'actual': values['voice'] + values['bts'] + values['hsi'],
             'acc_goal': Decimal(str(goal['accessory_goal'])), 'acc_actual': values['accessory'],
             'incomplete': incomplete}, elapsed, days, accessory_targets=goal['dealer'] != 'ARBF')
@@ -211,7 +211,7 @@ def build_tables(goals, actuals, month, current):
             for key in ('actual', 'growth', 'acc_actual', 'acc_remain', 'per_day', 'trend', 'achieved', 'overall'):
                 row[key] = None
         summary.append(row)
-    for metric, title in (('voice', 'VOICE GOALS'), ('bts', 'BTS GOALS'), ('hsi', 'HSI/HINT GOALS')):
+    for metric, title in (('voice', 'VOICE GOALS'), ('bts', 'BTS GOALS'), ('hsi', 'HSI/HINT GOALS'), ('upgrade', 'UPGRADE GOALS')):
         rows = sorted(metrics[metric], key=lambda r: (r['dealer'], r['market'], r['growth'] is None, -(r['growth'] or 0), r['store']))
         total = {'store': 'TOTAL', 'goal': sum(r['goal'] for r in rows),
                  'actual': sum(r['actual'] or 0 for r in rows), 'incomplete': any(r['incomplete'] for r in rows)}
@@ -238,7 +238,8 @@ def build_tables(goals, actuals, month, current):
     total = summary_values({'store': 'TOTAL', **{k: sum(r[k] or 0 for r in summary)
         for k in ('quota', 'actual', 'acc_goal', 'acc_actual')},
         'incomplete': any(r['incomplete'] for r in summary)}, elapsed, days,
-        accessory_targets=bool(eligible), target_actual=sum(r['acc_actual'] or 0 for r in eligible))
+        accessory_targets=bool(eligible), target_actual=sum(r['acc_actual'] or 0 for r in eligible),
+        target_goal=sum(r['acc_goal'] or 0 for r in eligible))
     if summary and all(r['actual'] is None for r in summary):
         for key in ('actual', 'growth', 'acc_actual', 'acc_remain', 'per_day', 'trend', 'achieved', 'overall'):
             total[key] = None
@@ -313,7 +314,7 @@ def report_workbook(data):
     dealers = {r['dealer'] for r in data['tables'][0]['rows']}
     accent = sales.COLORS[next(iter(dealers))] if len(dealers) == 1 else sales.COLORS['Connect']
     for table in data['tables']:
-        sheet = book.create_sheet({'voice':'Voice Goals','bts':'BTS Goals','hsi':'HSI Goals','summary':'Achievement Summary'}[table['id']])
+        sheet = book.create_sheet({'voice':'Voice Goals','bts':'BTS Goals','hsi':'HSI Goals','upgrade':'Upgrade Goals','summary':'Achievement Summary'}[table['id']])
         cols = table['columns']
         sheet.append([table['title'] + ' | ' + data['month']])
         sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(cols))
@@ -369,14 +370,14 @@ def register_quota(app):
         if not roster:
             raise PortalError('Upload a Calling Tree for this dealer first.')
         book = Workbook(); sheet = book.active; sheet.title = 'Goals'
-        sheet.append(['Store ID', 'Market', 'Stores', 'Voice', 'BTS', 'HSI/HINT'] + ([] if dealer == 'ARBF' else ['Acc']) + ['MIM'])
+        sheet.append(['Store ID', 'Market', 'Stores', 'Voice', 'BTS', 'HSI/HINT', 'Acc', 'MIM', 'Upgrade'])
         for row in roster:
-            sheet.append([row['store_id'], row['market'], row['store'], 0, 0, 0] + ([] if dealer == 'ARBF' else [0]) + [0])
+            sheet.append([row['store_id'], row['market'], row['store'], 0, 0, 0, 0, 0, 0])
             for cell in sheet[sheet.max_row][:3]:
                 cell.data_type = 's'
         for cell in sheet[1]:
             cell.font = Font(bold=True, color='FFFFFF'); cell.fill = PatternFill('solid', fgColor=sales.COLORS[dealer][1:])
-        for col in 'ABCDEFGH':
+        for col in 'ABCDEFGHI':
             sheet.column_dimensions[col].width = 38 if col == 'C' else 18
         sheet.freeze_panes = 'D2'
         return excel_file(book, 'Quota-Goals-' + dealer + '.xlsx')
@@ -418,7 +419,7 @@ def register_quota(app):
                     (month, dealer, filename, len(records), g.portal_user['id']))
                 conn.execute('delete from public.quota_goals where goal_month=%s and dealer=%s', (month, dealer))
                 with conn.cursor() as cursor:
-                    cursor.executemany('''insert into public.quota_goals(goal_month,dealer,store_id,voice_goal,bts_goal,hsi_goal,accessory_goal,mim_goal)
-                        values(%s,%s,%s,%s,%s,%s,%s,%s)''', [(month, dealer, r['store_id'], *(r[k] for k in GOALS)) for r in records])
+                    cursor.executemany('''insert into public.quota_goals(goal_month,dealer,store_id,voice_goal,bts_goal,hsi_goal,accessory_goal,mim_goal,upgrade_goal)
+                        values(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', [(month, dealer, r['store_id'], *(r[k] for k in GOALS)) for r in records])
         return jsonify(rows=records, count=len(records), roster_version=version,
                        message=f'{len(records)} store goals {"saved" if apply else "validated"} for {dealer}, {month:%B %Y}.')

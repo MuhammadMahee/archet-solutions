@@ -29,7 +29,7 @@ def workbook(rows=None, headers=None):
 
 def fixture_goals():
     return [{**s, 'voice_goal': D(100), 'bts_goal': D(20), 'hsi_goal': D(10),
-             'accessory_goal': D(1000), 'mim_goal': D(5)} for s in roster() if s['dealer']=='Connect']
+             'accessory_goal': D(1000), 'mim_goal': D(5), 'upgrade_goal': D(20)} for s in roster() if s['dealer']=='Connect']
 
 
 def fixture_actuals():
@@ -79,14 +79,55 @@ def test_reference_voice_and_summary_formulas_and_weighted_totals():
     voice = tables[0]
     assert voice['rows'][0]['actual']==75  # 80 + 10 - 10 - 5, never includes 999 upgrades
     assert voice['total']['growth']==D(225)/400
-    row = next(r for r in tables[3]['rows'] if r['store_id']=='1')
+    row = next(r for r in tables[-1]['rows'] if r['store_id']=='1')
     assert row['quota']==135 and row['actual']==90
     assert row['growth']==D(90)/135
     assert row['acc_remain']==500 and row['per_day']==D(500)/15
     assert row['trend']==1000 and row['achieved']==1
     assert row['overall']==(D(90)/135+1)/2
-    assert [r['rank'] for r in tables[3]['rows']]==[1,1,3]
-    assert tables[3]['total']['growth']==D(270)/505
+    assert [r['rank'] for r in tables[-1]['rows']]==[1,1,3]
+    assert tables[-1]['total']['growth']==D(270)/505
+
+
+def test_upgrade_progress_and_export_use_saved_upgsor_without_changing_summary():
+    goals, actuals = fixture_goals(), fixture_actuals()
+    goals[1]['upgrade_goal'] = D(40)
+    actuals[0]['upgrade'] = 11
+    actuals[1]['upgrade'] = 12
+    actuals[2]['upgrade'] = 0
+    tables, elapsed, days = quota.build_tables(goals, actuals, date(2026,10,1), date(2026,10,2))
+    upgrades = next(t for t in tables if t['id']=='upgrade')
+    row = next(r for r in upgrades['rows'] if r['store_id']=='1')
+    assert row['goal']==20 and row['actual']==11 and row['remaining']==9
+    assert row['growth']==D(11)/20
+    assert upgrades['total']['goal']==80 and upgrades['total']['actual']==23
+    assert upgrades['total']['remaining']==57 and upgrades['total']['growth']==D(23)/80
+    assert all(r['quota']==135 and r['actual']==90 for r in tables[-1]['rows'])
+    book = quota.report_workbook({'tables':tables,'month':'2026-10','today':'2026-10-02',
+                                  'incomplete':0,'elapsed':elapsed,'days':days})
+    assert book['Upgrade Goals']['D4'].value==20
+    assert book['Upgrade Goals']['E4'].value==11
+    assert book['Upgrade Goals']['G4'].number_format=='0.00%;(0.00%)'
+    book.close()
+
+
+def test_upgrade_missing_sales_and_legacy_workbook_without_upgrade():
+    parsed = quota.parse_workbook(workbook(), roster(), 'Connect')
+    assert parsed[0]['upgrade_goal']==0
+    tables,_,_ = quota.build_tables(parsed, [], date(2026,10,1), date(2026,10,2))
+    upgrades = next(t for t in tables if t['id']=='upgrade')
+    assert upgrades['rows'][0]['actual'] is None and upgrades['rows'][0]['incomplete']
+    assert upgrades['total']['actual'] is None
+
+
+@pytest.mark.parametrize('value', [-1, 'NaN', '=10+1'])
+def test_upgrade_and_arbf_accessory_goals_validate_supplied_values(value):
+    stores = [{**roster()[0], 'dealer':'ARBF'}]
+    for acc, upgrade in [(value,11), (2950,value)]:
+        data = workbook([['RENO','STORE 1',27,5,3,acc,8,upgrade]],
+                        ['Market','Stores','Voice','BTS','HSI/HINT','Acc','MIM','Upgrade'])
+        with pytest.raises(PortalError):
+            quota.parse_workbook(data, stores, 'ARBF')
 
 
 def test_rank_resets_per_dealer_and_market():
@@ -94,7 +135,7 @@ def test_rank_resets_per_dealer_and_market():
     goals.extend([{**goals[0],'dealer':'California'},{**goals[0],'market':'DALLAS','store_id':'9'}])
     actuals.extend([{**actuals[0],'dealer':'California'},{**actuals[0],'store_id':'9'}])
     tables,_,_=quota.build_tables(goals,actuals,date(2026,9,1),date(2026,9,15))
-    assert all(r['rank']==1 for r in tables[3]['rows'])
+    assert all(r['rank']==1 for r in tables[-1]['rows'])
 
 
 def test_zero_goals_negative_voice_overachievement_and_month_boundaries():
@@ -104,8 +145,8 @@ def test_zero_goals_negative_voice_overachievement_and_month_boundaries():
     tables,_,_=quota.build_tables(goals,actuals,date(2026,9,1),date(2026,10,1))
     assert tables[0]['rows'][0]['actual']==-15
     assert tables[0]['rows'][0]['growth']==0
-    assert tables[3]['rows'][0]['per_day']==0
-    assert tables[3]['rows'][0]['trend']==500
+    assert tables[-1]['rows'][0]['per_day']==0
+    assert tables[-1]['rows'][0]['trend']==500
     future,elapsed,_=quota.build_tables(goals,[],date(2026,10,1),date(2026,9,30))
     assert elapsed==0 and future[0]['rows'][0]['actual']==0
     assert not future[0]['rows'][0]['incomplete']
@@ -120,18 +161,18 @@ def test_missing_sales_are_blank_and_partial_totals_are_flagged():
     tables,_,_=quota.build_tables(goals,actuals,date(2026,9,1),date(2026,9,15))
     assert sum(r['actual'] is None for r in tables[0]['rows'])==2
     assert tables[0]['total']['actual']==75 and tables[0]['total']['incomplete']
-    assert tables[3]['rows'][-1]['rank'] is None
+    assert tables[-1]['rows'][-1]['rank'] is None
     empty,_,_=quota.build_tables(goals,[],date(2026,9,1),date(2026,9,15))
-    assert empty[0]['total']['actual'] is None and empty[3]['total']['trend'] is None
+    assert empty[0]['total']['actual'] is None and empty[-1]['total']['trend'] is None
 
 
-def test_export_four_tables_number_formats_colors_and_formula_injection():
+def test_export_five_tables_number_formats_colors_and_formula_injection():
     goals=fixture_goals();goals[0]['store']='=DANGEROUS()'
     tables,elapsed,days=quota.build_tables(goals,fixture_actuals(),date(2026,9,1),date(2026,9,15))
     data={'tables':tables,'month':'2026-09','today':'2026-09-15','incomplete':0,'elapsed':elapsed,'days':days}
     book=quota.report_workbook(data); buffer=BytesIO();book.save(buffer);book.close()
     book=load_workbook(BytesIO(buffer.getvalue()))
-    assert len(book.worksheets)==4
+    assert len(book.worksheets)==5
     sheet=book['Voice Goals'];assert sheet['D4'].value==100
     assert sheet['C4'].value=='=DANGEROUS()' and sheet['C4'].data_type=='s'
     assert sheet['G4'].number_format=='0.00%;(0.00%)'
@@ -186,14 +227,15 @@ def test_upload_preview_then_apply_is_scoped_and_rechecks_roster(client,monkeypa
     assert write(client,'password',{'padding':'x'*40000}).status_code==413
 
 
-def test_arbf_accepts_no_acc_column_and_ignores_legacy_acc_values():
+def test_arbf_accepts_optional_acc_and_imports_supplied_acc_and_upgrades():
     stores=[{**roster()[0], 'dealer':'ARBF'}]
     data=workbook([['RENO','STORE 1',100,20,10]], ['Market','Stores','Voice','BTS','HSI/HINT'])
     assert quota.parse_workbook(data,stores,'ARBF')[0]['accessory_goal']==0
     with pytest.raises(PortalError, match='Acc'):
         quota.parse_workbook(data,roster(),'Connect')
-    legacy=workbook([['RENO','STORE 1',100,20,10,'=ignored()',5]])
-    assert quota.parse_workbook(legacy,stores,'ARBF')[0]['accessory_goal']==0
+    updated=workbook([['RENO','STORE 1',100,20,10,2950,5,11]], ['Market','Stores','Voice','BTS','HSI/HINT','Acc','MIM','Upgrade'])
+    parsed=quota.parse_workbook(updated,stores,'ARBF')[0]
+    assert parsed['accessory_goal']==2950 and parsed['upgrade_goal']==11
 
 
 def test_arbf_existing_goals_do_not_affect_scores_or_exports():
@@ -210,7 +252,8 @@ def test_arbf_existing_goals_do_not_affect_scores_or_exports():
     assert summary['total']['acc_actual']==1000999
     book=quota.report_workbook({'tables':tables,'month':'2026-09','today':'2026-09-15','incomplete':0,'elapsed':elapsed,'days':days})
     headers=[c.value for c in book['Achievement Summary'][3]]
-    assert 'Acc Goal' not in headers and 'Achieved' not in headers and 'Acc Actual' in headers
+    assert 'ACC GOALS' in headers and 'Achieved' not in headers and 'Acc Actual' in headers
+    assert summary['total']['acc_goal']==3000
     book.close()
 
 
@@ -219,21 +262,21 @@ def test_mixed_totals_exclude_arbf_from_accessory_targets_only():
     actuals=[fixture_actuals()[0],{**fixture_actuals()[0],'dealer':'ARBF','accessory':D(999999)}]
     tables,_,_=quota.build_tables(goals,actuals,date(2026,9,1),date(2026,9,15))
     summary=tables[-1];total=summary['total']
-    assert total['acc_goal']==1000 and total['acc_remain']==500
+    assert total['acc_goal']==2000 and total['acc_remain']==500
     assert total['achieved']==1 and total['per_day']==D(500)/15
     assert total['acc_actual']==1000499 and total['trend']==2000998
     assert total['growth']==D(180)/270
     arbf=next(r for r in summary['rows'] if r['dealer']=='ARBF')
-    assert arbf['acc_goal'] is None and arbf['overall']==arbf['growth']
+    assert arbf['acc_goal']==1000 and arbf['overall']==arbf['growth']
     assert any(c['key']=='acc_goal' for c in summary['columns'])
 
 
-def test_arbf_template_omits_accessory_goal(client,monkeypatch):
+def test_arbf_template_includes_accessory_and_upgrade_goals(client,monkeypatch):
     monkeypatch.setattr(quota.sales,'connect',lambda:UploadDB())
     monkeypatch.setattr(quota,'active_roster',lambda _:[{**roster()[0],'dealer':'ARBF'}])
     login(client)
     result=client.get('/api/internal/quota/template?dealer=ARBF')
     assert result.status_code==200
     book=load_workbook(BytesIO(result.data))
-    assert [c.value for c in book.active[1]]==['Store ID','Market','Stores','Voice','BTS','HSI/HINT','MIM']
+    assert [c.value for c in book.active[1]]==['Store ID','Market','Stores','Voice','BTS','HSI/HINT','Acc','MIM','Upgrade']
     book.close()

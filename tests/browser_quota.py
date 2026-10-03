@@ -53,8 +53,10 @@ def main():
                 page.goto(origin+'/internal#quota')
                 page.locator('#login-username').fill('Mahee');page.locator('#login-password').fill('TestPass123');page.locator('#login-form button[type=submit]').click()
                 expect(page.locator('#quota-count')).to_have_text('6 STORES')
-                assert page.locator('.quota-card').count()==4
+                assert page.locator('.quota-card').count()==5
                 expect(page.locator('#quota-card-voice tbody tr').first.locator('td').nth(4)).to_have_text('75')
+                expect(page.locator('#quota-card-upgrade tbody tr').first.locator('td').nth(3)).to_have_text('20')
+                expect(page.locator('#quota-card-upgrade tbody tr').first.locator('td').nth(4)).to_have_text('999')
                 page.locator('#quota-dealer-trigger').click();page.locator('#quota-dealer-menu [role=option]').filter(has_text='Connect').click()
                 expect(page.locator('#quota-count')).to_have_text('3 STORES')
                 page.locator('#quota-sync').click()
@@ -94,7 +96,7 @@ def main():
                 (ROOT/'test-results/quota-summary-snapshot.png').write_bytes(bytes(png))
                 with page.expect_download() as download:
                     page.locator('#quota-excel').click()
-                book=load_workbook(BytesIO(Path(download.value.path()).read_bytes()));assert len(book.worksheets)==4;assert book.worksheets[0].max_row==7;book.close()
+                book=load_workbook(BytesIO(Path(download.value.path()).read_bytes()));assert len(book.worksheets)==5;assert book.worksheets[0].max_row==7;book.close()
                 page.locator('#quota-dealer-trigger').click();page.locator('#quota-dealer-menu [role=option]').filter(has_text='California').click()
                 expect(page.locator('#quota-count')).to_have_text('3 STORES')
                 assert page.evaluate("getComputedStyle(document.body).getPropertyValue('--sales-accent')")!=connect_color
@@ -135,19 +137,20 @@ def main():
                 page.set_viewport_size({'width':390,'height':844});page.screenshot(path=str(ROOT/'test-results/quota-mobile.png'),full_page=True)
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 page.locator('#quota-dealer-trigger').click();page.locator('#quota-dealer-menu [role=option]').filter(has_text='ARBF').click()
-                expect(page.locator('#quota-card-summary th').filter(has_text='Acc Goal')).to_have_count(0)
+                expect(page.locator('#quota-card-summary th').filter(has_text='ACC GOALS')).to_have_count(1)
                 expect(page.locator('#quota-card-summary th').filter(has_text='Acc Actual')).to_have_count(1)
                 expect(page.locator('#quota-card-summary tbody tr').first.locator('td').last).to_have_text('66.67%')
                 page.locator('#quota-upload-dealer').select_option('ARBF')
                 no_acc=workbook([['RENO','STORE 1',100,20,10,5]],['Market','Stores','Voice','BTS','HSI/HINT','MIM'])
                 page.locator('#quota-file').set_input_files({'name':'ARBF.xlsx','mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','buffer':no_acc})
                 page.locator('#quota-preview-button').click();expect(page.locator('#quota-preview')).to_be_visible()
-                expect(page.locator('#quota-preview-table th').filter(has_text='Acc')).to_have_count(0)
+                expect(page.locator('#quota-preview-table th').filter(has_text='Acc')).to_have_count(1)
+                expect(page.locator('#quota-preview-table th').filter(has_text='Upgrade')).to_have_count(1)
                 page.locator('#quota-save').click();expect(page.locator('#quota-message')).to_contain_text('store goals saved for ARBF')
                 assert len(db.saved)==2
                 page.evaluate('window.drawn=[]');page.locator('[data-quota-copy=summary]').click()
                 expect(page.locator('#quota-message')).to_contain_text('snapshot copied')
-                assert 'ACC GOAL' not in [r['text'] for r in page.evaluate('window.drawn')]
+                assert 'ACC GOALS' in [r['text'] for r in page.evaluate('window.drawn')]
                 page.locator('#sidebar-toggle').click();page.locator('#logout').click();expect(page.locator('#login')).to_be_visible()
                 assert page.locator('.quota-card').count()==0
                 page.locator('#login-username').fill('Member');page.locator('#login-password').fill('TestPass123');page.locator('#login-form button[type=submit]').click()

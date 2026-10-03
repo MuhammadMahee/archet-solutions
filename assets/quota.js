@@ -128,7 +128,7 @@
       if (id!==previewSequence || !currentUser) return;
       pending = {...payload,roster_version:result.roster_version};
       el('preview-summary').textContent = result.message;
-      const previewColumns = [['market','Market'],['store','Store'],['voice_goal','Voice'],['bts_goal','BTS'],['hsi_goal','HSI/HINT'],...(payload.dealer==='ARBF'?[]:[['accessory_goal','Acc']]),['mim_goal','MIM']];
+      const previewColumns = [['market','Market'],['store','Store'],['voice_goal','Voice'],['bts_goal','BTS'],['hsi_goal','HSI/HINT'],['upgrade_goal','Upgrade'],['accessory_goal','Acc'],['mim_goal','MIM']];
       el('preview-table').tHead.innerHTML = '<tr>'+previewColumns.map(([,label])=>'<th>'+label+'</th>').join('')+'</tr>';
       el('preview-table').tBodies[0].innerHTML = result.rows.map(r=>'<tr>'+previewColumns.map(([k])=>'<td>'+escapeHTML(format(r[k],k==='market'||k==='store'?'text':k==='accessory_goal'?'money':'number'))+'</td>').join('')+'</tr>').join('');
       el('preview').hidden=false;message('Preview ready. Review the goals, then apply them.');
