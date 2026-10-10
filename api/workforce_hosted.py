@@ -8,7 +8,14 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from api.workforce_ai import AIError
 
 DEFAULT_MODEL = 'google/gemini-2.5-flash-lite'
-GROQ_MODEL = 'llama-3.3-70b-versatile'
+GROQ_MODEL = 'openai/gpt-oss-120b'
+
+
+def groq_model(model):
+    # Groq retired the previous app default for Free/Developer accounts.
+    # Resolve saved preferences, environment overrides and retrying old tasks.
+    model = model.strip()
+    return GROQ_MODEL if model == 'llama-3.3-70b-versatile' else model
 
 
 def provider():
@@ -24,7 +31,7 @@ def hosted():
 
 def default_model():
     if provider() == 'groq':
-        return os.getenv('GROQ_MODEL', GROQ_MODEL)
+        return groq_model(os.getenv('GROQ_MODEL', GROQ_MODEL))
     return os.getenv('WORKFORCE_MODEL', DEFAULT_MODEL) if hosted() else os.getenv('OLLAMA_MODEL', 'qwen3:1.7b')
 
 
@@ -127,33 +134,41 @@ class GroqAI(VercelAI):
 
     def models(self):
         configured = os.getenv('GROQ_MODELS', os.getenv('GROQ_MODEL', GROQ_MODEL))
-        return list(dict.fromkeys(m.strip() for m in configured.split(',') if m.strip()))
+        return list(dict.fromkeys(groq_model(m) for m in configured.split(',') if m.strip()))
 
     def local_model(self, model):
         if not self.key:
             raise AIError('Add your free Groq account API key as GROQ_API_KEY in Vercel Production, then redeploy.')
-        if model not in self.models():
+        if groq_model(model) not in self.models():
             raise AIError('This assignment uses a model unavailable on Groq. Send a new message or select a configured Groq model.')
 
+    def chat(self, model, system, content, schema=None):
+        return super().chat(groq_model(model), system, content, schema)
+
     def prepare_payload(self, payload, schema):
-        if schema:
-            # Llama supports JSON object mode. The executor independently checks
-            # every plan field, permitted action, date range and dealer value.
+        if payload['model'] in ('openai/gpt-oss-120b', 'openai/gpt-oss-20b'):
+            # Keep strict schema mode and bound reasoning within the token budget.
+            payload['reasoning_effort'] = 'low'
+            payload['include_reasoning'] = False
+            payload['max_completion_tokens'] = payload.pop('max_tokens')
+        elif schema:
+            # Other configured models use JSON object mode; plans are also
+            # independently validated by the executor before any tool runs.
             payload['response_format'] = {'type': 'json_object'}
             payload['messages'][0]['content'] += '\nReturn a JSON object matching this schema exactly: ' + json.dumps(schema)
         return payload
 
     def http_error(self, exc):
+        raw, code = '', None
+        try:
+            raw = exc.read(8192).decode('utf-8', errors='replace')
+            detail = json.loads(raw).get('error', {})
+            code = detail.get('code') if isinstance(detail, dict) else None
+        except (ValueError, TypeError, AttributeError, OSError):
+            pass
         if exc.code == 401:
             raise AIError('Groq rejected GROQ_API_KEY (HTTP 401). Check that Vercel Production contains a valid Groq API key, then redeploy if it changed.') from None
         if exc.code == 403:
-            raw = ''
-            try:
-                raw = exc.read(8192).decode('utf-8', errors='replace')
-                detail = json.loads(raw).get('error', {})
-                code = detail.get('code') if isinstance(detail, dict) else None
-            except (ValueError, AttributeError, OSError):
-                code = None
             if code in ('model_permission_blocked_org', 'model_permission_blocked_project'):
                 raise AIError('Groq has blocked this model (HTTP 403). Enable the selected model in Groq organization/project model permissions, then retry.') from None
             if '1010' in raw:
@@ -163,4 +178,14 @@ class GroqAI(VercelAI):
             raise AIError('Groq free-tier usage limit reached. Wait for your quota to reset, then retry. No fallback provider was used.') from None
         if exc.code == 402:
             raise AIError('Groq account access needs review. Use a Free-plan account; this app does not purchase credits or upgrade your plan.') from None
-        raise AIError('Groq could not process this assignment. Check the model and request limits, then retry.') from None
+        if code == 'model_decommissioned':
+            raise AIError(f'Groq retired the selected model (HTTP {exc.code}). Select a current Groq model and send a new assignment.') from None
+        if code == 'model_not_found' or exc.code == 404:
+            raise AIError(f'Groq could not find or grant access to this model (HTTP {exc.code}). Check GROQ_MODEL and model permissions.') from None
+        if code == 'json_validate_failed':
+            raise AIError(f'Groq could not generate a valid assignment plan (HTTP {exc.code}). Retry with a shorter request.') from None
+        if code == 'context_length_exceeded' or exc.code == 413:
+            raise AIError(f'This assignment exceeds Groq request limits (HTTP {exc.code}). Send a shorter request or request fewer days of sales.') from None
+        if exc.code >= 500:
+            raise AIError(f'Groq is temporarily unavailable (HTTP {exc.code}). Retry later.') from None
+        raise AIError(f'Groq rejected the assignment request (HTTP {exc.code}). Check the configured model and request format.') from None

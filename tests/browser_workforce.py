@@ -51,7 +51,7 @@ def main():
             stack.enter_context(patch.object(workforce, 'get_store', lambda: queue))
             class HostedModel(Model):
                 def models(self):
-                    return ['llama-3.3-70b-versatile' if args.groq else 'google/gemini-2.5-flash-lite']
+                    return ['openai/gpt-oss-120b' if args.groq else 'google/gemini-2.5-flash-lite']
             stack.enter_context(patch.object(workforce, 'ai_client', HostedModel))
         if not args.live_ollama:
             stack.enter_context(patch.object(ai.Ollama, 'models', lambda self: ['qwen3:1.7b']))

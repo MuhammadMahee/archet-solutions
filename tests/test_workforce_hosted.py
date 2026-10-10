@@ -198,12 +198,14 @@ def test_groq_calls_only_groq_with_json_plan_and_own_key(monkeypatch):
     assert req.get_header('User-agent') == 'ArchetWorkforce/1.0'
     assert req.get_header('Accept') == 'application/json'
     payload = json.loads(req.data)
-    assert payload['response_format'] == {'type': 'json_object'}
-    assert json.dumps(ai.PLAN_SCHEMA) in payload['messages'][0]['content']
+    assert payload['response_format']['json_schema']['schema'] == ai.PLAN_SCHEMA
+    assert payload['response_format']['json_schema']['strict'] is True
+    assert payload['reasoning_effort'] == 'low' and payload['include_reasoning'] is False
+    assert payload['max_completion_tokens'] == 1200 and 'max_tokens' not in payload
     assert 'must-not-use' not in req.data.decode()
 
 
-@pytest.mark.parametrize('code', [401, 403, 429, 500])
+@pytest.mark.parametrize('code', [400, 401, 403, 404, 413, 422, 429, 500])
 def test_groq_errors_never_fall_back_or_expose_secrets(monkeypatch, code):
     monkeypatch.setenv('GROQ_API_KEY', 'groq-test')
     calls = []
@@ -242,6 +244,59 @@ def test_groq_access_errors_distinguish_key_model_and_network(monkeypatch, code,
         hosted.GroqAI().chat(hosted.GROQ_MODEL, '', '')
     assert expected in str(error.value)
     assert 'PRIVATE' not in str(error.value)
+
+
+@pytest.mark.parametrize('status,code,expected', [
+    (400, 'model_decommissioned', 'retired the selected model'),
+    (404, 'model_not_found', 'could not find or grant access'),
+    (400, 'json_validate_failed', 'valid assignment plan'),
+    (400, 'context_length_exceeded', 'exceeds Groq request limits'),
+    (413, None, 'exceeds Groq request limits'),
+    (503, None, 'temporarily unavailable'),
+    (400, 'PRIVATE', 'request format'),
+])
+def test_groq_request_errors_are_specific_without_raw_content(status, code, expected):
+    body = {'error': {'code': code, 'message': 'PRIVATE', 'failed_generation': 'PRIVATE'}}
+    exc = HTTPError('https://example.com', status, 'PRIVATE', {}, BytesIO(json.dumps(body).encode()))
+    with pytest.raises(ai.AIError) as error:
+        hosted.GroqAI().http_error(exc)
+    assert expected in str(error.value) and f'HTTP {status}' in str(error.value)
+    assert 'PRIVATE' not in str(error.value)
+
+
+def test_groq_retired_model_configuration_and_old_task_use_replacement(monkeypatch):
+    monkeypatch.setenv('WORKFORCE_AI_PROVIDER', 'groq')
+    monkeypatch.setenv('GROQ_API_KEY', 'groq-test')
+    monkeypatch.setenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+    monkeypatch.setenv('GROQ_MODELS', 'llama-3.3-70b-versatile,openai/gpt-oss-120b')
+    calls = []
+    def request(req, **kwargs):
+        calls.append(json.loads(req.data))
+        return BytesIO(b'{"choices":[{"finish_reason":"stop","message":{"content":"Hello"}}]}')
+    monkeypatch.setattr(hosted, 'build_opener', lambda *_: SimpleNamespace(open=request))
+    client = hosted.GroqAI()
+    assert hosted.default_model() == hosted.GROQ_MODEL
+    assert client.models() == [hosted.GROQ_MODEL]
+    client.local_model('llama-3.3-70b-versatile')
+    assert client.chat('llama-3.3-70b-versatile', 'system', 'Hello') == 'Hello'
+    assert calls[0]['model'] == hosted.GROQ_MODEL
+    monkeypatch.setenv('GROQ_MODELS', 'another-configured-model')
+    with pytest.raises(ai.AIError, match='unavailable on Groq'):
+        client.chat('llama-3.3-70b-versatile', 'system', 'Hello')
+    assert len(calls) == 1
+
+
+def test_saved_retired_groq_preference_resolves_for_status_and_new_tasks(client, hosted_queue, monkeypatch):
+    queue, model = hosted_queue
+    monkeypatch.setenv('WORKFORCE_AI_PROVIDER', 'groq')
+    queue.set_model('llama-3.3-70b-versatile', 'admin', 'model:groq')
+    model.models = lambda: [hosted.GROQ_MODEL]
+    assert client.get('/api/internal/workforce/status').json['model'] == hosted.GROQ_MODEL
+    cid = create(client)
+    result = write(client, f'workforce/conversations/{cid}/messages', {'content': 'Hello', 'request_id': str(uuid4())})
+    with queue.connection() as conn:
+        task = conn.execute('SELECT model FROM tasks WHERE id=?', (result.json['task_id'],)).fetchone()
+    assert task['model'] == hosted.GROQ_MODEL
 
 
 def test_switch_to_groq_keeps_existing_chats_and_uses_separate_model_setting(client, hosted_queue, monkeypatch):

@@ -13,7 +13,7 @@ from api import portal
 from api.portal import PortalError, require_user, body, text_field, valid_id
 from api.workforce_ai import AIError, EMPLOYEES, Ollama, execute
 from api.workforce_store import Store
-from api.workforce_hosted import VercelAI, GroqAI, hosted, default_model, provider, model_setting
+from api.workforce_hosted import VercelAI, GroqAI, hosted, default_model, provider, model_setting, groq_model
 from api.workforce_postgres import PostgresStore
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +38,11 @@ def ai_client():
     if provider() == 'groq':
         return GroqAI()
     return VercelAI() if hosted() else Ollama()
+
+
+def selected_model(store):
+    model = store.model(default_model(), model_setting())
+    return groq_model(model) if provider() == 'groq' else model
 
 
 def run_assignment(store, task_id, user):
@@ -71,7 +76,7 @@ def register_workforce(app):
         store = get_store()
         error = None
         client = ai_client()
-        model = store.model(default_model(), model_setting())
+        model = selected_model(store)
         try:
             models = client.models()
             if hosted():
@@ -151,7 +156,7 @@ def register_workforce(app):
             raise PortalError('Invalid AI assignment preference.')
         portal.rate_limit('workforce-message', g.portal_user['id'], 60, 60)
         result = store.enqueue(valid_id(chat), g.portal_user, content, request_id,
-                               store.model(default_model(), model_setting()), invoke)
+                               selected_model(store), invoke)
         if result['task_id']:
             run_assignment(store, result['task_id'], g.portal_user)
         return jsonify(result), 201

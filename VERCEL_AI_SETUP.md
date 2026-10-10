@@ -14,10 +14,17 @@ WORKFORCE_AI_PROVIDER=groq
 GROQ_API_KEY=your_groq_key
 ```
 
-The app chooses `llama-3.3-70b-versatile` by default; `GROQ_MODEL` and `GROQ_MODELS`
+The app chooses `openai/gpt-oss-120b` on Groq by default; `GROQ_MODEL` and `GROQ_MODELS`
 can override the default/allowlist if needed. Existing `WORKFORCE_MODEL` and
 `AI_GATEWAY_API_KEY` values are ignored in Groq mode. Model preferences are kept
 separately per provider, so an old Gateway model selection does not break Groq.
+
+Groq [retired the former Llama default](https://console.groq.com/docs/deprecations)
+for Free/Developer accounts on August 16, 2026. The app translates the old
+`llama-3.3-70b-versatile` value to `openai/gpt-oss-120b`, including saved settings,
+environment overrides and retried assignments. Requests still go directly to
+Groq using the same key. GPT-OSS plans use strict JSON schema output with low
+reasoning effort and a 1,200-token completion limit.
 
 Your portal stays on Vercel, chats stay in Supabase, and model requests go directly
 to Groq. No Vercel AI Gateway billing verification is used. Send a **new message**
