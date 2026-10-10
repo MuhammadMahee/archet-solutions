@@ -28,7 +28,9 @@ class NoRedirect(HTTPRedirectHandler):
 
 class VercelAI:
     def __init__(self):
-        self.key = os.getenv('AI_GATEWAY_API_KEY') or os.getenv('VERCEL_OIDC_TOKEN')
+        api_key = os.getenv('AI_GATEWAY_API_KEY', '').strip()
+        self.key = api_key or os.getenv('VERCEL_OIDC_TOKEN', '').strip()
+        self.auth_method = 'API key' if api_key else 'automatic Vercel authentication'
         self.deadline = time.monotonic() + 180
 
     def models(self):
@@ -69,8 +71,21 @@ class VercelAI:
                     raise AIError('The model returned an incomplete answer. Retry with a shorter request.')
                 return answer.strip()
         except HTTPError as exc:
-            if exc.code in (401, 403):
-                raise AIError('AI Gateway authentication failed. Check its Vercel configuration.') from None
+            if exc.code == 401:
+                if self.auth_method == 'API key':
+                    raise AIError('AI Gateway rejected AI_GATEWAY_API_KEY (HTTP 401). Replace it with an AI Gateway key in Vercel Production, then redeploy. A saved API key overrides automatic authentication.') from None
+                raise AIError('AI Gateway rejected automatic Vercel authentication (HTTP 401). Add AI_GATEWAY_API_KEY to Vercel Production and redeploy, or check the project OIDC settings.') from None
+            if exc.code == 403:
+                # Classify known setup errors without exposing arbitrary upstream
+                # text, credentials, request identifiers or account details.
+                try:
+                    detail = json.loads(exc.read(8192)).get('error', {})
+                    message = (detail.get('message', '') if isinstance(detail, dict) else '').lower()
+                except (ValueError, TypeError, AttributeError, OSError):
+                    message = ''
+                if 'credit card' in message or 'payment method' in message:
+                    raise AIError('AI Gateway requires billing verification (HTTP 403). Review the payment-method requirement in your Vercel AI Gateway dashboard, then retry.') from None
+                raise AIError('AI Gateway denied access (HTTP 403). Check AI Gateway access, key permissions, and billing verification for the Vercel team that owns this project.') from None
             if exc.code in (402, 429):
                 raise AIError('AI Gateway credits or rate limit reached. Check usage in Vercel before retrying.') from None
             raise AIError('AI Gateway could not process the assignment. Check the configured model and retry.') from None

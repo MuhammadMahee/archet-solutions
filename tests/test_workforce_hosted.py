@@ -155,6 +155,32 @@ def test_gateway_timeout_and_execution_budget(monkeypatch):
         client.chat(hosted.DEFAULT_MODEL, '', '')
 
 
+@pytest.mark.parametrize('key,code,body,expected', [
+    ('test-key', 401, {}, 'rejected AI_GATEWAY_API_KEY'),
+    ('', 401, {}, 'rejected automatic Vercel authentication'),
+    ('test-key', 403, {'error': {'message': 'A valid credit card is required. PRIVATE'}}, 'requires billing verification'),
+    ('test-key', 403, {'error': {'message': 'access_denied PRIVATE'}}, 'denied access'),
+    ('test-key', 403, {'error': {'message': None}}, 'denied access'),
+])
+def test_actionable_authentication_errors(monkeypatch, key, code, body, expected):
+    monkeypatch.setenv('AI_GATEWAY_API_KEY', key)
+    monkeypatch.setenv('VERCEL_OIDC_TOKEN', 'test-oidc')
+    def request(*args, **kwargs):
+        raise HTTPError('https://example.com', code, 'PRIVATE', {}, BytesIO(json.dumps(body).encode()))
+    monkeypatch.setattr(hosted, 'build_opener', lambda *_: SimpleNamespace(open=request))
+    with pytest.raises(ai.AIError) as error:
+        hosted.VercelAI().chat(hosted.DEFAULT_MODEL, '', '')
+    assert expected in str(error.value) and 'PRIVATE' not in str(error.value)
+
+
+def test_key_whitespace_is_removed_and_blank_key_uses_oidc(monkeypatch):
+    monkeypatch.setenv('AI_GATEWAY_API_KEY', '  test-key\r\n')
+    monkeypatch.setenv('VERCEL_OIDC_TOKEN', 'test-oidc')
+    assert hosted.VercelAI().key == 'test-key'
+    monkeypatch.setenv('AI_GATEWAY_API_KEY', '  ')
+    assert hosted.VercelAI().key == 'test-oidc'
+
+
 def test_postgres_adapter_preserves_values_and_transaction(monkeypatch):
     from api import workforce_postgres as postgres
     calls = []
