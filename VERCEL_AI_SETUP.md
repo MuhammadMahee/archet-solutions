@@ -271,3 +271,36 @@ References: [Vercel Python AI Gateway](https://vercel.com/docs/ai-gateway/sdks-a
 [AI Gateway pricing](https://vercel.com/docs/ai-gateway/pricing),
 [Flask on Vercel](https://vercel.com/docs/frameworks/backend/flask),
 [Gemini Flash Lite](https://vercel.com/ai-gateway/models/gemini-2.5-flash-lite).
+
+## Persistent AI memory
+
+Migration 016 stores memory in private Supabase tables independently of chat history.
+No additional service, paid plan or environment variable is needed.
+
+Manager can extract up to three short durable notes in its existing planning call,
+using verbatim evidence from the current request. It does not import old chats or
+save entire transcripts, attachments or disappearing messages. Specialists can read
+eligible notes; Manager handles automatic saving. Explicit requests such as
+"Remember that I prefer concise Dallas updates" receive a server-confirmed result.
+Automatic memory defaults on and can be switched off under **Memory**.
+
+Personal notes belong to their author. They are recalled only in chats whose human
+members are all within the note's original audience, including new private AI chats.
+Manual personal notes default to the author alone. An administrator can explicitly
+publish a note as **Company**, making it available to all employees. Other admins
+cannot inspect another employee's personal notes. The Memory panel supports review,
+search, editing and forgetting notes, with server-side authorization.
+
+Clearing or leaving a chat does not erase its saved notes. Forgetting removes the
+note from future retrieval, without rewriting existing messages. In-flight automatic
+saves honor opt-out/edit/forget revisions; replies recheck memory availability and
+audience permissions. Recall includes at most 30 relevant/recent notes and 6,000
+characters, so it is useful background rather than unlimited or perfect recollection.
+Current user corrections take precedence over remembered facts.
+
+Verification:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_workforce_memory.py -q
+.\.venv\Scripts\python.exe tests/browser_workforce_memory.py
+```

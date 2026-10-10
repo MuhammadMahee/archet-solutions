@@ -70,6 +70,7 @@ def main():
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/013_workforce_agents_mentions.sql').read_text())
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/014_workforce_images.sql').read_text())
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/015_workforce_chat_controls.sql').read_text())
+        page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/016_workforce_memory.sql').read_text(encoding='utf-8-sig'))
         store = PgStore(page)
         user = {'id': str(uuid4()), 'display_name': 'Sample employee', 'session_version': str(uuid4())}
         other = str(uuid4())
@@ -153,6 +154,15 @@ def main():
         store.group_action(cid,user,'clear',{})
         assert store.snapshot(cid,user['id'])['messages']==[]
         assert store.snapshot(cid,other)['messages']
+        memory=store.save_memory(user,{'topic':'Reporting style','content':'Use concise updates.','scope':'company'})
+        assert store.memory_list(user)['memories'][0]['content']=='Use concise updates.'
+        personal=store.create_chat('Memory test',user['id'],[])
+        request=store.enqueue(personal,user,'Remember that I prefer Dallas.',str(uuid4()),'sample/model')
+        memory_task=store.claim('worker',request['task_id'])
+        assert store.memory_context(memory_task,user)['notes'][0]['scope']=='company'
+        assert store.remember_request(memory_task,user,[{'topic':'Market','evidence':'I prefer Dallas.'}],1)==1
+        store.forget_memory(user,memory)
+        assert len(store.memory_list(user)['memories'])==1
         denied = page.evaluate('''async () => {
             await db.exec('SET ROLE anon');
             try { await db.query('SELECT * FROM archet_workforce.messages'); return false; }

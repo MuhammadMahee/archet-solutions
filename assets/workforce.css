@@ -239,3 +239,21 @@
 }
 @media(hover:none) { .wf-chat-options { opacity:1; } .wf-message-meta button { opacity:.65; } }
 @media(prefers-reduced-motion:reduce) { .wf-log { scroll-behavior:auto; } .wf-message-meta button { transition:none; } }
+/* Durable AI memory is separate from chat history. */
+.wf-memory-panel { width:min(640px,calc(100% - 24px)); max-height:90dvh; overflow:auto; }
+.wf-memory-toggle { display:flex; align-items:center; gap:10px; padding:13px; border-radius:10px; background:#22382e; color:#d2e6d9; }
+.wf-memory-toggle input { width:16px; height:16px; flex-shrink:0; }
+.wf-memory-help { font-size:12px!important; margin:12px 0 18px; }
+.wf-memory-tools { display:flex; align-items:center; gap:10px; margin-bottom:17px; }
+.wf-memory-tools input { flex:1; min-width:0; font-size:13px; }
+.wf-memory-tools button { flex-shrink:0; font-size:12px; }
+.wf-memory-note { padding:17px 0; border-top:1px solid #ffffff14; }
+.wf-memory-note-head { display:flex; gap:12px; justify-content:space-between; align-items:center; }
+.wf-memory-note-head strong { font-size:14px; overflow-wrap:anywhere; }
+.wf-memory-note-head span { padding:3px 7px; border-radius:5px; background:#2b4438; font-size:10px; color:#9ed4b8; }
+.wf-memory-note p { white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0; color:#cfddd4; }
+.wf-memory-note small { font-size:11px; color:#879f8f; }
+.wf-memory-note-actions { display:flex; gap:8px; margin-top:10px; }
+.wf-memory-note-actions button { padding:5px 10px; font-size:11px; background:transparent; }
+.wf-control-dialog form>label { margin-bottom:14px; }
+@media(max-width:720px) { .wf-hero { flex-wrap:wrap; } .wf-hero-actions { flex-wrap:wrap; } .wf-memory-panel { padding:20px; } }

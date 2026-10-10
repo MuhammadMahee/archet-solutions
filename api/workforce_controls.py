@@ -10,6 +10,34 @@ from api.workforce_controls_store import visible_sql, visible_params
 
 
 def register_controls(app, get_store):
+    @app.get('/api/internal/workforce/memory')
+    @require_user()
+    def memory_list():
+        return jsonify(get_store().memory_list(g.portal_user))
+
+    @app.post('/api/internal/workforce/memory')
+    @require_user()
+    def memory_add():
+        portal.rate_limit('workforce-memory',g.portal_user['id'],60,60)
+        return jsonify(id=get_store().save_memory(g.portal_user,body())),201
+
+    @app.patch('/api/internal/workforce/memory/settings')
+    @require_user()
+    def memory_settings():
+        get_store().memory_toggle(g.portal_user,body().get('enabled'))
+        return jsonify(ok=True)
+
+    @app.patch('/api/internal/workforce/memory/<mid>')
+    @require_user()
+    def memory_edit(mid):
+        return jsonify(id=get_store().save_memory(g.portal_user,body(),valid_id(mid)))
+
+    @app.delete('/api/internal/workforce/memory/<mid>')
+    @require_user()
+    def memory_forget(mid):
+        get_store().forget_memory(g.portal_user,valid_id(mid))
+        return jsonify(ok=True)
+
     @app.post('/api/internal/workforce/direct')
     @require_user()
     def direct():

@@ -11,6 +11,7 @@ from api.portal import PortalError
 from api.workforce_agents import AGENTS, DEFAULT_IDS
 from api.workforce_controls_store import ControlsStore, PREF_DEFAULTS, visible_sql, visible_params
 from api.workforce_controls_schema import SCHEMA as CONTROLS_SCHEMA
+from api.workforce_memory import MemoryStore, SCHEMA as MEMORY_SCHEMA
 
 
 def now():
@@ -59,14 +60,14 @@ PRAGMA user_version=1;
 """
 
 
-class Store(ControlsStore):
+class Store(ControlsStore, MemoryStore):
     lease_seconds = 45
     def __init__(self, path):
         self.path = str(Path(path).resolve())
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as conn:
             conn.execute('PRAGMA journal_mode=WAL')
-            conn.executescript(SCHEMA + CONTROLS_SCHEMA)
+            conn.executescript(SCHEMA + CONTROLS_SCHEMA + MEMORY_SCHEMA)
 
     @contextmanager
     def connection(self, write=False):
