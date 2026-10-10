@@ -7,6 +7,7 @@ import sys
 from tempfile import TemporaryDirectory
 from threading import Event, Thread
 from unittest.mock import patch
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -151,6 +152,20 @@ def main():
                 expect(member.locator('#wf-chats .wf-chat')).to_have_count(1)
                 member.locator('#wf-chats .wf-chat').click()
                 expect(member.locator('.wf-message')).to_have_count(5)
+                if args.hosted:
+                    user = fake.tables['portal_users'][0]
+                    cid = queue.list_chats(user['id'])[0]['id']
+                    queue.enqueue(cid, user, 'Sample failed assignment', str(uuid4()), 'sample/model')
+                    queue.fail(queue.claim('sample-failure'), 'Sample gateway setup error')
+                    expect(page.get_by_role('button', name='Dismiss failed assignment')).to_be_visible()
+                    page.screenshot(path=str(artifacts / 'failed-card-mobile.png'), full_page=True)
+                    page.get_by_role('button', name='Dismiss failed assignment').click()
+                    expect(page.locator('.wf-task[data-status="failed"]')).to_have_count(0)
+                    page.reload()
+                    page.locator('#wf-chats .wf-chat').click()
+                    expect(page.locator('.wf-message')).to_have_count(6)
+                    expect(page.locator('.wf-task[data-status="failed"]')).to_have_count(0)
+                    expect(member.locator('.wf-task[data-status="failed"]')).to_have_count(1)
                 fake.tables['portal_users'][0]['rest_mode'] = True
                 expect(page.locator('#account-rest')).to_be_visible(timeout=10000)
                 assert page.locator('#wf-messages').inner_text() == ''
@@ -159,7 +174,7 @@ def main():
                 assert not failures, failures
                 member_context.close(); context.close(); browser.close()
                 with queue.connection() as conn:
-                    assert conn.execute('SELECT COUNT(*) FROM tasks').fetchone()[0] == 1
+                    assert conn.execute('SELECT COUNT(*) FROM tasks').fetchone()[0] == (2 if args.hosted else 1)
                     assert conn.execute("SELECT COUNT(*) FROM audit WHERE event='tool.completed'").fetchone()[0] == 1
                 print('PASS: login, group membership, manager delegation, sales tool, persisted result, CSV, reload, safe rendering, mobile, second user, rest-mode privacy.' + (' REAL LOCAL OLLAMA; SAMPLE SALES ONLY.' if args.live_ollama else ' Deterministic model double.'), flush=True)
         finally:

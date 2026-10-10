@@ -109,6 +109,9 @@ def main():
         running = store.claim('worker', second)
         store.fail(running, 'Sample failure')
         assert store.snapshot(cid, other)['tasks'][0]['status'] == 'failed'
+        store.dismiss(second, user['id'])
+        assert all(t['id'] != second for t in store.snapshot(cid, user['id'])['tasks'])
+        assert store.snapshot(cid, other)['tasks'][0]['id'] == second
         denied = page.evaluate('''async () => {
             await db.exec('SET ROLE anon');
             try { await db.query('SELECT * FROM archet_workforce.messages'); return false; }

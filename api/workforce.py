@@ -157,12 +157,14 @@ def register_workforce(app):
     @app.post('/api/internal/workforce/tasks/<task_id>/<action>')
     @require_user()
     def workforce_task_action(task_id, action):
-        if action not in ('cancel', 'retry', 'run') or (action == 'run' and not hosted()):
+        if action not in ('cancel', 'retry', 'run', 'dismiss') or (action == 'run' and not hosted()):
             raise PortalError('Not found.', 404)
         body()
         store = get_store()
         task_id = valid_id(task_id)
-        if action != 'run':
+        if action == 'dismiss':
+            store.dismiss(task_id, g.portal_user['id'])
+        elif action != 'run':
             store.control(task_id, g.portal_user, action)
         if action in ('retry', 'run'):
             run_assignment(store, task_id, g.portal_user)

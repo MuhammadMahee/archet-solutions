@@ -286,3 +286,35 @@ def test_serverless_uses_postgres_without_local_storage(client, monkeypatch):
     monkeypatch.setenv('SUPABASE_DB_URL', 'postgresql://test-only')
     with index.app.app_context():
         assert isinstance(workforce.get_store(), workforce.PostgresStore)
+
+
+def test_dismiss_failed_card_is_persistent_private_and_preserves_history(client, queue, store):
+    login(client)
+    cid = chat(client, [store.member['id']])
+    task_id = send(client, cid).json['task_id']
+    queue.fail(queue.claim('worker'), 'Sample failure')
+    assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 200
+    assert client.get('/api/internal/workforce/conversations/' + cid).json['tasks'] == []
+    assert len(client.get('/api/internal/workforce/conversations/' + cid).json['messages']) == 1
+    assert client.get(f'/api/internal/workforce/tasks/{task_id}/audit').status_code == 200
+    login(client, 'Member')
+    assert len(client.get('/api/internal/workforce/conversations/' + cid).json['tasks']) == 1
+    assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 200
+    login(client, 'OtherAdmin')
+    assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 404
+    login(client)
+    assert client.get('/api/internal/workforce/conversations/' + cid).json['tasks'] == []
+    assert write(client, f'workforce/tasks/{task_id}/retry', {}).status_code == 200
+    queue.fail(queue.claim('worker'), 'New attempt failed')
+    assert len(client.get('/api/internal/workforce/conversations/' + cid).json['tasks']) == 1
+
+
+def test_active_assignment_cannot_be_dismissed(client, queue):
+    login(client)
+    cid = chat(client)
+    task_id = send(client, cid).json['task_id']
+    assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 409
+    queue.claim('worker')
+    assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 409
+    assert write(client, f'workforce/tasks/{task_id}/cancel', {}).status_code == 200
+    assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 200

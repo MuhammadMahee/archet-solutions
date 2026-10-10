@@ -119,7 +119,10 @@ class Store:
                                                  'start': result['start'], 'end': result['end']}
             oldest = messages[0]['seq'] if messages else 0
             has_older = bool(oldest and conn.execute('SELECT 1 FROM messages WHERE conversation_id=? AND seq<? LIMIT 1', (chat, oldest)).fetchone())
-            tasks = [self.public_task(row) for row in conn.execute('SELECT * FROM tasks WHERE conversation_id=? ORDER BY created_at DESC LIMIT 30', (chat,))]
+            tasks = [self.public_task(row) for row in conn.execute('''SELECT t.* FROM tasks t WHERE conversation_id=?
+                AND NOT (t.status IN ('failed','cancelled') AND EXISTS (
+                    SELECT 1 FROM settings s WHERE s.key=? || t.id AND s.value=CAST(t.attempts AS TEXT)))
+                ORDER BY created_at DESC LIMIT 30''', (chat, 'dismissed:' + user + ':'))]
             members = [row['user_id'] for row in conn.execute('SELECT user_id FROM members WHERE conversation_id=?', (chat,))]
         return dict(conversation=conversation, messages=messages, tasks=tasks, member_ids=members, has_older=has_older)
 
@@ -170,6 +173,20 @@ class Store:
                 conn.execute("UPDATE tasks SET status='pending',step='Waiting to start',error=NULL,result=NULL,cancel_requested=0,lease_owner=NULL,lease_until=NULL,started_at=NULL,completed_at=NULL,session_version=? WHERE id=?",
                              (user['session_version'], task_id))
             self.audit(conn, user['id'], 'task.' + action, task_id)
+
+    def dismiss(self, task_id, user):
+        """Hide this ended attempt for this member; keep chat and audit history."""
+        with self.connection(True) as conn:
+            row = conn.execute('SELECT * FROM tasks WHERE id=?', (task_id,)).fetchone()
+            if not row:
+                raise PortalError('Assignment not found.', 404)
+            self.member(conn, row['conversation_id'], user)
+            if row['status'] not in ('failed', 'cancelled'):
+                raise PortalError('Only failed or cancelled assignments can be dismissed.', 409)
+            key = 'dismissed:' + user + ':' + task_id
+            conn.execute('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                         (key, str(row['attempts'])))
+            self.audit(conn, user, 'task.dismissed', task_id)
 
     def heartbeat(self, worker):
         with self.connection(True) as conn:
