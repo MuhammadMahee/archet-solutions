@@ -250,14 +250,14 @@ class Store:
             if changed:
                 self.audit(conn, task['creator_id'], 'task.failed', task['id'], {'reason': message})
 
-    def model(self, default):
+    def model(self, default, setting='model'):
         with self.connection() as conn:
-            row = conn.execute("SELECT value FROM settings WHERE key='model'").fetchone()
+            row = conn.execute('SELECT value FROM settings WHERE key=?', (setting,)).fetchone()
             return row['value'] if row else default
 
-    def set_model(self, model, actor):
+    def set_model(self, model, actor, setting='model'):
         with self.connection(True) as conn:
-            conn.execute("INSERT INTO settings VALUES('model',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (model,))
+            conn.execute('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (setting, model))
             self.audit(conn, actor, 'model.changed', details={'model': model})
 
     def result(self, task_id, user):

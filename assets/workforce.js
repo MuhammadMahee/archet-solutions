@@ -19,7 +19,7 @@
   const auditDialog = dialog('audit-dialog', 'Assignment activity', '<div id="wf-audit-content"></div>');
 
   function worker(online) {
-    el('worker').textContent = status?.provider === 'vercel' ? 'AI runs on Vercel' : online ? 'AI worker online' : 'AI worker offline - jobs stay queued';
+    el('worker').textContent = status?.execution === 'request' ? 'AI runs on Vercel' : online ? 'AI worker online' : 'AI worker offline - jobs stay queued';
     el('worker-dot').classList.toggle('online', online);
   }
   function renderChats() {
@@ -99,7 +99,7 @@
     try {
       const [info] = await Promise.all([api(endpoint + 'status'), refreshChats(token)]);
       if (!valid(token)) return;
-      status = info; worker(info.worker_online); el('model-label').textContent = info.model + (info.provider === 'vercel' ? ' - Vercel AI Gateway' : ' - local model'); el('demo').hidden = !info.demo;
+      status = info; worker(info.worker_online); el('model-label').textContent = info.model + (info.provider === 'groq' ? ' - Groq' : info.provider === 'vercel' ? ' - Vercel AI Gateway' : ' - local model'); el('demo').hidden = !info.demo;
       if (info.error) error(info.error);
       if (active) await refreshConversation(true);
     } catch (e) { if (valid(token)) error(e.message); }
@@ -191,8 +191,8 @@
     el('model-save').hidden = currentUser.role !== 'admin'; el('model').disabled = currentUser.role !== 'admin';
     try {
       const info = await api(endpoint + 'status'); if (!valid(token)) return; status = info;
-      el('connection').textContent = info.provider === 'vercel' ? 'Vercel AI Gateway: ' + (info.ai_configured ? 'Configured' : 'Needs setup') : 'Ollama: ' + (info.ollama_online ? 'Connected' : 'Unavailable') + ' - AI worker: ' + (info.worker_online ? 'Online' : 'Offline');
-      el('worker-help').textContent = info.provider === 'vercel' ? 'Assignments run on Vercel and are saved in Supabase. Prompts and selected sales summaries are sent to the hosted model. Usage draws from your Vercel AI Gateway credits.' : 'Start the AI worker on your company AI computer to process queued assignments.';
+      el('connection').textContent = info.execution === 'request' ? (info.provider === 'groq' ? 'Groq: ' : 'Vercel AI Gateway: ') + (info.ai_configured ? 'Configured' : 'Needs setup') : 'Ollama: ' + (info.ollama_online ? 'Connected' : 'Unavailable') + ' - AI worker: ' + (info.worker_online ? 'Online' : 'Offline');
+      el('worker-help').textContent = info.provider === 'groq' ? 'Assignments run on Vercel and are saved in Supabase. Prompts and selected sales summaries are sent to Groq. Stay on the Groq Free plan for free usage within its limits.' : info.provider === 'vercel' ? 'Assignments run on Vercel and are saved in Supabase. Prompts and selected sales summaries are sent to the hosted model. Usage draws from your Vercel AI Gateway credits.' : 'Start the AI worker on your company AI computer to process queued assignments.';
       el('model').replaceChildren(...info.models.map(model => new Option(model, model)));
       el('model').value = info.model; el('settings-error').textContent = info.error || '';
       el('integrations').innerHTML = info.integrations.map(item => '<div>' + escapeHTML(item.name) + ': <strong>' + (item.connected ? 'Configured' : 'Not connected') + '</strong></div>').join('');

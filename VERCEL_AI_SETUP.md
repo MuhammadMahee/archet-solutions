@@ -3,7 +3,40 @@
 This setup uses your existing Vercel project and Supabase database. No Ollama,
 PC, tunnel, separate AI server, or always-running worker is required.
 
-## Vercel settings
+## Free-plan option: connect Groq directly
+
+Create a [Groq account and API key](https://console.groq.com/keys) and keep the
+account on the **Free** plan. Add these in your Vercel project's Production
+environment variables, then redeploy:
+
+```dotenv
+WORKFORCE_AI_PROVIDER=groq
+GROQ_API_KEY=your_groq_key
+```
+
+The app chooses `llama-3.3-70b-versatile` by default; `GROQ_MODEL` and `GROQ_MODELS`
+can override the default/allowlist if needed. Existing `WORKFORCE_MODEL` and
+`AI_GATEWAY_API_KEY` values are ignored in Groq mode. Model preferences are kept
+separately per provider, so an old Gateway model selection does not break Groq.
+
+Your portal stays on Vercel, chats stay in Supabase, and model requests go directly
+to Groq. No Vercel AI Gateway billing verification is used. Send a **new message**
+after switching: old assignments retain their previous model and may not be
+compatible with the new provider. Existing history and dismiss buttons remain.
+
+Free-plan rate/token limits apply. A quota error stops the assignment; the app
+does not upgrade the account, purchase credits, or fall back to a paid provider.
+If you independently upgrade the Groq account, that account's usage charges apply.
+Vercel and Supabase hosting limits still apply separately.
+
+Prompts and selected sales summaries are sent to Groq. Groq documents that it does
+not retain inference content by default, with exceptions for reliability/abuse
+monitoring; all customers can enable Zero Data Retention in Data Controls.
+Review [Groq data handling](https://console.groq.com/docs/your-data),
+[Free-plan limits](https://console.groq.com/docs/rate-limits), and
+[billing plans](https://console.groq.com/docs/billing-faqs).
+
+## Alternative: Vercel AI Gateway settings
 
 Keep the portal's existing Supabase and login settings. Add or confirm:
 
@@ -103,6 +136,7 @@ copied to Supabase; production starts with its own conversation history.
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
 .\.venv\Scripts\python.exe tests/browser_workforce.py --hosted
+.\.venv\Scripts\python.exe tests/browser_workforce.py --groq
 .\.venv\Scripts\python.exe tests/postgres_workforce.py
 ```
 

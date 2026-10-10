@@ -181,6 +181,68 @@ def test_key_whitespace_is_removed_and_blank_key_uses_oidc(monkeypatch):
     assert hosted.VercelAI().key == 'test-oidc'
 
 
+def test_groq_calls_only_groq_with_json_plan_and_own_key(monkeypatch):
+    monkeypatch.setenv('GROQ_API_KEY', ' groq-test ')
+    monkeypatch.setenv('AI_GATEWAY_API_KEY', 'must-not-use-gateway-key')
+    monkeypatch.setenv('VERCEL_OIDC_TOKEN', 'must-not-use-oidc')
+    calls = []
+    def request(req, timeout):
+        calls.append(req)
+        return BytesIO(json.dumps({'choices': [{'finish_reason': 'stop', 'message': {'content': '{}'}}]}).encode())
+    monkeypatch.setattr(hosted, 'build_opener', lambda *_: SimpleNamespace(open=request))
+    client = hosted.GroqAI()
+    client.chat(hosted.GROQ_MODEL, 'system', 'user', ai.PLAN_SCHEMA)
+    req = calls[0]
+    assert req.full_url == 'https://api.groq.com/openai/v1/chat/completions'
+    assert req.get_header('Authorization') == 'Bearer groq-test'
+    payload = json.loads(req.data)
+    assert payload['response_format'] == {'type': 'json_object'}
+    assert json.dumps(ai.PLAN_SCHEMA) in payload['messages'][0]['content']
+    assert 'must-not-use' not in req.data.decode()
+
+
+@pytest.mark.parametrize('code', [401, 403, 429, 500])
+def test_groq_errors_never_fall_back_or_expose_secrets(monkeypatch, code):
+    monkeypatch.setenv('GROQ_API_KEY', 'groq-test')
+    calls = []
+    def request(req, **kwargs):
+        calls.append(req.full_url)
+        raise HTTPError(req.full_url, code, 'PRIVATE', {}, BytesIO(b'PRIVATE'))
+    monkeypatch.setattr(hosted, 'build_opener', lambda *_: SimpleNamespace(open=request))
+    with pytest.raises(ai.AIError) as error:
+        hosted.GroqAI().chat(hosted.GROQ_MODEL, '', '')
+    assert 'PRIVATE' not in str(error.value)
+    assert calls == ['https://api.groq.com/openai/v1/chat/completions']
+    if code == 429:
+        assert 'quota to reset' in str(error.value)
+
+
+def test_groq_needs_its_own_key(monkeypatch):
+    monkeypatch.delenv('GROQ_API_KEY', raising=False)
+    monkeypatch.setenv('AI_GATEWAY_API_KEY', 'unrelated-key')
+    with pytest.raises(ai.AIError, match='GROQ_API_KEY'):
+        hosted.GroqAI().local_model(hosted.GROQ_MODEL)
+
+
+def test_switch_to_groq_keeps_existing_chats_and_uses_separate_model_setting(client, hosted_queue, monkeypatch):
+    queue, model = hosted_queue
+    queue.set_model(hosted.DEFAULT_MODEL, 'admin')
+    monkeypatch.setenv('WORKFORCE_AI_PROVIDER', 'groq')
+    monkeypatch.setenv('WORKFORCE_MODEL', hosted.DEFAULT_MODEL)
+    monkeypatch.setenv('GROQ_API_KEY', 'groq-test')
+    model.models = lambda: [hosted.GROQ_MODEL]
+    assert isinstance(workforce.GroqAI(), hosted.GroqAI)
+    assert hosted.hosted() and hosted.default_model() == hosted.GROQ_MODEL
+    info = client.get('/api/internal/workforce/status').json
+    assert info['provider'] == 'groq' and info['model'] == hosted.GROQ_MODEL
+    assert write(client, 'workforce/settings', {'model': hosted.GROQ_MODEL}, method='PATCH').status_code == 200
+    assert queue.model('fallback') == hosted.DEFAULT_MODEL
+    cid = create(client)
+    result = write(client, f'workforce/conversations/{cid}/messages', {'content': 'Sales yesterday', 'request_id': str(uuid4())})
+    assert result.status_code == 201
+    assert client.get('/api/internal/workforce/conversations/' + cid).json['tasks'][0]['status'] == 'completed'
+
+
 def test_postgres_adapter_preserves_values_and_transaction(monkeypatch):
     from api import workforce_postgres as postgres
     calls = []

@@ -29,7 +29,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live-ollama', action='store_true')
     parser.add_argument('--hosted', action='store_true', help='Test Vercel request execution with an isolated store and model double.')
+    parser.add_argument('--groq', action='store_true', help='Test the Groq provider UI using isolated sample data.')
     args = parser.parse_args()
+    args.hosted = args.hosted or args.groq
     if args.hosted and args.live_ollama:
         parser.error('Choose hosted simulation or live Ollama, not both.')
     artifacts = ROOT / 'test-results' / 'workforce'
@@ -45,11 +47,11 @@ def main():
         stack.enter_context(patch.object(index, 'db', fake.db))
         stack.enter_context(patch.object(sales, 'report_data', demo_report))
         if args.hosted:
-            stack.enter_context(patch.dict(os.environ, WORKFORCE_AI_PROVIDER='vercel'))
+            stack.enter_context(patch.dict(os.environ, WORKFORCE_AI_PROVIDER='groq' if args.groq else 'vercel'))
             stack.enter_context(patch.object(workforce, 'get_store', lambda: queue))
             class HostedModel(Model):
                 def models(self):
-                    return ['google/gemini-2.5-flash-lite']
+                    return ['llama-3.3-70b-versatile' if args.groq else 'google/gemini-2.5-flash-lite']
             stack.enter_context(patch.object(workforce, 'ai_client', HostedModel))
         if not args.live_ollama:
             stack.enter_context(patch.object(ai.Ollama, 'models', lambda self: ['qwen3:1.7b']))
@@ -91,8 +93,8 @@ def main():
                 if args.hosted:
                     expect(page.locator('#wf-worker')).to_have_text('AI runs on Vercel')
                     page.locator('#wf-settings').click()
-                    expect(page.locator('#wf-connection')).to_contain_text('Vercel AI Gateway: Configured')
-                    expect(page.locator('#wf-worker-help')).to_contain_text('hosted model')
+                    expect(page.locator('#wf-connection')).to_contain_text('Groq: Configured' if args.groq else 'Vercel AI Gateway: Configured')
+                    expect(page.locator('#wf-worker-help')).to_contain_text('Groq Free plan' if args.groq else 'hosted model')
                     page.locator('#wf-settings-dialog .close').click()
                 page.screenshot(path=str(artifacts / 'empty-desktop.png'), full_page=True)
                 page.locator('#wf-start').click()

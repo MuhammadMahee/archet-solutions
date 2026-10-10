@@ -13,7 +13,7 @@ from api import portal
 from api.portal import PortalError, require_user, body, text_field, valid_id
 from api.workforce_ai import AIError, EMPLOYEES, Ollama, execute
 from api.workforce_store import Store
-from api.workforce_hosted import VercelAI, hosted, default_model
+from api.workforce_hosted import VercelAI, GroqAI, hosted, default_model, provider, model_setting
 from api.workforce_postgres import PostgresStore
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +35,8 @@ def get_store():
 
 
 def ai_client():
+    if provider() == 'groq':
+        return GroqAI()
     return VercelAI() if hosted() else Ollama()
 
 
@@ -69,7 +71,7 @@ def register_workforce(app):
         store = get_store()
         error = None
         client = ai_client()
-        model = store.model(default_model())
+        model = store.model(default_model(), model_setting())
         try:
             models = client.models()
             if hosted():
@@ -77,7 +79,7 @@ def register_workforce(app):
         except AIError as exc:
             models, error = [], str(exc)
         return jsonify(employees=EMPLOYEES, models=models, ollama_online=error is None,
-                       model=model, provider='vercel' if hosted() else 'ollama',
+                       model=model, provider=provider(),
                        execution='request' if hosted() else 'worker',
                        ai_configured=error is None,
                        worker_online=store.worker_online(), error=error,
@@ -94,7 +96,7 @@ def register_workforce(app):
         if model not in client.models():
             raise PortalError('Select one of the available models.')
         client.local_model(model)
-        store.set_model(model, g.portal_user['id'])
+        store.set_model(model, g.portal_user['id'], model_setting())
         return jsonify(model=model)
 
     @app.get('/api/internal/workforce/conversations')
@@ -149,7 +151,7 @@ def register_workforce(app):
             raise PortalError('Invalid AI assignment preference.')
         portal.rate_limit('workforce-message', g.portal_user['id'], 60, 60)
         result = store.enqueue(valid_id(chat), g.portal_user, content, request_id,
-                               store.model(default_model()), invoke)
+                               store.model(default_model(), model_setting()), invoke)
         if result['task_id']:
             run_assignment(store, result['task_id'], g.portal_user)
         return jsonify(result), 201
