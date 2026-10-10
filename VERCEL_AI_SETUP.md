@@ -44,6 +44,29 @@ with at most 2,500 per message; older or longer context may need restating.
 It cannot execute code, change employee accounts, inspect files, browse, send
 external messages or act on unconnected business systems.
 
+### Specialist bots and mentions
+
+Ask `@manager Add HR and Finance bots to this group.` The group creator or a
+group-member administrator can add HR, Finance, Engineering, Marketing,
+Recruiting and Support bots. These are approved role profiles, not new accounts
+or independent external services. Additions persist in that group, are audited,
+and never grant access to additional business systems. The **AI employees**
+directory can insert an add-bot request into the composer for you to send.
+
+Type `@` (or use the @ button) to pick a person or joined bot. Use arrow keys and
+Enter/Tab, or tap an option. `@hr` and `@finance` address the corresponding bots;
+up to two specialists can reply to one message. Human-only mentions create an
+in-app ping without running AI. Bot mentions invoke their replies even when
+automatic Manager replies are unchecked. Messages without mentions follow that
+checkbox. Human pings get a conversation-list @ badge and a highlighted message;
+there are no email, push or operating-system notifications. Mentioned people
+must already belong to this group. Use the picker for exact handles.
+An explicit `@manager` takes priority over specialist mentions so the Manager
+can coordinate the request or add bots.
+
+Migration `013_workforce_agents_mentions.sql` adds private tables for group bot
+membership and message mentions. Existing chats keep Manager and Operations.
+
 Prompts, this bounded chat context and selected sales summaries are sent to Groq. Groq documents that it does
 not retain inference content by default, with exceptions for reliability/abuse
 monitoring; all customers can enable Zero Data Retention in Data Controls.

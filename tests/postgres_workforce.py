@@ -67,6 +67,7 @@ def main():
             await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;');
         }''')
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/012_ai_workforce.sql').read_text())
+        page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/013_workforce_agents_mentions.sql').read_text())
         store = PgStore(page)
         user = {'id': str(uuid4()), 'display_name': 'Sample employee', 'session_version': str(uuid4())}
         other = str(uuid4())
@@ -117,6 +118,14 @@ def main():
         store.dismiss(second, user['id'])
         assert all(t['id'] != second for t in store.snapshot(cid, user['id'])['tasks'])
         assert store.snapshot(cid, other)['tasks'][0]['id'] == second
+        user['role'] = 'admin'
+        add = store.enqueue(cid, user, 'Add HR', str(uuid4()), 'sample/model')['task_id']
+        add_task = store.claim('worker', add)
+        assert store.progress(add_task, 'Added', ('ai-manager', 'AI Manager'), complete=True, agents=['ai-hr'], user=user)
+        assert 'ai-hr' in store.snapshot(cid, other)['agent_ids']
+        ping = store.enqueue(cid, user, '@hr @teammate Hello', str(uuid4()), 'sample/model', False, ['ai-hr', other])
+        assert set(store.snapshot(cid, other)['messages'][-1]['mention_ids']) == {'ai-hr', other}
+        assert store.list_chats(other)[0]['mention_seq'] == ping['message_seq']
         denied = page.evaluate('''async () => {
             await db.exec('SET ROLE anon');
             try { await db.query('SELECT * FROM archet_workforce.messages'); return false; }

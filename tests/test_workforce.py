@@ -380,3 +380,120 @@ def test_active_assignment_cannot_be_dismissed(client, queue):
     assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 409
     assert write(client, f'workforce/tasks/{task_id}/cancel', {}).status_code == 200
     assert write(client, f'workforce/tasks/{task_id}/dismiss', {}).status_code == 200
+
+
+class AddAgents(Model):
+    def chat(self, model, system, content, schema=None):
+        self.calls.append((system, content))
+        return json.dumps(dict(action='add_agents', message='Adding specialists.', start='', end='', dealer='', market='', agent_ids=['ai-hr', 'ai-finance']))
+
+
+def add_specialists(client, queue, cid):
+    sent = send(client, cid, content='Add HR and Finance bots to this group.').json
+    ai.execute(queue, queue.claim('worker', sent['task_id']), AddAgents())
+    return sent
+
+
+def test_manager_adds_real_persistent_bots_to_current_group_only(client, queue, store):
+    login(client)
+    cid, other = chat(client, [store.member['id']]), chat(client)
+    sent = add_specialists(client, queue, cid)
+    reopened = Store(queue.path)
+    assert reopened.snapshot(cid, store.owner['id'])['agent_ids'] == ['ai-manager', 'ai-operations', 'ai-hr', 'ai-finance']
+    assert reopened.snapshot(other, store.owner['id'])['agent_ids'] == ['ai-manager', 'ai-operations']
+    state = client.get('/api/internal/workforce/conversations/' + cid).json
+    assert state['tasks'][0]['status'] == 'completed'
+    assert '@hr' in state['messages'][-1]['content'] and '@finance' in state['messages'][-1]['content']
+    assert {p['handle'] for p in state['participants']} >= {'Mahee', 'Member', 'manager', 'hr', 'finance'}
+    assert all('session_version' not in p for p in state['participants'])
+    add_specialists(client, queue, cid)
+    assert len(reopened.snapshot(cid, store.owner['id'])['agent_ids']) == 4
+    with queue.connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM audit WHERE event='agents.added'").fetchone()[0] == 2
+
+
+def test_member_cannot_add_bots_to_someone_elses_group(client, queue, store):
+    login(client)
+    cid = chat(client, [store.member['id']])
+    login(client, 'Member')
+    add_specialists(client, queue, cid)
+    state = queue.snapshot(cid, store.member['id'])
+    assert state['agent_ids'] == ['ai-manager', 'ai-operations']
+    assert 'group creator' in state['tasks'][0]['error']
+    personal = chat(client)
+    add_specialists(client, queue, personal)
+    assert 'ai-hr' in queue.snapshot(personal, store.member['id'])['agent_ids']
+
+
+def test_cancelled_addition_cannot_mutate_roster(client, queue, store):
+    login(client)
+    cid = chat(client)
+    task_id = send(client, cid).json['task_id']
+    task = queue.claim('worker')
+    queue.control(task_id, store.owner, 'cancel')
+    assert not queue.progress(task, 'Added', ai.MANAGER, complete=True, agents=['ai-hr'], user=store.owner)
+    assert 'ai-hr' not in queue.snapshot(cid, store.owner['id'])['agent_ids']
+
+
+@pytest.mark.parametrize('agents', [['ai-admin'], ['ai-manager'], ['ai-hr'] * 7, 'ai-hr'])
+def test_model_cannot_add_arbitrary_agents_or_tools(agents):
+    payload = dict(action='add_agents', message='Add', start='', end='', dealer='', market='', agent_ids=agents)
+    with pytest.raises(ai.AIError):
+        ai.parse_plan(json.dumps(payload))
+
+
+def test_mentions_are_scoped_persisted_and_route_to_specialists(client, queue, store):
+    login(client)
+    cid = chat(client, [store.member['id']])
+    add_specialists(client, queue, cid)
+    sent = send(client, cid, content='@hr @finance Draft a hiring budget.', invoke_agents=False).json
+    assert sent['task_id']
+    task = queue.claim('worker', sent['task_id'])
+    model = Model()
+    ai.execute(queue, task, model)
+    assert len(model.calls) == 2
+    state = queue.snapshot(cid, store.owner['id'])
+    assert {m['sender_id'] for m in state['messages'][-2:]} == {'ai-hr', 'ai-finance'}
+    assert state['tasks'][0]['status'] == 'completed'
+    assert any(m['mention_ids'] == ['ai-finance', 'ai-hr'] for m in state['messages'])
+    model_payload = json.loads(model.calls[0][1])
+    assert {p['handle'] for p in model_payload['mentioned']} == {'hr', 'finance'}
+    other = chat(client)
+    response = send(client, other, content='@hr Hello', invoke_agents=False).json
+    assert not response['task_id']
+    assert queue.snapshot(other, store.owner['id'])['messages'][-1]['mention_ids'] == []
+    with pytest.raises(ai.portal.PortalError):
+        queue.enqueue(other, store.owner, '@hr', str(uuid4()), 'model', True, ['ai-hr'])
+
+
+def test_human_ping_does_not_run_ai_and_has_unread_marker(client, queue, store):
+    login(client)
+    cid = chat(client, [store.member['id']])
+    sent = send(client, cid, content='@Member Please review this.', invoke_agents=True).json
+    assert sent['task_id'] is None
+    assert queue.list_chats(store.member['id'])[0]['mention_seq'] == sent['message_seq']
+    assert queue.list_chats(store.owner['id'])[0]['mention_seq'] is None
+    assert queue.snapshot(cid, store.member['id'])['messages'][0]['mention_ids'] == [store.member['id']]
+    send(client, cid, content='someone@Member.com @MemberExtra @OtherAdmin `@Member` ```text\n@Member\n```', invoke_agents=False)
+    assert queue.snapshot(cid, store.owner['id'])['messages'][-1]['mention_ids'] == []
+
+
+def test_human_bot_handle_collision_is_unambiguous(client, queue, store):
+    from api.workforce_agents import mentioned_people
+    human = store.add_user('finance', 'member')
+    people = ai.conversation_people([human['id']], ['ai-finance'])
+    assert mentioned_people('@finance', people)[0]['id'] == 'ai-finance'
+    assert mentioned_people('@user-finance', people)[0]['id'] == human['id']
+
+
+def test_explicit_manager_mention_can_manage_already_mentioned_bots(client, queue, store):
+    login(client)
+    cid = chat(client)
+    add_specialists(client, queue, cid)
+    sent = send(client, cid, content='@manager Add @hr and Finance to this group.').json
+    model = AddAgents()
+    ai.execute(queue, queue.claim('worker', sent['task_id']), model)
+    assert len(model.calls) == 1
+    state = queue.snapshot(cid, store.owner['id'])
+    assert state['tasks'][0]['status'] == 'completed'
+    assert state['messages'][-1]['sender_id'] == 'ai-manager'

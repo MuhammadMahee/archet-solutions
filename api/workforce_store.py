@@ -8,6 +8,7 @@ import time
 from uuid import uuid4
 
 from api.portal import PortalError
+from api.workforce_agents import AGENTS, DEFAULT_IDS
 
 
 def now():
@@ -40,6 +41,13 @@ CREATE TABLE IF NOT EXISTS audit (
  event TEXT NOT NULL, details TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS workers (id TEXT PRIMARY KEY, heartbeat REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS conversation_agents (
+ conversation_id TEXT NOT NULL REFERENCES conversations(id), agent_id TEXT NOT NULL,
+ added_by TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(conversation_id,agent_id));
+CREATE TABLE IF NOT EXISTS message_mentions (
+ message_seq INTEGER NOT NULL REFERENCES messages(seq), recipient_id TEXT NOT NULL,
+ PRIMARY KEY(message_seq,recipient_id));
+CREATE INDEX IF NOT EXISTS mentions_recipient ON message_mentions(recipient_id,message_seq);
 PRAGMA user_version=1;
 """
 
@@ -95,9 +103,11 @@ class Store:
             return [dict(row) for row in conn.execute('''SELECT c.*,
                 (SELECT content FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1) AS preview,
                 (SELECT MAX(seq) FROM messages WHERE conversation_id=c.id) AS last_seq,
+                (SELECT MAX(mm.message_seq) FROM message_mentions mm JOIN messages msg ON msg.seq=mm.message_seq
+                    WHERE msg.conversation_id=c.id AND mm.recipient_id=?) AS mention_seq,
                 (SELECT COUNT(*) FROM tasks WHERE conversation_id=c.id AND status IN ('pending','running')) AS working
                 FROM conversations c JOIN members m ON m.conversation_id=c.id WHERE m.user_id=?
-                ORDER BY last_seq DESC NULLS LAST,c.created_at DESC LIMIT 200''', (user,))]
+                ORDER BY last_seq DESC NULLS LAST,c.created_at DESC LIMIT 200''', (user, user))]
 
     def snapshot(self, chat, user, after=0, before=0):
         with self.connection() as conn:
@@ -111,7 +121,14 @@ class Store:
                 rows = conn.execute(select + 'AND m.seq<? ORDER BY m.seq DESC LIMIT 100',
                                     (chat, before or 9223372036854775807)).fetchall()[::-1]
             messages = [dict(row) for row in rows]
+            mentions = {}
+            if messages:
+                for item in conn.execute('''SELECT mm.message_seq,mm.recipient_id FROM message_mentions mm
+                    JOIN messages m ON m.seq=mm.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=?''',
+                    (chat, messages[0]['seq'], messages[-1]['seq'])):
+                    mentions.setdefault(item['message_seq'], []).append(item['recipient_id'])
             for message in messages:
+                message['mention_ids'] = mentions.get(message['seq'], [])
                 if message['report_ready']:
                     result = json.loads(conn.execute('SELECT result FROM tasks WHERE id=?', (message['task_id'],)).fetchone()['result'])
                     message['report_summary'] = {'store_count': len(result['rows']), 'total_boxes': result['totals'].get('total_boxes'),
@@ -124,7 +141,20 @@ class Store:
                     SELECT 1 FROM settings s WHERE s.key=? || t.id AND s.value=CAST(t.attempts AS TEXT)))
                 ORDER BY created_at DESC LIMIT 30''', (chat, 'dismissed:' + user + ':'))]
             members = [row['user_id'] for row in conn.execute('SELECT user_id FROM members WHERE conversation_id=?', (chat,))]
-        return dict(conversation=conversation, messages=messages, tasks=tasks, member_ids=members, has_older=has_older)
+            agents = self.agent_ids(conn, chat)
+        return dict(conversation=conversation, messages=messages, tasks=tasks, member_ids=members, agent_ids=agents, has_older=has_older)
+
+    @staticmethod
+    def agent_ids(conn, chat):
+        return DEFAULT_IDS + [row['agent_id'] for row in conn.execute(
+            'SELECT agent_id FROM conversation_agents WHERE conversation_id=? ORDER BY created_at,agent_id', (chat,))
+            if row['agent_id'] in AGENTS and row['agent_id'] not in DEFAULT_IDS]
+
+    def roster(self, chat, user):
+        with self.connection() as conn:
+            conversation = self.member(conn, chat, user)
+            people = [r['user_id'] for r in conn.execute('SELECT user_id FROM members WHERE conversation_id=?', (chat,))]
+            return conversation, people, self.agent_ids(conn, chat)
 
     def assignment_context(self, task):
         """Read only this member's conversation, stopping before the assignment."""
@@ -135,6 +165,9 @@ class Store:
             rows = conn.execute('''SELECT sender_name,kind,content,created_at FROM messages
                 WHERE conversation_id=? AND seq<? ORDER BY seq DESC LIMIT 25''',
                 (task['conversation_id'], task['message_seq'])).fetchall()
+            agents = self.agent_ids(conn, task['conversation_id'])
+            mentions = [r['recipient_id'] for r in conn.execute(
+                'SELECT recipient_id FROM message_mentions WHERE message_seq=?', (task['message_seq'],))]
         history, remaining = [], 9000
         limited = len(rows) > 24
         for row in rows[:24]:
@@ -147,7 +180,8 @@ class Store:
             history.append({'name': row['sender_name'][:100], 'kind': row['kind'],
                             'content': content, 'truncated': truncated, 'sent_at': row['created_at']})
             remaining -= len(content)
-        return {'title': conversation['title'], 'member_ids': members,
+        return {'title': conversation['title'], 'creator_id': conversation['creator_id'], 'member_ids': members,
+                'agent_ids': agents, 'mention_ids': mentions,
                 'recent_messages': history[::-1], 'history_limited': limited}
 
     @staticmethod
@@ -155,13 +189,21 @@ class Store:
         return {**{k: row[k] for k in ('id', 'creator_id', 'status', 'step', 'created_at', 'started_at', 'completed_at', 'error', 'attempts')},
                 'has_report': row['status'] == 'completed' and bool(row['result'])}
 
-    def enqueue(self, chat, user, content, request_id, model, invoke=True):
+    def enqueue(self, chat, user, content, request_id, model, invoke=True, mention_ids=None):
         with self.connection(True) as conn:
             self.member(conn, chat, user['id'])
+            mentions = list(dict.fromkeys(mention_ids or []))
+            allowed = set(self.agent_ids(conn, chat)) | {r['user_id'] for r in conn.execute(
+                'SELECT user_id FROM members WHERE conversation_id=?', (chat,))}
+            if len(mentions) > 10 or any(uid not in allowed for uid in mentions):
+                raise PortalError('Mention up to 10 members of this group.')
+            if len([uid for uid in mentions if uid in AGENTS and uid != 'ai-manager']) > 2:
+                raise PortalError('Mention up to two specialist bots per message.')
             old = conn.execute('SELECT seq,task_id,content FROM messages WHERE conversation_id=? AND sender_id=? AND request_id=?',
                                (chat, user['id'], request_id)).fetchone()
             if old:
-                if old['content'] != content or bool(old['task_id']) != invoke:
+                old_mentions = {r['recipient_id'] for r in conn.execute('SELECT recipient_id FROM message_mentions WHERE message_seq=?', (old['seq'],))}
+                if old['content'] != content or bool(old['task_id']) != invoke or old_mentions != set(mentions):
                     raise PortalError('This message ID was already used for another message.', 409)
                 return dict(message_seq=old['seq'], task_id=old['task_id'])
             if invoke and conn.execute("SELECT COUNT(*) AS count FROM tasks WHERE creator_id=? AND status IN ('pending','running')", (user['id'],)).fetchone()['count'] >= 5:
@@ -170,6 +212,7 @@ class Store:
             stamp = now()
             seq = conn.execute('''INSERT INTO messages(conversation_id,sender_id,sender_name,kind,content,created_at,task_id,request_id)
                 VALUES(?,?,?,?,?,?,?,?) RETURNING seq''', (chat, user['id'], user['display_name'], 'human', content, stamp, task, request_id)).fetchone()['seq']
+            conn.executemany('INSERT INTO message_mentions VALUES(?,?)', [(seq, uid) for uid in mentions])
             if invoke:
                 conn.execute('''INSERT INTO tasks(id,conversation_id,message_seq,creator_id,session_version,model,status,step,created_at)
                     VALUES(?,?,?,?,?,?,'pending','Waiting to start',?)''',
@@ -251,11 +294,22 @@ class Store:
             row = conn.execute('SELECT status,lease_owner FROM tasks WHERE id=?', (task['id'],)).fetchone()
             return bool(row and row['status'] == 'running' and row['lease_owner'] == task['lease_owner'])
 
-    def progress(self, task, step, sender=None, content=None, event=None, details=None, complete=False, result=None):
+    def progress(self, task, step, sender=None, content=None, event=None, details=None, complete=False, result=None, agents=None, user=None):
         with self.connection(True) as conn:
             row = conn.execute('SELECT status,lease_owner FROM tasks WHERE id=?', (task['id'],)).fetchone()
             if not row or row['status'] != 'running' or row['lease_owner'] != task['lease_owner']:
                 return False
+            if agents is not None:
+                chat = self.member(conn, task['conversation_id'], task['creator_id'])
+                if not user or user['id'] != task['creator_id'] or (user['role'] != 'admin' and chat['creator_id'] != user['id']):
+                    raise PortalError('Only the group creator or an administrator can add AI teammates.', 403)
+                if not agents or len(agents) > 6 or any(a not in AGENTS or a in DEFAULT_IDS for a in agents):
+                    raise PortalError('Choose available specialist bots.')
+                for agent in dict.fromkeys(agents):
+                    conn.execute('INSERT INTO conversation_agents VALUES(?,?,?,?) ON CONFLICT(conversation_id,agent_id) DO NOTHING',
+                                 (task['conversation_id'], agent, user['id'], now()))
+                self.audit(conn, user['id'], 'agents.added', task['id'], {'agent_ids': agents})
+                content = 'Ready in this group: ' + ', '.join(AGENTS[a]['name'] + ' (@' + AGENTS[a]['handle'] + ')' for a in dict.fromkeys(agents)) + '. Mention a bot to ask for help. These bots can advise and draft; adding them does not connect private business records.'
             if sender and content:
                 conn.execute('''INSERT INTO messages(conversation_id,sender_id,sender_name,kind,content,created_at,task_id)
                     VALUES(?,?,?,'ai',?,?,?)''', (task['conversation_id'], sender[0], sender[1], content, now(), task['id']))

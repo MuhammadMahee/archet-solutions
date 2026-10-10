@@ -4,6 +4,7 @@
   const endpoint = 'workforce/';
   let generation = 0, selection = 0, active = null, chats = [], messages = [], tasks = [], status = null;
   let polling = false, ticks = 0, pendingSend = null, sending = false;
+  let participants = [], canAddAgents = false, mentionOptions = [], mentionIndex = 0, mentionStart = -1;
   const seen = new Map();
   const valid = token => token === generation && currentUser && !currentUser.rest_mode && page === 'workforce';
   const error = message => { el('error').textContent = message || ''; el('error').hidden = !message; };
@@ -14,9 +15,79 @@
     node.querySelector('.close').onclick = () => node.close(); document.body.append(node); return node;
   }
   const newDialog = dialog('new-dialog', 'Start a conversation', '<form id="wf-new-form"><p>Your AI Manager and Operations agent will join this conversation.</p><div class="field"><label for="wf-new-title">Conversation name</label><input id="wf-new-title" required maxlength="80" placeholder="Daily operations"></div><div class="field" id="wf-people-field" hidden><label for="wf-people">Add team members (optional)</label><select id="wf-people" multiple aria-describedby="wf-people-help"></select><p id="wf-people-help">Hold Ctrl or Command to select multiple people. Leave empty for a private AI chat.</p></div><p id="wf-new-error" class="error" role="alert"></p><div class="actions"><button type="submit" class="primary">Create conversation</button></div></form>');
-  const directory = dialog('directory-dialog', 'Your AI employees', '<p>Two specialists, one conversation. Their responses are always marked as AI.</p><div id="wf-employees"></div><p>More departments and company integrations will be added in later releases.</p>');
+  const directory = dialog('directory-dialog', 'Your AI employees', '<p>Add specialist bots to a group by asking @manager. Mention a joined bot to get its help.</p><div id="wf-employees"></div><p>Specialists advise and draft. Adding a bot does not connect private HR, finance or other business records.</p>');
   const settings = dialog('settings-dialog', 'Connection & models', '<div id="wf-connection" class="wf-connection"></div><form id="wf-model-form"><div class="field"><label for="wf-model">Default AI model</label><select id="wf-model"></select></div><p>Changes apply to new assignments. Current assignments keep their original model.</p><p id="wf-settings-error" class="error" role="alert"></p><button class="primary" type="submit" id="wf-model-save">Save model</button></form><p id="wf-worker-help">Start the AI worker on your company AI computer to process queued assignments.</p><div id="wf-integrations" class="wf-connection"></div>');
   const auditDialog = dialog('audit-dialog', 'Assignment activity', '<div id="wf-audit-content"></div>');
+  const mentionMenu = document.createElement('div');
+  mentionMenu.id = 'wf-mention-menu'; mentionMenu.className = 'wf-mention-menu'; mentionMenu.hidden = true;
+  mentionMenu.setAttribute('role', 'listbox'); mentionMenu.setAttribute('aria-label', 'Mention a teammate');
+  el('composer').prepend(mentionMenu);
+  el('input').setAttribute('aria-controls', mentionMenu.id);
+  el('input').setAttribute('aria-autocomplete', 'list');
+  const mentionButton = document.createElement('button');
+  mentionButton.type = 'button'; mentionButton.className = 'wf-mention-button'; mentionButton.textContent = '@';
+  mentionButton.setAttribute('aria-label', 'Mention a teammate');
+  el('composer').querySelector('.wf-composer-bottom').prepend(mentionButton);
+
+  function closeMentions() {
+    mentionMenu.hidden = true; mentionOptions = []; mentionStart = -1;
+    el('input').removeAttribute('aria-activedescendant');
+  }
+  function showMentions() {
+    const input = el('input'), before = input.value.slice(0, input.selectionStart);
+    const match = before.match(/(?:^|\s)@([a-zA-Z0-9_-]*)$/);
+    if (!match || input.selectionStart !== input.selectionEnd) return closeMentions();
+    mentionStart = before.lastIndexOf('@');
+    const query = match[1].toLowerCase();
+    const rank = p => p.handle.toLowerCase().startsWith(query) ? 0 : p.name.toLowerCase().startsWith(query) ? 1 : 2;
+    mentionOptions = participants.filter(p => (p.handle + ' ' + p.name).toLowerCase().includes(query)).sort((a,b) => rank(a) - rank(b)).slice(0,12);
+    mentionIndex = 0;
+    if (!mentionOptions.length) return closeMentions();
+    renderMentions();
+  }
+  function renderMentions() {
+    mentionMenu.innerHTML = mentionOptions.map((p,i) => '<button type="button" role="option" id="wf-mention-option-' + i + '" data-mention-index="' + i + '" aria-selected="' + (i === mentionIndex) + '"><strong>' + escapeHTML(p.name) + '</strong><small>@' + escapeHTML(p.handle) + ' · ' + (p.kind === 'ai' ? 'AI bot' : 'Team member') + '</small></button>').join('');
+    mentionMenu.hidden = false;
+    el('input').setAttribute('aria-activedescendant', 'wf-mention-option-' + mentionIndex);
+    document.getElementById('wf-mention-option-' + mentionIndex).scrollIntoView({block:'nearest'});
+  }
+  function chooseMention(index) {
+    const person = mentionOptions[index], input = el('input');
+    if (!person || mentionStart < 0) return;
+    input.setRangeText('@' + person.handle + ' ', mentionStart, input.selectionStart, 'end');
+    closeMentions(); input.focus();
+  }
+  mentionMenu.onmousedown = event => event.preventDefault();
+  mentionMenu.onclick = event => { const option = event.target.closest('[data-mention-index]'); if (option) chooseMention(Number(option.dataset.mentionIndex)); };
+  mentionButton.onclick = () => {
+    const input = el('input'); input.focus();
+    const prefix = input.selectionStart && !/\s/.test(input.value[input.selectionStart - 1]) ? ' @' : '@';
+    input.setRangeText(prefix, input.selectionStart, input.selectionEnd, 'end'); showMentions();
+  };
+  el('input').addEventListener('input', showMentions);
+  el('input').addEventListener('click', showMentions);
+  document.addEventListener('click', event => { if (!el('composer').contains(event.target)) closeMentions(); });
+
+  function messageMarkup(message) {
+    const template = document.createElement('template'); template.innerHTML = markup(message.content);
+    const handles = new Set(participants.filter(p => (message.mention_ids || []).includes(p.id)).map(p => p.handle.toLowerCase()));
+    const walker = document.createTreeWalker(template.content, NodeFilter.SHOW_TEXT), nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    nodes.forEach(node => {
+      if (node.parentElement?.closest('code,pre')) return;
+      const text = node.textContent, pattern = /(^|[^\w@])@([a-zA-Z0-9_-]+)(?![\w-])/g;
+      const fragment = document.createDocumentFragment(); let end = 0, match;
+      while ((match = pattern.exec(text))) {
+        if (!handles.has(match[2].toLowerCase())) continue;
+        const start = match.index + match[1].length;
+        fragment.append(text.slice(end,start));
+        const tag = document.createElement('span'); tag.className = 'wf-mention'; tag.textContent = '@' + match[2];
+        fragment.append(tag); end = pattern.lastIndex;
+      }
+      if (end) { fragment.append(text.slice(end)); node.replaceWith(fragment); }
+    });
+    return template.innerHTML;
+  }
 
   function worker(online) {
     el('worker').textContent = status?.execution === 'request' ? 'AI runs on Vercel' : online ? 'AI worker online' : 'AI worker offline - jobs stay queued';
@@ -26,7 +97,7 @@
     const query = el('search').value.trim().toLowerCase();
     const filtered = chats.filter(chat => (chat.title + ' ' + (chat.preview || '')).toLowerCase().includes(query));
     el('chat-count').textContent = chats.length + (chats.length === 1 ? ' conversation' : ' conversations');
-    const html = filtered.length ? filtered.map(chat => '<button class="wf-chat ' + (active === chat.id ? 'selected' : '') + '" data-chat="' + escapeHTML(chat.id) + '" aria-pressed="' + (active === chat.id) + '"><span class="wf-chat-avatar">A↗</span><span class="wf-chat-copy"><strong>' + escapeHTML(chat.title) + '</strong><p>' + escapeHTML(chat.working ? 'AI assignment in progress…' : chat.preview || 'AI Manager & Operations') + '</p></span>' + (chat.last_seq > (seen.get(chat.id) || 0) && active !== chat.id ? '<span class="wf-chat-new" aria-label="Unread messages"></span>' : '') + '</button>').join('') : '<div class="wf-empty-chat">' + (chats.length ? 'No matching conversations.' : 'Your next conversation starts here.<br>Use + to create a private chat or group.') + '</div>';
+    const html = filtered.length ? filtered.map(chat => '<button class="wf-chat ' + (active === chat.id ? 'selected' : '') + '" data-chat="' + escapeHTML(chat.id) + '" aria-pressed="' + (active === chat.id) + '"><span class="wf-chat-avatar">A↗</span><span class="wf-chat-copy"><strong>' + escapeHTML(chat.title) + '</strong><p>' + escapeHTML(chat.working ? 'AI assignment in progress…' : chat.preview || 'AI Manager & Operations') + '</p></span>' + (chat.mention_seq > (seen.get(chat.id) || 0) && active !== chat.id ? '<span class="wf-ping" aria-label="You were mentioned">@</span>' : '') + (chat.last_seq > (seen.get(chat.id) || 0) && active !== chat.id ? '<span class="wf-chat-new" aria-label="Unread messages"></span>' : '') + '</button>').join('') : '<div class="wf-empty-chat">' + (chats.length ? 'No matching conversations.' : 'Your next conversation starts here.<br>Use + to create a private chat or group.') + '</div>';
     if (el('chats').innerHTML !== html) el('chats').innerHTML = html;
   }
   function markup(text) {
@@ -48,8 +119,8 @@
     const visible = messages.filter(m => (m.content + ' ' + m.sender_name).toLowerCase().includes(query));
     el('messages').innerHTML = visible.length ? '<div class="wf-date">' + escapeHTML(new Date(visible[0].created_at).toLocaleDateString(undefined, {weekday:'long',month:'long',day:'numeric'})) + '</div>' + visible.map(m => {
       const own = m.sender_id === currentUser.id, ai = m.kind === 'ai';
-      const initials = ai ? m.sender_id === 'ai-manager' ? 'AM' : 'OP' : m.sender_name.slice(0,2).toUpperCase();
-      return '<article class="wf-message ' + (own ? 'own ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + markup(m.content) + '</div>' + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
+      const initials = ai ? (status?.employees?.find(a => a.id === m.sender_id)?.initials || 'AI') : m.sender_name.slice(0,2).toUpperCase();
+      return '<article class="wf-message ' + (own ? 'own ' : '') + ((m.mention_ids || []).includes(currentUser.id) ? 'mentioned ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + messageMarkup(m) + '</div>' + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
     }).join('') : '<div class="wf-empty-chat">' + (query ? 'No matching loaded messages.' : 'Your AI team is ready for an assignment.<button type="button" class="wf-suggestion" id="wf-example">Summarize yesterday’s saved sales for all stores.</button>') + '</div>';
     if (stick || nearBottom) log.scrollTop = log.scrollHeight;
   }
@@ -78,7 +149,8 @@
     const taskChanged = JSON.stringify(tasks) !== JSON.stringify(data.tasks);
     tasks = data.tasks;
     el('title').textContent = data.conversation.title;
-    el('members').textContent = 'AI Manager, Operations · ' + data.member_ids.length + (data.member_ids.length === 1 ? ' team member' : ' team members');
+    participants = data.participants || []; canAddAgents = data.can_add_agents;
+    el('members').textContent = participants.map(p => p.kind === 'ai' ? '@' + p.handle : p.name).join(', ');
     if (initial) el('older').hidden = !data.has_older;
     seen.set(chat, messages.at(-1)?.seq || 0);
     if (initial || added.length) renderMessages(initial);
@@ -86,7 +158,7 @@
     renderChats();
   }
   async function selectChat(id) {
-    selection++; active = id; messages = []; tasks = []; pendingSend = null;
+    selection++; active = id; messages = []; tasks = []; pendingSend = null; participants = []; canAddAgents = false; closeMentions();
     el('input').value = ''; el('message-search').value = ''; el('older').hidden = true;
     el('welcome').hidden = true; el('active').hidden = false; el('layout').classList.add('chat-open');
     el('title').textContent = 'Opening conversation…'; el('members').textContent = '';
@@ -105,6 +177,7 @@
     } catch (e) { if (valid(token)) error(e.message); }
   }
   function clear() {
+    participants = []; canAddAgents = false; closeMentions();
     generation++; selection++; active = null; chats = []; messages = []; tasks = []; status = null; pendingSend = null; sending = false; seen.clear();
     el('chats').replaceChildren(); el('messages').replaceChildren(); el('tasks').replaceChildren();
     el('input').value = ''; el('search').value = ''; el('message-search').value = ''; el('new-form').reset(); el('people').replaceChildren();
@@ -138,7 +211,17 @@
   el('message-search').oninput = () => renderMessages();
   el('back').onclick = () => el('layout').classList.remove('chat-open');
   el('messages').onclick = event => { if (event.target.closest('#wf-example')) { el('input').value = 'Summarize yesterday’s saved sales for all stores.'; el('input').focus(); } };
-  el('input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); el('composer').requestSubmit(); } };
+  el('input').onkeydown = event => {
+    if (event.isComposing) return;
+    if (!mentionMenu.hidden) {
+      if (event.key === 'Escape') { event.preventDefault(); closeMentions(); return; }
+      if (['ArrowDown','ArrowUp'].includes(event.key)) {
+        event.preventDefault(); mentionIndex = (mentionIndex + (event.key === 'ArrowDown' ? 1 : -1) + mentionOptions.length) % mentionOptions.length; renderMentions(); return;
+      }
+      if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') { event.preventDefault(); chooseMention(mentionIndex); return; }
+    }
+    if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); el('composer').requestSubmit(); }
+  };
   el('composer').onsubmit = async event => {
     event.preventDefault(); if (!active || sending) return;
     const content = el('input').value.trim(), chat = active, token = generation, invoke = el('invoke').checked;
@@ -150,7 +233,7 @@
       await api(endpoint + 'conversations/' + chat + '/messages', 'POST', {content,request_id:outgoing.id,invoke_agents:invoke});
       if (!valid(token) || active !== chat) return;
       if (el('input').value.trim() === content) el('input').value = '';
-      pendingSend = null;
+      pendingSend = null; closeMentions();
       await refreshConversation(); await refreshChats(token); el('log').scrollTop = el('log').scrollHeight;
     } catch(e) { if (valid(token) && active === chat) error(e.message + ' Your message is kept here for retry.'); }
     finally { if (token === generation) { sending = false; el('send').disabled = false; } }
@@ -183,8 +266,19 @@
     } catch(e) { if (valid(token)) error(e.message); } finally { button.disabled = false; }
   };
   el('directory').onclick = () => {
-    el('employees').innerHTML = (status?.employees || []).map(agent => '<div class="wf-employee"><div class="wf-chat-avatar">' + escapeHTML(agent.initials) + '</div><div><h3>' + escapeHTML(agent.name) + ' <span class="wf-ai-label">AI</span></h3><small>' + escapeHTML(agent.department) + '</small><p>' + escapeHTML(agent.description) + '</p></div></div>').join('') || '<p>Connect to the workforce server to see employees.</p>';
+    el('employees').innerHTML = (status?.employees || []).map(agent => {
+      const joined = participants.some(p => p.id === agent.id);
+      return '<div class="wf-employee"><div class="wf-chat-avatar">' + escapeHTML(agent.initials) + '</div><div><h3>' + escapeHTML(agent.name) + ' <span class="wf-ai-label">AI</span></h3><small>@' + escapeHTML(agent.handle) + ' ? ' + escapeHTML(agent.department) + '</small><p>' + escapeHTML(agent.description) + '</p>' + (active && !joined && canAddAgents ? '<button type="button" data-add-agent="' + escapeHTML(agent.id) + '">Ask Manager to add</button>' : joined ? '<small>In this group</small>' : '') + '</div></div>';
+    }).join('') || '<p>Connect to the workforce server to see employees.</p>';
     directory.showModal();
+  };
+  el('employees').onclick = event => {
+    const button = event.target.closest('[data-add-agent]');
+    const agent = status?.employees?.find(a => a.id === button?.dataset.addAgent);
+    if (!agent || !active) return;
+    directory.close();
+    el('input').value += (el('input').value ? '\n' : '') + '@manager Add ' + agent.name + ' to this group.';
+    el('input').focus();
   };
   el('settings').onclick = async () => {
     const token = generation; el('settings-error').textContent = ''; el('connection').textContent = 'Checking connection…'; settings.showModal();

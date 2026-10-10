@@ -11,7 +11,8 @@ from flask import current_app, g, jsonify, request, Response
 
 from api import portal
 from api.portal import PortalError, require_user, body, text_field, valid_id
-from api.workforce_ai import AIError, EMPLOYEES, Ollama, execute
+from api.workforce_ai import AIError, Ollama, execute, conversation_people
+from api.workforce_agents import AGENTS, mentioned_people
 from api.workforce_store import Store
 from api.workforce_hosted import VercelAI, GroqAI, hosted, default_model, provider, model_setting, groq_model
 from api.workforce_postgres import PostgresStore
@@ -83,7 +84,7 @@ def register_workforce(app):
                 client.local_model(model)
         except AIError as exc:
             models, error = [], str(exc)
-        return jsonify(employees=EMPLOYEES, models=models, ollama_online=error is None,
+        return jsonify(employees=list(AGENTS.values()), models=models, ollama_online=error is None,
                        model=model, provider=provider(),
                        execution='request' if hosted() else 'worker',
                        ai_configured=error is None,
@@ -142,7 +143,10 @@ def register_workforce(app):
         store = get_store()
         if hosted():
             store.expire()
-        return jsonify(store.snapshot(valid_id(chat), g.portal_user['id'], after, before))
+        state = store.snapshot(valid_id(chat), g.portal_user['id'], after, before)
+        state['participants'] = conversation_people(state['member_ids'], state['agent_ids'])
+        state['can_add_agents'] = g.portal_user['role'] == 'admin' or state['conversation']['creator_id'] == g.portal_user['id']
+        return jsonify(state)
 
     @app.post('/api/internal/workforce/conversations/<chat>/messages')
     @require_user()
@@ -154,9 +158,15 @@ def register_workforce(app):
         invoke = payload.get('invoke_agents', True)
         if type(invoke) is not bool:
             raise PortalError('Invalid AI assignment preference.')
+        _, members, agents = store.roster(valid_id(chat), g.portal_user['id'])
+        mentioned = mentioned_people(content, conversation_people(members, agents))
+        # A direct human ping is a chat message; mentioning a bot explicitly
+        # invokes that bot even if automatic Manager replies are unchecked.
+        if mentioned:
+            invoke = any(p['kind'] == 'ai' for p in mentioned)
         portal.rate_limit('workforce-message', g.portal_user['id'], 60, 60)
         result = store.enqueue(valid_id(chat), g.portal_user, content, request_id,
-                               selected_model(store), invoke)
+                               selected_model(store), invoke, [p['id'] for p in mentioned])
         if result['task_id']:
             run_assignment(store, result['task_id'], g.portal_user)
         return jsonify(result), 201
