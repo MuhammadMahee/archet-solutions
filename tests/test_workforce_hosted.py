@@ -195,6 +195,8 @@ def test_groq_calls_only_groq_with_json_plan_and_own_key(monkeypatch):
     req = calls[0]
     assert req.full_url == 'https://api.groq.com/openai/v1/chat/completions'
     assert req.get_header('Authorization') == 'Bearer groq-test'
+    assert req.get_header('User-agent') == 'ArchetWorkforce/1.0'
+    assert req.get_header('Accept') == 'application/json'
     payload = json.loads(req.data)
     assert payload['response_format'] == {'type': 'json_object'}
     assert json.dumps(ai.PLAN_SCHEMA) in payload['messages'][0]['content']
@@ -222,6 +224,24 @@ def test_groq_needs_its_own_key(monkeypatch):
     monkeypatch.setenv('AI_GATEWAY_API_KEY', 'unrelated-key')
     with pytest.raises(ai.AIError, match='GROQ_API_KEY'):
         hosted.GroqAI().local_model(hosted.GROQ_MODEL)
+
+
+@pytest.mark.parametrize('code,body,expected', [
+    (401, {'error': {'code': 'invalid_api_key'}}, 'rejected GROQ_API_KEY'),
+    (403, {'error': 'error code: 1010'}, 'network filter'),
+    (403, {'error': {'code': 'model_permission_blocked_org'}}, 'blocked this model'),
+    (403, {'error': {'code': 'model_permission_blocked_project'}}, 'blocked this model'),
+    (403, {'error': {'message': 'PRIVATE ACCOUNT DETAIL'}}, 'denied this request'),
+])
+def test_groq_access_errors_distinguish_key_model_and_network(monkeypatch, code, body, expected):
+    monkeypatch.setenv('GROQ_API_KEY', 'groq-test')
+    def request(req, **kwargs):
+        raise HTTPError(req.full_url, code, 'PRIVATE', {}, BytesIO(json.dumps(body).encode()))
+    monkeypatch.setattr(hosted, 'build_opener', lambda *_: SimpleNamespace(open=request))
+    with pytest.raises(ai.AIError) as error:
+        hosted.GroqAI().chat(hosted.GROQ_MODEL, '', '')
+    assert expected in str(error.value)
+    assert 'PRIVATE' not in str(error.value)
 
 
 def test_switch_to_groq_keeps_existing_chats_and_uses_separate_model_setting(client, hosted_queue, monkeypatch):

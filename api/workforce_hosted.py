@@ -72,7 +72,8 @@ class VercelAI:
         payload = self.prepare_payload(payload, schema)
         req = Request(self.endpoint,
                       data=json.dumps(payload).encode(), headers={
-                          'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json'})
+                          'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json',
+                          'Accept': 'application/json', 'User-Agent': 'ArchetWorkforce/1.0'})
         try:
             with build_opener(NoRedirect()).open(req, timeout=min(45, remaining)) as response:
                 raw = response.read(1000001)
@@ -143,8 +144,21 @@ class GroqAI(VercelAI):
         return payload
 
     def http_error(self, exc):
-        if exc.code in (401, 403):
-            raise AIError('Groq rejected access. Check GROQ_API_KEY and model permissions in your Groq account, then redeploy if the key changed.') from None
+        if exc.code == 401:
+            raise AIError('Groq rejected GROQ_API_KEY (HTTP 401). Check that Vercel Production contains a valid Groq API key, then redeploy if it changed.') from None
+        if exc.code == 403:
+            raw = ''
+            try:
+                raw = exc.read(8192).decode('utf-8', errors='replace')
+                detail = json.loads(raw).get('error', {})
+                code = detail.get('code') if isinstance(detail, dict) else None
+            except (ValueError, AttributeError, OSError):
+                code = None
+            if code in ('model_permission_blocked_org', 'model_permission_blocked_project'):
+                raise AIError('Groq has blocked this model (HTTP 403). Enable the selected model in Groq organization/project model permissions, then retry.') from None
+            if '1010' in raw:
+                raise AIError('Groq blocked the app request at its network filter (HTTP 403, error 1010). Contact your administrator to check the deployed HTTP client; this does not establish that the API key is invalid.') from None
+            raise AIError('Groq denied this request (HTTP 403). Check Groq account/project access or contact Groq support; the response did not identify an invalid API key.') from None
         if exc.code == 429:
             raise AIError('Groq free-tier usage limit reached. Wait for your quota to reset, then retry. No fallback provider was used.') from None
         if exc.code == 402:
