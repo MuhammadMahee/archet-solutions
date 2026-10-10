@@ -105,9 +105,8 @@ def main():
                 expect(page.locator('#wf-title')).to_have_text('Daily Operations · Demo')
                 page.locator('#wf-input').fill('Summarize yesterday\'s saved sales for all stores.')
                 page.locator('#wf-input').press('Enter')
-                expect(page.locator('.wf-task')).to_have_count(1)
-                expect(page.locator('.wf-task[data-status="completed"]')).to_have_count(1, timeout=600000 if args.live_ollama else 15000)
-                expect(page.locator('.wf-message')).to_have_count(4)
+                expect(page.locator('.wf-message')).to_have_count(4, timeout=600000 if args.live_ollama else 15000)
+                expect(page.locator('.wf-task[data-status="completed"]')).to_have_count(0)
                 expect(page.locator('.wf-message.operations')).to_have_count(1)
                 expect(page.locator('#wf-messages')).to_contain_text('12')
                 expect(page.locator('.wf-source')).to_contain_text('$240.00')
@@ -116,15 +115,12 @@ def main():
                     assert 'no saved records matched' not in actual, actual
                     assert '240 accessories' not in actual, actual
                 with page.expect_download() as download:
-                    page.get_by_role('link', name='↓ Sales CSV').click()
+                    page.get_by_role('link', name='Download source report').click()
                 downloaded = download.value
                 target = artifacts / 'sample-sales.csv'
                 downloaded.save_as(target)
                 assert 'DEMO Dallas Sample Store' in target.read_text(encoding='utf-8-sig')
                 page.screenshot(path=str(artifacts / ('live-desktop.png' if args.live_ollama else 'chat-desktop.png')), full_page=True)
-                page.get_by_role('button', name='View assignment activity').click()
-                expect(page.locator('#wf-audit-content')).to_contain_text('tool · completed')
-                page.locator('#wf-audit-dialog .close').click()
                 # History persists through a page reload and still has exactly one job.
                 page.reload()
                 expect(page.locator('#wf-chats .wf-chat')).to_have_count(1)

@@ -54,7 +54,7 @@
     if (stick || nearBottom) log.scrollTop = log.scrollHeight;
   }
   function renderTasks() {
-    el('tasks').innerHTML = tasks.slice(0,10).map(task => {
+    el('tasks').innerHTML = tasks.filter(task => task.status !== 'completed').slice(0,10).map(task => {
       const own = task.creator_id === currentUser.id, running = ['pending','running'].includes(task.status);
       const retryable = ['failed','cancelled'].includes(task.status) && task.attempts < 3;
       return '<div class="wf-task" data-status="' + escapeHTML(task.status) + '"><span class="wf-task-status">' + escapeHTML(task.status) + '</span><div class="wf-task-info"><strong>' + escapeHTML(task.step) + '</strong>' + (task.error ? '<small>' + escapeHTML(task.error) + '</small>' : '') + '</div><div class="wf-task-actions">' + (task.has_report ? '<a href="/api/internal/workforce/tasks/' + task.id + '/report.csv" download>↓ Sales CSV</a>' : '') + (own && running ? '<button data-task="' + task.id + '" data-action="cancel">Cancel</button>' : '') + (own && task.status === 'pending' && status?.execution === 'request' ? '<button data-task="' + task.id + '" data-action="run">Start</button>' : '') + (own && retryable ? '<button data-task="' + task.id + '" data-action="retry">Retry</button>' : '') + '<button data-audit="' + task.id + '" aria-label="View assignment activity">Activity</button>' + (['failed','cancelled'].includes(task.status) ? '<button class="wf-dismiss" data-task="' + task.id + '" data-action="dismiss" aria-label="Dismiss ' + task.status + ' assignment" title="Dismiss assignment">&times;</button>' : '') + '</div></div>';
