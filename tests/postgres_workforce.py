@@ -87,6 +87,9 @@ def main():
         claimed = store.claim('worker', task['task_id'])
         assert store.claim('other-worker', task['task_id']) is None
         assert store.active(claimed)
+        context = store.assignment_context(claimed)
+        assert context['title'] == 'Sample PostgreSQL chat' and context['recent_messages'] == []
+        assert set(context['member_ids']) == {user['id'], other}
         result = {'rows': [{'store': 'Sample'}], 'totals': {'total_boxes': 12, 'accessory': 240},
                   'coverage': {'complete': 1, 'expected': 1, 'retained': 0}, 'start': '2026-10-08', 'end': '2026-10-08'}
         assert store.progress(claimed, 'Done', ('ai-manager', 'AI Manager'), 'Sample summary', complete=True, result=result)
@@ -101,6 +104,8 @@ def main():
         store.control(second, user, 'cancel')
         store.control(second, user, 'retry')
         running = store.claim('worker', second)
+        context = store.assignment_context(running)
+        assert [m['content'] for m in context['recent_messages']] == ['Sample sales question', 'Sample summary']
         with store.connection(True) as conn:
             conn.execute('UPDATE tasks SET lease_until=0 WHERE id=?', (second,))
         store.expire()

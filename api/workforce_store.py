@@ -126,6 +126,30 @@ class Store:
             members = [row['user_id'] for row in conn.execute('SELECT user_id FROM members WHERE conversation_id=?', (chat,))]
         return dict(conversation=conversation, messages=messages, tasks=tasks, member_ids=members, has_older=has_older)
 
+    def assignment_context(self, task):
+        """Read only this member's conversation, stopping before the assignment."""
+        with self.connection() as conn:
+            conversation = self.member(conn, task['conversation_id'], task['creator_id'])
+            members = [row['user_id'] for row in conn.execute(
+                'SELECT user_id FROM members WHERE conversation_id=?', (task['conversation_id'],))]
+            rows = conn.execute('''SELECT sender_name,kind,content,created_at FROM messages
+                WHERE conversation_id=? AND seq<? ORDER BY seq DESC LIMIT 25''',
+                (task['conversation_id'], task['message_seq'])).fetchall()
+        history, remaining = [], 9000
+        limited = len(rows) > 24
+        for row in rows[:24]:
+            content = row['content'][:min(2500, remaining)]
+            if not content:
+                limited = True
+                break
+            truncated = len(content) < len(row['content'])
+            limited = limited or truncated
+            history.append({'name': row['sender_name'][:100], 'kind': row['kind'],
+                            'content': content, 'truncated': truncated, 'sent_at': row['created_at']})
+            remaining -= len(content)
+        return {'title': conversation['title'], 'member_ids': members,
+                'recent_messages': history[::-1], 'history_limited': limited}
+
     @staticmethod
     def public_task(row):
         return {**{k: row[k] for k in ('id', 'creator_id', 'status', 'step', 'created_at', 'started_at', 'completed_at', 'error', 'attempts')},

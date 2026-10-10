@@ -36,7 +36,15 @@ does not upgrade the account, purchase credits, or fall back to a paid provider.
 If you independently upgrade the Groq account, that account's usage charges apply.
 Vercel and Supabase hosting limits still apply separately.
 
-Prompts and selected sales summaries are sent to Groq. Groq documents that it does
+The manager can help with planning, writing, explanations and code drafting as
+well as saved sales reporting. It receives the requester's display name, this
+group's title and member display names (including AI teammates), and up to 24
+preceding messages from this group. History is capped at 9,000 content characters,
+with at most 2,500 per message; older or longer context may need restating.
+It cannot execute code, change employee accounts, inspect files, browse, send
+external messages or act on unconnected business systems.
+
+Prompts, this bounded chat context and selected sales summaries are sent to Groq. Groq documents that it does
 not retain inference content by default, with exceptions for reliability/abuse
 monitoring; all customers can enable Zero Data Retention in Data Controls.
 Review [Groq data handling](https://console.groq.com/docs/your-data),

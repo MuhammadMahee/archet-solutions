@@ -264,6 +264,68 @@ def test_manager_can_reply_without_inventing_tool_execution(client, queue):
         assert conn.execute("SELECT COUNT(*) FROM audit WHERE event='tool.started'").fetchone()[0] == 0
 
 
+def test_manager_receives_current_group_identity_and_history_only(client, queue, store):
+    login(client)
+    private = chat(client)
+    send(client, private, content='PRIVATE OTHER CHAT', invoke_agents=False)
+    cid = chat(client, [store.member['id']])
+    send(client, cid, content='Call the project Sunrise.', invoke_agents=False)
+    login(client, 'Member')
+    send(client, cid, content='I can help with Sunrise.', invoke_agents=False)
+    login(client)
+    send(client, cid, content='Who is here and what did we decide?')
+    task = queue.claim('worker')
+    send(client, cid, content='FUTURE MESSAGE', invoke_agents=False)
+    model = Model()
+    def reply(model_name, system, content, schema=None):
+        model.calls.append((system, content))
+        return json.dumps(dict(action='reply', message='You are Mahee. Member is also here.', start='', end='', dealer='', market=''))
+    model.chat = reply
+    ai.execute(queue, task, model)
+    assert len(model.calls) == 1
+    context = json.loads(model.calls[0][1])
+    assert context['requester'] == {'name': 'Mahee', 'kind': 'human'}
+    assert {p['name'] for p in context['conversation']['participants']} == {'Mahee', 'Member', ai.MANAGER[1], ai.OPERATIONS[1]}
+    assert [m['name'] for m in context['conversation']['recent_messages']] == ['Mahee', 'Member']
+    assert 'Sunrise' in model.calls[0][1]
+    for excluded in ('PRIVATE OTHER CHAT', 'FUTURE MESSAGE', 'OtherAdmin', 'session_version', store.owner['id']):
+        assert excluded not in model.calls[0][1]
+    assert context['current_request'] == 'Who is here and what did we decide?'
+    assert queue.snapshot(cid, store.owner['id'])['tasks'][0]['status'] == 'completed'
+    with queue.connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM audit WHERE event='tool.started'").fetchone()[0] == 0
+
+
+def test_manager_history_is_bounded_ordered_and_membership_checked(client, queue, store):
+    login(client)
+    cid = chat(client)
+    for number in range(28):
+        send(client, cid, content=f'{number}: ' + 'x' * 3900, invoke_agents=False)
+    send(client, cid, content='Summarize our plan')
+    task = queue.claim('worker')
+    context = queue.assignment_context(task)
+    history = context['recent_messages']
+    assert context['history_limited'] is True
+    assert sum(len(m['content']) for m in history) <= 9000
+    assert all(len(m['content']) <= 2500 for m in history)
+    assert history[-1]['content'].startswith('27: ')
+    assert [int(m['content'].split(':')[0]) for m in history] == sorted(int(m['content'].split(':')[0]) for m in history)
+    with pytest.raises(ai.portal.PortalError):
+        queue.assignment_context({**task, 'creator_id': store.admin['id']})
+
+
+def test_removing_membership_prevents_context_from_reaching_model(client, queue, store):
+    login(client)
+    cid = chat(client)
+    send(client, cid)
+    task = queue.claim('worker')
+    with queue.connection(True) as conn:
+        conn.execute('DELETE FROM members WHERE conversation_id=? AND user_id=?', (cid, store.owner['id']))
+    model = Model()
+    ai.execute(queue, task, model)
+    assert model.calls == []
+
+
 def test_ollama_transport_timeout_and_cloud_rejection(monkeypatch):
     class Offline:
         def open(self, *args, **kwargs):
