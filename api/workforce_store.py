@@ -404,3 +404,11 @@ class Store:
             if row['status'] != 'completed' or not row['result']:
                 raise PortalError('No completed sales report is available.', 404)
             return json.loads(row['result'])
+
+    def latest_report(self, task):
+        with self.connection() as conn:
+            self.member(conn, task['conversation_id'], task['creator_id'])
+            row = conn.execute('''SELECT result FROM tasks WHERE conversation_id=?
+                AND message_seq<? AND status='completed' AND result IS NOT NULL
+                ORDER BY message_seq DESC LIMIT 1''', (task['conversation_id'], task['message_seq'])).fetchone()
+            return json.loads(row['result']) if row else None

@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from api import portal, sales
-from api.workforce_images import report_image, text_image, website_image
+from api.workforce_images import text_image, website_image
 
 MANAGER = ('ai-manager', 'Archet AI Manager')
 OPERATIONS = ('ai-operations', 'Operations Agent')
@@ -85,7 +85,7 @@ class Ollama:
 
 PLAN_SCHEMA = {
     'type': 'object', 'additionalProperties': False,
-    'properties': {'action': {'type': 'string', 'enum': ['sales', 'reply', 'add_agents', 'summary_image', 'website_screenshot']},
+    'properties': {'action': {'type': 'string', 'enum': ['sales', 'sales_snapshot', 'reply', 'add_agents', 'summary_image', 'website_screenshot']},
                    'message': {'type': 'string'}, 'start': {'type': 'string'}, 'end': {'type': 'string'},
                    'dealer': {'type': 'string'}, 'market': {'type': 'string'},
                    'agent_ids': {'type': 'array', 'items': {'type': 'string', 'enum': [a['id'] for a in SPECIALISTS]}},
@@ -123,6 +123,8 @@ def conversation_people(member_ids, agent_ids):
 
 def manager_context(store, task, user):
     context = store.assignment_context(task)
+    report = store.latest_report(task)
+    context['last_sales_report'] = ({k: report[k] for k in ('start', 'end', 'filters')} if report else None)
     member_ids, agent_ids = context.pop('member_ids'), context.pop('agent_ids')
     creator = context.pop('creator_id')
     can_manage = user['role'] == 'admin' or creator == user['id']
@@ -177,8 +179,17 @@ are supported. No private dashboards, cookies or authenticated browser sessions 
 For a request to send a summary, plan or other chat content as an image, use action=summary_image,
 put the full concise content to render in message, and leave url empty. This makes a generated
 summary card, not a literal browser screenshot; describe it accurately.
-Sales reports automatically include an image snapshot as well as their CSV; use action=sales
-to retrieve a sales report, including when a user requests its screenshot.
+Sales reports include the EXACT Sales Update "Copy Snapshot" table image (all stores, metrics,
+colors and totals, without the Dealer column) as well as their CSV. Use action=sales to retrieve
+a sales report, including a new sales snapshot request. Never substitute a text list or generic
+summary_image for a sales snapshot. You do not need to click a button or access the clipboard;
+the app renders and attaches the same image through its shared Copy Snapshot renderer.
+For follow-ups asking for the snapshot or the "Copy Snapshot" button output of the last sales
+report, use action=sales_snapshot if conversation.last_sales_report exists and the user is not
+changing its filters or dates. This reattaches that saved report without changing its figures.
+For sales_snapshot, start/end/dealer/market/url are empty, agent_ids=[], and message is a short
+description. If the user changes the selection, use action=sales with the requested selection.
+If there is no previous report or clear selection, ask which dealer, market and dates to use.
 For every action except website_screenshot, url must be empty. For image actions agent_ids=[],
 and start/end/dealer/market are empty. Never claim an image was attached before the tool runs.
 uploaded_image_notes and earlier_image_notes describe screenshots using a vision model.
@@ -215,8 +226,10 @@ def parse_plan(raw):
         raise AIError('The AI Manager returned an invalid bot request.')
     if plan['action'] != 'website_screenshot' and plan['url']:
         raise AIError('The AI Manager returned an unexpected website URL.')
-    if plan['action'] not in ('sales', 'reply', 'add_agents', 'summary_image', 'website_screenshot') or not plan['message'].strip() or len(plan['message']) > 6000:
+    if plan['action'] not in ('sales', 'sales_snapshot', 'reply', 'add_agents', 'summary_image', 'website_screenshot') or not plan['message'].strip() or len(plan['message']) > 6000:
         raise AIError('The AI Manager returned an unsupported plan.')
+    if plan['action'] == 'sales_snapshot' and any(plan[k] for k in ('start', 'end', 'dealer', 'market')):
+        raise AIError('Use a new sales report to change the snapshot dates or filters.')
     if plan['action'] == 'sales':
         try:
             start, end = date.fromisoformat(plan['start']), date.fromisoformat(plan['end'])
@@ -246,6 +259,7 @@ def sales_tool(store, task, plan):
     allowed = ('dealer', 'market', 'store', 'new_activation', 'upgrade', 'reactivation', 'bts', 'hsi', 'accessory', 'total_boxes', 'qpay', 'apo', 'qpay_conv', 'stale', 'incomplete', 'unmatched')
     result = normalize({'start': data['start'], 'end': data['end'], 'rows': [{k: r[k] for k in allowed if k in r} for r in data['rows']],
                         'totals': data['totals'], 'coverage': data['coverage'], 'updated_at': data['updated_at'],
+                        'metric_fills': data.get('metric_fills') or sales.metric_fills(data['rows']),
                         'source': 'Saved Sales Update records', 'filters': {'dealer': plan['dealer'], 'market': plan['market']}})
     store.progress(task, 'Operations is analyzing the report', event='tool.completed', details={'tool': 'get_daily_sales', 'rows': len(result['rows'])})
     return result
@@ -322,6 +336,15 @@ Never invent company facts or impersonate a human. Keep the answer under 6000 ch
         check(store, task)
         plan = parse_plan(client.chat(task['model'], manager_instructions(), json.dumps(context), PLAN_SCHEMA))
         check(store, task)
+        if plan['action'] == 'sales_snapshot':
+            result = store.latest_report(task)
+            if result is None:
+                raise AIError('No saved sales report is available in this group yet. Specify the dealer, market and dates for a new snapshot.')
+            filters = result['filters']
+            description = f"Sales Update Copy Snapshot: {filters['dealer'] or 'All dealers'} / {filters['market'] or 'All markets'}, {result['start']} to {result['end']}. Same saved figures as the previous report. Open the image to copy or download it."
+            check(store, task)
+            store.progress(task, 'Sales snapshot ready', MANAGER, description, complete=True, result=result)
+            return
         if plan['action'] in ('summary_image', 'website_screenshot'):
             image_action(store, task, plan, MANAGER)
             return
@@ -338,7 +361,7 @@ Never invent company facts or impersonate a human. Keep the answer under 6000 ch
         store.progress(task, 'Delegated to Operations', MANAGER, plan['message'], event='agent.delegated', details={'agent': OPERATIONS[0]})
         result = sales_tool(store, task, plan)
         # Bound context without silently truncating the downloadable source report.
-        context = {**result, 'rows': result['rows'][:12], 'row_count': len(result['rows']), 'preview_rows': min(12, len(result['rows']))}
+        context = {**{k: v for k, v in result.items() if k != 'metric_fills'}, 'rows': result['rows'][:12], 'row_count': len(result['rows']), 'preview_rows': min(12, len(result['rows']))}
         if len(json.dumps(context)) > 16000:
             context['rows'] = []
             context['preview_rows'] = 0
@@ -365,7 +388,7 @@ Do not invent facts. Limit your answer to 100 words.''', json.dumps({'request': 
                          'totals': result['totals'], 'coverage': result['coverage'], 'updated_at': result['updated_at'],
                          'accessory_unit': 'USD', 'previewed_store_count': context['preview_rows']}}))
         check(store, task)
-        store.progress(task, 'Sales report ready', MANAGER, final, complete=True, result=result, images=[report_image(result)])
+        store.progress(task, 'Sales report ready', MANAGER, final, complete=True, result=result)
     except Cancelled:
         pass
     except AIError as exc:

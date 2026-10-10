@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from flask import current_app, g, jsonify, request, Response
 
-from api import portal
+from api import portal, sales
 from api.portal import PortalError, require_user, body, text_field, valid_id
 from api.workforce_ai import AIError, Ollama, execute, conversation_people
 from api.workforce_agents import AGENTS, mentioned_people
@@ -197,6 +197,14 @@ def register_workforce(app):
         if action in ('retry', 'run'):
             run_assignment(store, task_id, g.portal_user)
         return jsonify(status='success')
+
+    @app.get('/api/internal/workforce/tasks/<task_id>/snapshot')
+    @require_user()
+    def workforce_snapshot(task_id):
+        result = get_store().result(valid_id(task_id), g.portal_user['id'])
+        # Render the saved report using the same canvas as Sales Update's Copy Snapshot.
+        # Older reports predate stored color fills; derive them from their saved rows.
+        return jsonify({**result, 'metric_fills': result.get('metric_fills') or sales.metric_fills(result['rows'])})
 
     @app.get('/api/internal/workforce/tasks/<task_id>/report.csv')
     @require_user()

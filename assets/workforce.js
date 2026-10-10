@@ -6,6 +6,7 @@
   let polling = false, ticks = 0, pendingSend = null, sending = false;
   let participants = [], canAddAgents = false, mentionOptions = [], mentionIndex = 0, mentionStart = -1;
   let attachedImages = [], processingImages = false;
+  const reportSnapshots = new Map();
   const seen = new Map();
   const valid = token => token === generation && currentUser && !currentUser.rest_mode && page === 'workforce';
   const error = message => { el('error').textContent = message || ''; el('error').hidden = !message; };
@@ -19,7 +20,47 @@
   const directory = dialog('directory-dialog', 'Your AI employees', '<p>Add specialist bots to a group by asking @manager. Mention a joined bot to get its help.</p><div id="wf-employees"></div><p>Specialists advise and draft. Adding a bot does not connect private HR, finance or other business records.</p>');
   const settings = dialog('settings-dialog', 'Connection & models', '<div id="wf-connection" class="wf-connection"></div><form id="wf-model-form"><div class="field"><label for="wf-model">Default AI model</label><select id="wf-model"></select></div><p>Changes apply to new assignments. Current assignments keep their original model.</p><p id="wf-settings-error" class="error" role="alert"></p><button class="primary" type="submit" id="wf-model-save">Save model</button></form><p id="wf-worker-help">Start the AI worker on your company AI computer to process queued assignments.</p><div id="wf-integrations" class="wf-connection"></div>');
   const auditDialog = dialog('audit-dialog', 'Assignment activity', '<div id="wf-audit-content"></div>');
-  const imageDialog = dialog('image-dialog', 'Chat image', '<img id="wf-full-image" alt="Chat attachment"><a id="wf-download-image" download>Download image</a>');
+  const imageDialog = dialog('image-dialog', 'Chat image', '<img id="wf-full-image" alt="Chat attachment"><button type="button" id="wf-copy-snapshot" hidden>Copy Snapshot</button> <a id="wf-download-image" download>Download image</a><p id="wf-image-feedback" role="status"></p>');
+  el('copy-snapshot').onclick = async () => {
+    const button = el('copy-snapshot'); button.disabled = true;
+    try {
+      const bytes = Uint8Array.from(atob(el('full-image').src.split(',')[1]), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], {type:'image/png'});
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      el('image-feedback').textContent = 'Snapshot copied.';
+    } catch { el('image-feedback').textContent = 'Clipboard unavailable. Use Download image to save the snapshot.'; }
+    finally { button.disabled = false; }
+  };
+
+  function snapshotMarkup(message) {
+    if (!message.report_ready) return imageMarkup(message.images);
+    return '<button type="button" class="wf-chat-image wf-sales-snapshot" data-snapshot="' + escapeHTML(message.task_id) + '" aria-label="Open Sales Update Copy Snapshot"><span>Loading Sales Update snapshot…</span></button>';
+  }
+  async function loadSnapshots() {
+    const token = generation, selected = selection;
+    for (const button of el('messages').querySelectorAll('[data-snapshot]')) {
+      const id = button.dataset.snapshot;
+      try {
+        if (!reportSnapshots.has(id)) reportSnapshots.set(id, api(endpoint + 'tasks/' + id + '/snapshot').then(report => {
+          if (!valid(token) || selected !== selection) return null;
+          return window.salesSnapshot.render(report, report.filters).toDataURL('image/png');
+        }));
+        const url = await reportSnapshots.get(id);
+        if (!valid(token) || selected !== selection) return;
+        if (!url || !button.isConnected) continue;
+        const log = el('log'), atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 100;
+        const image = document.createElement('img'), caption = document.createElement('small');
+        image.alt = 'Sales Update Copy Snapshot'; image.src = url;
+        image.onload = () => { if (atBottom && valid(token) && selected === selection) log.scrollTop = log.scrollHeight; };
+        caption.textContent = 'Sales Update · Copy Snapshot';
+        button.replaceChildren(image, caption);
+      } catch {
+        if (!valid(token) || selected !== selection) return;
+        reportSnapshots.delete(id);
+        button.textContent = 'Snapshot could not load. Click to retry.';
+      }
+    }
+  }
   const imageInput = document.createElement('input'); imageInput.type = 'file'; imageInput.multiple = true;
   imageInput.accept = 'image/png,image/jpeg,image/webp'; imageInput.hidden = true; imageInput.id = 'wf-image-input';
   const imageButton = document.createElement('button'); imageButton.type = 'button'; imageButton.className = 'wf-image-button';
@@ -175,9 +216,10 @@
     el('messages').innerHTML = visible.length ? '<div class="wf-date">' + escapeHTML(new Date(visible[0].created_at).toLocaleDateString(undefined, {weekday:'long',month:'long',day:'numeric'})) + '</div>' + visible.map(m => {
       const own = m.sender_id === currentUser.id, ai = m.kind === 'ai';
       const initials = ai ? (status?.employees?.find(a => a.id === m.sender_id)?.initials || 'AI') : m.sender_name.slice(0,2).toUpperCase();
-      return '<article class="wf-message ' + (own ? 'own ' : '') + ((m.mention_ids || []).includes(currentUser.id) ? 'mentioned ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + messageMarkup(m) + '</div>' + imageMarkup(m.images) + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
+      return '<article class="wf-message ' + (own ? 'own ' : '') + ((m.mention_ids || []).includes(currentUser.id) ? 'mentioned ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + messageMarkup(m) + '</div>' + snapshotMarkup(m) + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
     }).join('') : '<div class="wf-empty-chat">' + (query ? 'No matching loaded messages.' : 'Your AI team is ready for an assignment.<button type="button" class="wf-suggestion" id="wf-example">Summarize yesterday’s saved sales for all stores.</button>') + '</div>';
     if (stick || nearBottom) log.scrollTop = log.scrollHeight;
+    loadSnapshots();
   }
   function renderTasks() {
     el('tasks').innerHTML = tasks.filter(task => task.status !== 'completed').slice(0,10).map(task => {
@@ -213,6 +255,7 @@
     renderChats();
   }
   async function selectChat(id) {
+    reportSnapshots.clear();
     attachedImages = []; renderImagePreview();
     selection++; active = id; messages = []; tasks = []; pendingSend = null; participants = []; canAddAgents = false; closeMentions();
     el('input').value = ''; el('message-search').value = ''; el('older').hidden = true;
@@ -233,8 +276,10 @@
     } catch (e) { if (valid(token)) error(e.message); }
   }
   function clear() {
+    reportSnapshots.clear();
     participants = []; canAddAgents = false; closeMentions(); attachedImages = []; renderImagePreview();
     el('full-image').removeAttribute('src');
+    el('download-image').removeAttribute('href'); el('image-feedback').textContent = '';
     generation++; selection++; active = null; chats = []; messages = []; tasks = []; status = null; pendingSend = null; sending = false; seen.clear();
     el('chats').replaceChildren(); el('messages').replaceChildren(); el('tasks').replaceChildren();
     el('input').value = ''; el('search').value = ''; el('message-search').value = ''; el('new-form').reset(); el('people').replaceChildren();
@@ -268,9 +313,18 @@
   el('message-search').oninput = () => renderMessages();
   el('back').onclick = () => el('layout').classList.remove('chat-open');
   el('messages').onclick = event => {
+    const snapshot = event.target.closest('[data-snapshot]');
+    if (snapshot) {
+      const image = snapshot.querySelector('img');
+      if (!image) { loadSnapshots(); return; }
+      el('full-image').src = image.src; el('download-image').href = image.src;
+      el('download-image').download = 'sales-snapshot.png'; el('copy-snapshot').hidden = false;
+      el('image-feedback').textContent = ''; imageDialog.showModal(); return;
+    }
     const button = event.target.closest('[data-image]');
     if (button) {
       const url = '/api/internal/workforce/images/' + button.dataset.image;
+      el('copy-snapshot').hidden = true; el('download-image').download = ''; el('image-feedback').textContent = '';
       el('full-image').src = url; el('download-image').href = url; imageDialog.showModal();
     }
     if (event.target.closest('#wf-example')) { el('input').value = 'Summarize yesterday saved sales for all stores.'; el('input').focus(); }

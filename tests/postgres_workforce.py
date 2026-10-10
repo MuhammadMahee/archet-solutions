@@ -106,6 +106,7 @@ def main():
         store.control(second, user, 'cancel')
         store.control(second, user, 'retry')
         running = store.claim('worker', second)
+        assert store.latest_report(running) == result
         context = store.assignment_context(running)
         assert [m['content'] for m in context['recent_messages']] == ['Sample sales question', 'Sample summary']
         with store.connection(True) as conn:

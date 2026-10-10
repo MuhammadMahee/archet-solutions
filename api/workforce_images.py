@@ -80,14 +80,6 @@ def text_image(title, text, source='Generated summary'):
     return normalize_image(output.getvalue(), title, source)
 
 
-def report_image(report):
-    totals = report['totals']
-    text = f"Dates: {report['start']} to {report['end']}\nMatching stores: {len(report['rows'])}\nTotal boxes: {totals.get('total_boxes', 'Unavailable')}\nAccessory sales (USD): {totals.get('accessory', 'Unavailable')}\nCoverage: {report['coverage']['complete']}/{report['coverage']['expected']} source-days\n\n"
-    text += '\n'.join(f"{r.get('store', 'Store')}: {r.get('total_boxes', '?')} boxes; USD {r.get('accessory', '?')} accessory sales" for r in report['rows'][:12])
-    text += '\n\nFirst 12 stores shown. Full data is in the CSV. Missing data is not zero.'
-    return text_image('Saved sales report', text, 'Report snapshot from saved source records')
-
-
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         raise PortalError('The screenshot service redirected unexpectedly. Retry later.', 502)

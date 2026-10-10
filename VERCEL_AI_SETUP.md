@@ -86,8 +86,22 @@ permissions and quotas still apply. Gateway and Ollama modes can share images,
 but image reading currently requires Groq.
 
 Ask `@manager Send our checklist as a summary image.` Bots render summary cards
-locally, and completed saved-sales reports include an image plus the full CSV.
-These are generated cards, not screenshots of an external application.
+locally. These are generated cards, not screenshots of an external application.
+
+Sales reports use the exact **Sales Update → Copy Snapshot** canvas renderer in
+`assets/sales-snapshot.js`, shared by the dashboard and chat. The table includes
+every saved store row, all metrics, totals, dealer colors and APO/QPay color
+scales, omitting the Dealer column just like the dashboard button. Chat renders
+the image from the authorized saved report; it does not send private report
+data to the public website screenshot service or require a server browser.
+Open the image to **Copy Snapshot** or download its PNG; the full CSV is also
+available. Existing saved report messages use this layout too.
+
+Ask `@manager Send that using Copy Snapshot.` The `sales_snapshot` action
+reattaches the latest completed report in this group, preserving its dates,
+filters and figures without a fresh sales query. To change the selection or
+refresh the data, request a new sales report instead. Report data and images
+remain restricted to current group members.
 
 Ask `@manager Send a screenshot of https://example.com`. Public website captures
 use [Microlink's free API](https://microlink.io/pricing), which currently allows

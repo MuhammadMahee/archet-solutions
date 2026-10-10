@@ -81,7 +81,7 @@ def main():
         try:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch()
-                context = browser.new_context(viewport={'width': 1440, 'height': 1000})
+                context = browser.new_context(viewport={'width': 1440, 'height': 1000}, permissions=['clipboard-read','clipboard-write'])
                 page = context.new_page(); errors = []
                 page.on('pageerror', lambda e: errors.append(str(e)))
                 page.goto(origin + '/ai-workforce')
@@ -110,6 +110,22 @@ def main():
                 expect(page.locator('.wf-message.operations')).to_have_count(1)
                 expect(page.locator('#wf-messages')).to_contain_text('12')
                 expect(page.locator('.wf-source')).to_contain_text('$240.00')
+                expect(page.locator('.wf-sales-snapshot img')).to_be_visible()
+                # Chat uses the exact same saved-data renderer as the Copy Snapshot button.
+                assert page.evaluate('''async () => {
+                    const button = document.querySelector('[data-snapshot]');
+                    const report = await (await fetch('/api/internal/workforce/tasks/' + button.dataset.snapshot + '/snapshot')).json();
+                    return button.querySelector('img').src === salesSnapshot.render(report, report.filters).toDataURL('image/png');
+                }''')
+                page.locator('.wf-sales-snapshot').click()
+                expect(page.locator('#wf-full-image')).to_be_visible()
+                assert page.locator('#wf-full-image').evaluate('(img) => img.naturalWidth') == 1920
+                page.locator('#wf-copy-snapshot').click()
+                expect(page.locator('#wf-image-feedback')).to_have_text('Snapshot copied.')
+                with page.expect_download() as snapshot_download:
+                    page.locator('#wf-download-image').click()
+                snapshot_download.value.save_as(artifacts / 'copy-snapshot.png')
+                page.locator('#wf-image-dialog .close').click()
                 if args.live_ollama:
                     actual = page.locator('#wf-messages').inner_text().lower()
                     assert 'no saved records matched' not in actual, actual
@@ -130,7 +146,7 @@ def main():
                 page.locator('#wf-input').fill('<img src=x onerror="alert(1)"> **safe text**')
                 page.locator('#wf-input').press('Enter')
                 expect(page.locator('.wf-message')).to_have_count(5)
-                assert page.locator('#wf-messages img:not([src^="/api/internal/workforce/images/"])').count() == 0
+                assert page.locator('#wf-messages img:not([src^="/api/internal/workforce/images/"]):not(.wf-sales-snapshot img)').count() == 0
                 page.locator('#wf-message-search').fill('safe text')
                 expect(page.locator('.wf-message')).to_have_count(1)
                 page.locator('#wf-message-search').fill('')

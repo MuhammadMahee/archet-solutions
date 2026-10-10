@@ -11,7 +11,7 @@ import pytest
 from api import workforce_ai as ai, workforce_hosted as hosted, workforce_images as images
 from api.portal import PortalError
 from test_portal import store, client, login, write
-from test_workforce import local_workforce, queue, chat, send, Model
+from test_workforce import local_workforce, queue, chat, send, Model, report
 
 
 def sample():
@@ -170,3 +170,47 @@ def test_oversized_groq_request_does_not_recommend_waiting():
     error = HTTPError('https://api.groq.com', 429, 'limit', {}, BytesIO(b'{"error":{"message":"Request too large for model","code":"rate_limit_exceeded"}}'))
     with pytest.raises(ai.AIError, match='per-request allowance'):
         hosted.GroqAI().http_error(error)
+
+
+def test_sales_snapshot_reuses_saved_report_and_checks_membership(client, queue, store, monkeypatch):
+    login(client)
+    cid = chat(client, [store.member['id']])
+    monkeypatch.setattr(ai.sales, 'report_data', report)
+    first = send(client, cid).json['task_id']
+    ai.execute(queue, queue.claim('worker', first), Model())
+    saved = queue.result(first, store.owner['id'])
+    # Previous deployments saved reports without metric_fills.
+    saved.pop('metric_fills')
+    with queue.connection(True) as conn:
+        conn.execute('UPDATE tasks SET result=? WHERE id=?', (json.dumps(saved), first))
+    expected = ai.sales.metric_fills(saved['rows'])
+    endpoint = '/api/internal/workforce/tasks/' + first + '/snapshot'
+    response = client.get(endpoint)
+    assert response.status_code == 200
+    assert response.json['rows'] == saved['rows'] and response.json['metric_fills'] == expected
+    assert 'no-store' in response.headers['Cache-Control']
+    class CopyPlan(Model):
+        def chat(self, model, system, content, schema=None):
+            assert json.loads(content)['conversation']['last_sales_report']['start'] == saved['start']
+            return json.dumps(dict(action='sales_snapshot', message='Send the same snapshot.', url='', agent_ids=[], start='', end='', dealer='', market=''))
+    def forbidden(*args, **kwargs):
+        pytest.fail('Copy Snapshot must reuse the saved report, not requery sales')
+    monkeypatch.setattr(ai.sales, 'report_data', forbidden)
+    following = send(client, cid, content="There's a button of Copy Snapshot, I want you to give me the snapshot through that").json['task_id']
+    ai.execute(queue, queue.claim('worker', following), CopyPlan())
+    assert queue.result(following, store.owner['id']) == saved
+    last = queue.snapshot(cid, store.owner['id'])['messages'][-1]
+    assert last['report_ready'] and last['images'] == []
+    assert 'Copy Snapshot' in last['content']
+    login(client, 'Member')
+    assert client.get(endpoint).status_code == 200
+    login(client, 'OtherAdmin')
+    assert client.get(endpoint).status_code == 404
+    other_cid = chat(client)
+    other_task = send(client, other_cid).json['task_id']
+    assert queue.latest_report(queue.claim('worker', other_task)) is None
+
+
+def test_snapshot_plan_cannot_silently_change_filters():
+    with pytest.raises(ai.AIError, match='new sales report'):
+        ai.parse_plan(json.dumps(dict(action='sales_snapshot', message='copy', url='', agent_ids=[], start='', end='', dealer='Connect', market='')))
