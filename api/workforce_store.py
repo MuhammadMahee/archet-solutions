@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from api.portal import PortalError
 from api.workforce_agents import AGENTS, DEFAULT_IDS
+from api.workforce_controls_store import ControlsStore, PREF_DEFAULTS, visible_sql, visible_params
+from api.workforce_controls_schema import SCHEMA as CONTROLS_SCHEMA
 
 
 def now():
@@ -57,14 +59,14 @@ PRAGMA user_version=1;
 """
 
 
-class Store:
+class Store(ControlsStore):
     lease_seconds = 45
     def __init__(self, path):
         self.path = str(Path(path).resolve())
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as conn:
             conn.execute('PRAGMA journal_mode=WAL')
-            conn.executescript(SCHEMA)
+            conn.executescript(SCHEMA + CONTROLS_SCHEMA)
 
     @contextmanager
     def connection(self, write=False):
@@ -105,29 +107,36 @@ class Store:
 
     def list_chats(self, user):
         with self.connection() as conn:
-            return [dict(row) for row in conn.execute('''SELECT c.*,
-                (SELECT content FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1) AS preview,
+            rows = [dict(row) for row in conn.execute('''SELECT c.*,
+                EXISTS(SELECT 1 FROM chat_profiles p WHERE p.conversation_id=c.id AND p.avatar IS NOT NULL) AS has_avatar,
+                (SELECT COALESCE(MAX(seq),0) FROM chat_events e WHERE e.conversation_id=c.id AND e.event='group.updated') AS avatar_version,
+                (SELECT content FROM messages m WHERE m.conversation_id=c.id AND '''+visible_sql()+''' ORDER BY seq DESC LIMIT 1) AS preview,
                 (SELECT MAX(seq) FROM messages WHERE conversation_id=c.id) AS last_seq,
                 (SELECT MAX(mm.message_seq) FROM message_mentions mm JOIN messages msg ON msg.seq=mm.message_seq
                     WHERE msg.conversation_id=c.id AND mm.recipient_id=?) AS mention_seq,
                 (SELECT COUNT(*) FROM tasks WHERE conversation_id=c.id AND status IN ('pending','running')) AS working
                 FROM conversations c JOIN members m ON m.conversation_id=c.id WHERE m.user_id=?
-                ORDER BY last_seq DESC NULLS LAST,c.created_at DESC LIMIT 200''', (user, user))]
+                ORDER BY last_seq DESC NULLS LAST,c.created_at DESC LIMIT 200''', (*visible_params(user), user, user))]
+            preferences={r['conversation_id']:dict(r) for r in conn.execute('SELECT * FROM chat_preferences WHERE user_id=?',(user,))}
+            for row in rows:
+                row['preferences'] = {**PREF_DEFAULTS, **preferences.get(row['id'], {})}
+            return sorted(rows, key=lambda r: -r['preferences']['pinned'])
 
     def snapshot(self, chat, user, after=0, before=0):
         with self.connection() as conn:
             conversation = self.member(conn, chat, user)
             select = '''SELECT m.*, CASE WHEN t.status='completed' AND t.result IS NOT NULL AND
                 m.seq=(SELECT MAX(seq) FROM messages WHERE task_id=t.id) THEN 1 ELSE 0 END AS report_ready
-                FROM messages m LEFT JOIN tasks t ON t.id=m.task_id WHERE m.conversation_id=? '''
+                FROM messages m LEFT JOIN tasks t ON t.id=m.task_id WHERE m.conversation_id=? AND ''' + visible_sql() + ' '
             if after:
-                rows = conn.execute(select + 'AND m.seq>? ORDER BY m.seq LIMIT 100', (chat, after)).fetchall()
+                rows = conn.execute(select + 'AND m.seq>? ORDER BY m.seq LIMIT 100', (chat, *visible_params(user), after)).fetchall()
             else:
                 rows = conn.execute(select + 'AND m.seq<? ORDER BY m.seq DESC LIMIT 100',
-                                    (chat, before or 9223372036854775807)).fetchall()[::-1]
+                                    (chat, *visible_params(user), before or 9223372036854775807)).fetchall()[::-1]
             messages = [dict(row) for row in rows]
             mentions = {}
             images = {}
+            details, flags, reactions, quotes = {}, {}, {}, {}
             if messages:
                 for item in conn.execute('''SELECT i.id,i.message_seq,i.name,i.mime,i.width,i.height,i.source FROM message_images i
                     JOIN messages m ON m.seq=i.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=?''',
@@ -137,20 +146,33 @@ class Store:
                     JOIN messages m ON m.seq=mm.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=?''',
                     (chat, messages[0]['seq'], messages[-1]['seq'])):
                     mentions.setdefault(item['message_seq'], []).append(item['recipient_id'])
+                bounds=(chat,messages[0]['seq'],messages[-1]['seq'])
+                details={r['message_seq']:dict(r) for r in conn.execute('SELECT d.* FROM message_details d JOIN messages m ON m.seq=d.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=?',bounds)}
+                flags={r['message_seq']:r['starred'] for r in conn.execute('SELECT f.message_seq,f.starred FROM message_flags f JOIN messages m ON m.seq=f.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=? AND f.user_id=?',(*bounds,user))}
+                for r in conn.execute('SELECT r.* FROM message_reactions r JOIN messages m ON m.seq=r.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=?',bounds):
+                    reactions.setdefault(r['message_seq'],[]).append({'user_id':r['user_id'],'emoji':r['emoji']})
+                quotes={r['seq']:dict(r) for r in conn.execute('SELECT m.seq,m.sender_name,m.content FROM messages m WHERE m.conversation_id=? AND '+visible_sql()+' AND m.seq IN (SELECT reply_seq FROM message_details WHERE message_seq>=? AND message_seq<=?)',(chat,*visible_params(user),messages[0]['seq'],messages[-1]['seq']))}
             for message in messages:
                 message['mention_ids'] = mentions.get(message['seq'], [])
                 message['images'] = images.get(message['seq'], [])
+                detail = details.get(message['seq'], {})
+                message['details'] = detail
+                message['starred'] = bool(flags.get(message['seq']))
+                message['reactions'] = reactions.get(message['seq'], [])
+                if detail.get('reply_seq'):
+                    message['reply'] = dict(quotes.get(detail['reply_seq'], {'content':'Original message unavailable','sender_name':''}))
+                    message['reply']['content'] = message['reply']['content'][:300]
                 if message['report_ready']:
                     result = json.loads(conn.execute('SELECT result FROM tasks WHERE id=?', (message['task_id'],)).fetchone()['result'])
                     message['report_summary'] = {'store_count': len(result['rows']), 'total_boxes': result['totals'].get('total_boxes'),
                                                  'accessory_usd': result['totals'].get('accessory'), 'coverage': result['coverage'],
                                                  'start': result['start'], 'end': result['end']}
             oldest = messages[0]['seq'] if messages else 0
-            has_older = bool(oldest and conn.execute('SELECT 1 FROM messages WHERE conversation_id=? AND seq<? LIMIT 1', (chat, oldest)).fetchone())
-            tasks = [self.public_task(row) for row in conn.execute('''SELECT t.* FROM tasks t WHERE conversation_id=?
+            has_older = bool(oldest and conn.execute('SELECT 1 FROM messages m WHERE conversation_id=? AND seq<? AND '+visible_sql()+' LIMIT 1', (chat, oldest, *visible_params(user))).fetchone())
+            tasks = [self.public_task(row) for row in conn.execute('''SELECT t.* FROM tasks t JOIN messages m ON m.seq=t.message_seq WHERE t.conversation_id=? AND '''+visible_sql()+'''
                 AND NOT (t.status IN ('failed','cancelled') AND EXISTS (
                     SELECT 1 FROM settings s WHERE s.key=? || t.id AND s.value=CAST(t.attempts AS TEXT)))
-                ORDER BY created_at DESC LIMIT 30''', (chat, 'dismissed:' + user + ':'))]
+                ORDER BY t.created_at DESC LIMIT 30''', (chat, *visible_params(user), 'dismissed:' + user + ':'))]
             members = [row['user_id'] for row in conn.execute('SELECT user_id FROM members WHERE conversation_id=?', (chat,))]
             agents = self.agent_ids(conn, chat)
         return dict(conversation=conversation, messages=messages, tasks=tasks, member_ids=members, agent_ids=agents, has_older=has_older)
@@ -173,15 +195,15 @@ class Store:
             conversation = self.member(conn, task['conversation_id'], task['creator_id'])
             members = [row['user_id'] for row in conn.execute(
                 'SELECT user_id FROM members WHERE conversation_id=?', (task['conversation_id'],))]
-            rows = conn.execute('''SELECT seq,sender_name,kind,content,created_at FROM messages
-                WHERE conversation_id=? AND seq<? ORDER BY seq DESC LIMIT 25''',
-                (task['conversation_id'], task['message_seq'])).fetchall()
+            rows = conn.execute('''SELECT seq,sender_name,kind,content,created_at FROM messages m
+                WHERE conversation_id=? AND seq<? AND '''+visible_sql()+''' ORDER BY seq DESC LIMIT 25''',
+                (task['conversation_id'], task['message_seq'], *visible_params(task['creator_id']))).fetchall()
             agents = self.agent_ids(conn, task['conversation_id'])
             mentions = [r['recipient_id'] for r in conn.execute(
                 'SELECT recipient_id FROM message_mentions WHERE message_seq=?', (task['message_seq'],))]
             image_notes = [dict(r) for r in conn.execute('''SELECT i.analysis,i.name FROM message_images i
                 JOIN messages m ON m.seq=i.message_seq WHERE m.conversation_id=? AND m.seq<? AND i.analysis<>''
-                ORDER BY m.seq DESC LIMIT 2''', (task['conversation_id'], task['message_seq']))]
+                AND '''+visible_sql()+''' ORDER BY m.seq DESC LIMIT 2''', (task['conversation_id'], task['message_seq'], *visible_params(task['creator_id'])))]
         history, remaining = [], 9000
         limited = len(rows) > 24
         for row in rows[:24]:
@@ -204,9 +226,11 @@ class Store:
         return {**{k: row[k] for k in ('id', 'creator_id', 'status', 'step', 'created_at', 'started_at', 'completed_at', 'error', 'attempts')},
                 'has_report': row['status'] == 'completed' and bool(row['result'])}
 
-    def enqueue(self, chat, user, content, request_id, model, invoke=True, mention_ids=None, images=None):
+    def enqueue(self, chat, user, content, request_id, model, invoke=True, mention_ids=None, images=None, reply_seq=None):
         with self.connection(True) as conn:
             self.member(conn, chat, user['id'])
+            if reply_seq is not None and self.message(conn, reply_seq, user['id'])['conversation_id'] != chat:
+                raise PortalError('Reply must belong to this conversation.', 400)
             mentions = list(dict.fromkeys(mention_ids or []))
             allowed = set(self.agent_ids(conn, chat)) | {r['user_id'] for r in conn.execute(
                 'SELECT user_id FROM members WHERE conversation_id=?', (chat,))}
@@ -217,6 +241,9 @@ class Store:
             old = conn.execute('SELECT seq,task_id,content FROM messages WHERE conversation_id=? AND sender_id=? AND request_id=?',
                                (chat, user['id'], request_id)).fetchone()
             if old:
+                old_reply = conn.execute('SELECT reply_seq FROM message_details WHERE message_seq=?',(old['seq'],)).fetchone()
+                if (old_reply['reply_seq'] if old_reply else None) != reply_seq:
+                    raise PortalError('This message ID was already used for another reply.',409)
                 old_images = sorted(r['data'] for r in conn.execute('SELECT data FROM message_images WHERE message_seq=?', (old['seq'],)))
                 old_mentions = {r['recipient_id'] for r in conn.execute('SELECT recipient_id FROM message_mentions WHERE message_seq=?', (old['seq'],))}
                 if old['content'] != content or bool(old['task_id']) != invoke or old_mentions != set(mentions) or old_images != sorted(i['data'] for i in (images or [])):
@@ -230,6 +257,7 @@ class Store:
                 VALUES(?,?,?,?,?,?,?,?) RETURNING seq''', (chat, user['id'], user['display_name'], 'human', content, stamp, task, request_id)).fetchone()['seq']
             conn.executemany('INSERT INTO message_mentions VALUES(?,?)', [(seq, uid) for uid in mentions])
             self.save_images(conn, seq, images or [])
+            self.message_details(conn, seq, chat, reply_seq)
             if invoke:
                 conn.execute('''INSERT INTO tasks(id,conversation_id,message_seq,creator_id,session_version,model,status,step,created_at)
                     VALUES(?,?,?,?,?,?,'pending','Waiting to start',?)''',
@@ -331,6 +359,7 @@ class Store:
                 seq = conn.execute('''INSERT INTO messages(conversation_id,sender_id,sender_name,kind,content,created_at,task_id)
                     VALUES(?,?,?,'ai',?,?,?) RETURNING seq''', (task['conversation_id'], sender[0], sender[1], content, now(), task['id'])).fetchone()['seq']
                 self.save_images(conn, seq, images or [])
+                self.message_details(conn, seq, task['conversation_id'])
             conn.execute('UPDATE tasks SET step=? WHERE id=?', (step, task['id']))
             if event:
                 self.audit(conn, task['creator_id'], event, task['id'], details)
@@ -356,19 +385,20 @@ class Store:
                 JOIN messages m ON m.seq=i.message_seq WHERE i.id=?''', (image_id,)).fetchone()
             if not row:
                 raise PortalError('Image not found.', 404)
-            self.member(conn, row['conversation_id'], user)
+            self.message(conn, row['message_seq'], user)
             return dict(row)
 
     def task_images(self, task):
         with self.connection() as conn:
             self.member(conn, task['conversation_id'], task['creator_id'])
+            self.message(conn,task['message_seq'],task['creator_id'])
             current = [dict(r) for r in conn.execute('SELECT * FROM message_images WHERE message_seq=?', (task['message_seq'],))]
             if current:
                 return current
             previous = conn.execute('''SELECT m.seq FROM messages m JOIN message_images i ON i.message_seq=m.seq
                 WHERE m.conversation_id=? AND m.seq<? AND m.kind='human' AND i.analysis=''
                 AND m.seq IN (SELECT seq FROM messages WHERE conversation_id=? AND seq<? ORDER BY seq DESC LIMIT 24)
-                ORDER BY m.seq DESC LIMIT 1''', (task['conversation_id'], task['message_seq'], task['conversation_id'], task['message_seq'])).fetchone()
+                AND '''+visible_sql()+''' ORDER BY m.seq DESC LIMIT 1''', (task['conversation_id'], task['message_seq'], task['conversation_id'], task['message_seq'], *visible_params(task['creator_id']))).fetchone()
             return [dict(r) for r in conn.execute('SELECT * FROM message_images WHERE message_seq=?', (previous['seq'],))] if previous else []
 
     def remember_images(self, task, analysis, images):
@@ -401,6 +431,8 @@ class Store:
             if not row:
                 raise PortalError('Report not found.', 404)
             self.member(conn, row['conversation_id'], user)
+            message = conn.execute('SELECT seq FROM messages WHERE task_id=? ORDER BY seq DESC LIMIT 1',(task_id,)).fetchone()
+            if message: self.message(conn,message['seq'],user)
             if row['status'] != 'completed' or not row['result']:
                 raise PortalError('No completed sales report is available.', 404)
             return json.loads(row['result'])
@@ -408,7 +440,7 @@ class Store:
     def latest_report(self, task):
         with self.connection() as conn:
             self.member(conn, task['conversation_id'], task['creator_id'])
-            row = conn.execute('''SELECT result FROM tasks WHERE conversation_id=?
-                AND message_seq<? AND status='completed' AND result IS NOT NULL
-                ORDER BY message_seq DESC LIMIT 1''', (task['conversation_id'], task['message_seq'])).fetchone()
+            row = conn.execute('''SELECT t.result FROM tasks t JOIN messages m ON m.seq=t.message_seq WHERE t.conversation_id=?
+                AND t.message_seq<? AND t.status='completed' AND t.result IS NOT NULL AND '''+visible_sql()+'''
+                ORDER BY t.message_seq DESC LIMIT 1''', (task['conversation_id'], task['message_seq'], *visible_params(task['creator_id']))).fetchone()
             return json.loads(row['result']) if row else None

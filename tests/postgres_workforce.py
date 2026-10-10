@@ -69,6 +69,7 @@ def main():
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/012_ai_workforce.sql').read_text())
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/013_workforce_agents_mentions.sql').read_text())
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/014_workforce_images.sql').read_text())
+        page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/015_workforce_chat_controls.sql').read_text())
         store = PgStore(page)
         user = {'id': str(uuid4()), 'display_name': 'Sample employee', 'session_version': str(uuid4())}
         other = str(uuid4())
@@ -139,6 +140,19 @@ def main():
         assert store.task_images(claimed_image)[0]['analysis'] == 'Test image'
         assert store.progress(claimed_image, 'Done', ('ai-manager', 'AI Manager'), 'Image response', complete=True, images=[picture])
         assert len(store.snapshot(cid, other)['messages'][-1]['images']) == 1
+        store.update_preferences(cid,user,{'archived':True,'favorite':True,'theme':'plum','read_seq':claimed_image['message_seq']})
+        assert store.chat_controls(cid,user)['preferences']['archived']==1
+        store.update_group(cid,user,{'title':'Updated PostgreSQL group','description':'Test','disappearing':86400})
+        replied=store.enqueue(cid,user,'Reply',str(uuid4()),'sample/model',False,reply_seq=claimed_image['message_seq'])
+        store.message_action(replied['message_seq'],user,'react',{'emoji':'\U0001f44d'})
+        store.message_action(replied['message_seq'],user,'star',{})
+        assert store.snapshot(cid,user['id'])['messages'][-1]['reactions'][0]['emoji']=='\U0001f44d'
+        dest=store.create_chat('Forward target',user['id'],[other])
+        store.forward(state['messages'][-1]['seq'],dest,user,str(uuid4()))
+        assert store.snapshot(dest,other)['messages'][-1]['report_ready']
+        store.group_action(cid,user,'clear',{})
+        assert store.snapshot(cid,user['id'])['messages']==[]
+        assert store.snapshot(cid,other)['messages']
         denied = page.evaluate('''async () => {
             await db.exec('SET ROLE anon');
             try { await db.query('SELECT * FROM archet_workforce.messages'); return false; }

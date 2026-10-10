@@ -358,6 +358,7 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
 <script src="/assets/workspace.js"></script>
 <script src="/assets/rest.js"></script>
 <script src="/assets/invoices.js"></script>
+<script src="/assets/workforce-controls.js"></script>
 <script src="/assets/workforce.js"></script>
 <script>api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));</script>
 </body>

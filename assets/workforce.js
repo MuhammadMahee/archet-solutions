@@ -7,6 +7,7 @@
   let participants = [], canAddAgents = false, mentionOptions = [], mentionIndex = 0, mentionStart = -1;
   let attachedImages = [], processingImages = false;
   const reportSnapshots = new Map();
+  let controls = null;
   const seen = new Map();
   const valid = token => token === generation && currentUser && !currentUser.rest_mode && page === 'workforce';
   const error = message => { el('error').textContent = message || ''; el('error').hidden = !message; };
@@ -191,9 +192,9 @@
   }
   function renderChats() {
     const query = el('search').value.trim().toLowerCase();
-    const filtered = chats.filter(chat => (chat.title + ' ' + (chat.preview || '')).toLowerCase().includes(query));
+    const filtered = (controls ? controls.filter(chats) : chats).filter(chat => (chat.title + ' ' + (chat.preview || '')).toLowerCase().includes(query));
     el('chat-count').textContent = chats.length + (chats.length === 1 ? ' conversation' : ' conversations');
-    const html = filtered.length ? filtered.map(chat => '<button class="wf-chat ' + (active === chat.id ? 'selected' : '') + '" data-chat="' + escapeHTML(chat.id) + '" aria-pressed="' + (active === chat.id) + '"><span class="wf-chat-avatar">A↗</span><span class="wf-chat-copy"><strong>' + escapeHTML(chat.title) + '</strong><p>' + escapeHTML(chat.working ? 'AI assignment in progress…' : chat.preview || 'AI Manager & Operations') + '</p></span>' + (chat.mention_seq > (seen.get(chat.id) || 0) && active !== chat.id ? '<span class="wf-ping" aria-label="You were mentioned">@</span>' : '') + (chat.last_seq > (seen.get(chat.id) || 0) && active !== chat.id ? '<span class="wf-chat-new" aria-label="Unread messages"></span>' : '') + '</button>').join('') : '<div class="wf-empty-chat">' + (chats.length ? 'No matching conversations.' : 'Your next conversation starts here.<br>Use + to create a private chat or group.') + '</div>';
+    const html = filtered.length ? filtered.map(chat => '<div class="wf-chat-row"><button class="wf-chat ' + (active === chat.id ? 'selected' : '') + '" data-chat="' + escapeHTML(chat.id) + '" aria-pressed="' + (active === chat.id) + '"><span class="wf-chat-avatar">' + (chat.has_avatar ? '<img alt="" src="/api/internal/workforce/conversations/' + chat.id + '/avatar?v=' + chat.avatar_version + '">' : 'A↗') + '</span><span class="wf-chat-copy"><strong>' + escapeHTML((controls?.chatBadge(chat) || '') + chat.title) + '</strong><p>' + escapeHTML(chat.working ? 'AI assignment in progress…' : chat.preview || 'AI Manager & Operations') + '</p></span>' + (chat.preferences?.muted_until < Date.now()/1000 && chat.mention_seq > Math.max(seen.get(chat.id) || 0, chat.preferences?.read_seq || 0) && active !== chat.id ? '<span class="wf-ping" aria-label="You were mentioned">@</span>' : '') + (chat.preferences?.muted_until < Date.now()/1000 && (chat.preferences?.unread || chat.last_seq > Math.max(seen.get(chat.id) || 0,chat.preferences?.read_seq || 0)) && active !== chat.id ? '<span class="wf-chat-new" aria-label="Unread messages"></span>' : '') + '</button><button class="wf-chat-options" type="button" data-chat-options="' + escapeHTML(chat.id) + '" aria-label="Options for ' + escapeHTML(chat.title) + '">&#8964;</button></div>').join('') : '<div class="wf-empty-chat">' + (chats.length ? 'No matching conversations.' : 'Your next conversation starts here.<br>Use + to create a private chat or group.') + '</div>';
     if (el('chats').innerHTML !== html) el('chats').innerHTML = html;
   }
   function markup(text) {
@@ -216,7 +217,7 @@
     el('messages').innerHTML = visible.length ? '<div class="wf-date">' + escapeHTML(new Date(visible[0].created_at).toLocaleDateString(undefined, {weekday:'long',month:'long',day:'numeric'})) + '</div>' + visible.map(m => {
       const own = m.sender_id === currentUser.id, ai = m.kind === 'ai';
       const initials = ai ? (status?.employees?.find(a => a.id === m.sender_id)?.initials || 'AI') : m.sender_name.slice(0,2).toUpperCase();
-      return '<article class="wf-message ' + (own ? 'own ' : '') + ((m.mention_ids || []).includes(currentUser.id) ? 'mentioned ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + messageMarkup(m) + '</div>' + snapshotMarkup(m) + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
+      return '<article data-seq="' + m.seq + '" class="wf-message ' + (own ? 'own ' : '') + ((m.mention_ids || []).includes(currentUser.id) ? 'mentioned ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div>' + (controls?.beforeMessage(m) || '') + '<div class="wf-content">' + messageMarkup(m) + '</div>' + snapshotMarkup(m) + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time>' + (controls?.afterMessage(m) || '') + '</div></article>';
     }).join('') : '<div class="wf-empty-chat">' + (query ? 'No matching loaded messages.' : 'Your AI team is ready for an assignment.<button type="button" class="wf-suggestion" id="wf-example">Summarize yesterday’s saved sales for all stores.</button>') + '</div>';
     if (stick || nearBottom) log.scrollTop = log.scrollHeight;
     loadSnapshots();
@@ -237,8 +238,12 @@
     const chat = active, token = generation, selected = selection;
     if (!chat) return;
     const last = initial ? 0 : (messages.at(-1)?.seq || 0);
-    const data = await api(endpoint + 'conversations/' + chat + (last ? '?after=' + last : ''));
+    let data;
+    try { data = await api(endpoint + 'conversations/' + chat + (last ? '?after=' + last : '')); }
+    catch(e) { if (e.message === 'Conversation not found.' && active === chat) closeChat(); throw e; }
     if (!valid(token) || active !== chat || selection !== selected) return;
+    const changed = controls?.onState(data);
+    if (changed && !initial) return refreshConversation(true);
     if (initial) messages = [];
     const known = new Set(messages.map(m => m.seq));
     const added = data.messages.filter(m => !known.has(m.seq));
@@ -255,6 +260,7 @@
     renderChats();
   }
   async function selectChat(id) {
+    controls?.reset();
     reportSnapshots.clear();
     attachedImages = []; renderImagePreview();
     selection++; active = id; messages = []; tasks = []; pendingSend = null; participants = []; canAddAgents = false; closeMentions();
@@ -273,9 +279,11 @@
       status = info; worker(info.worker_online); el('model-label').textContent = info.model + (info.provider === 'groq' ? ' - Groq' : info.provider === 'vercel' ? ' - Vercel AI Gateway' : ' - local model'); el('demo').hidden = !info.demo;
       if (info.error) error(info.error);
       if (active) await refreshConversation(true);
+      await controls?.loaded();
     } catch (e) { if (valid(token)) error(e.message); }
   }
   function clear() {
+    controls?.reset();
     reportSnapshots.clear();
     participants = []; canAddAgents = false; closeMentions(); attachedImages = []; renderImagePreview();
     el('full-image').removeAttribute('src');
@@ -344,16 +352,17 @@
     event.preventDefault(); if (!active || sending || processingImages) return;
     const content = el('input').value.trim(), chat = active, token = generation, invoke = el('invoke').checked;
     if (!content && !attachedImages.length) return;
+    const reply_seq = controls?.replySeq() || null;
     const images = attachedImages.map(i => ({data:i.data}));
     const imageKey = images.map(i => i.data).join('|');
-    if (!pendingSend || pendingSend.chat !== chat || pendingSend.content !== content || pendingSend.invoke !== invoke || pendingSend.imageKey !== imageKey) pendingSend = {chat,content,invoke,imageKey,id:uuid()};
+    if (!pendingSend || pendingSend.chat !== chat || pendingSend.content !== content || pendingSend.invoke !== invoke || pendingSend.imageKey !== imageKey || pendingSend.reply_seq !== reply_seq) pendingSend = {chat,content,invoke,imageKey,reply_seq,id:uuid()};
     const outgoing = pendingSend;
     sending = true; el('send').disabled = true; error('');
     try {
-      await api(endpoint + 'conversations/' + chat + '/messages', 'POST', {content,request_id:outgoing.id,invoke_agents:invoke,images});
+      await api(endpoint + 'conversations/' + chat + '/messages', 'POST', {content,request_id:outgoing.id,invoke_agents:invoke,images,reply_seq});
       if (!valid(token) || active !== chat) return;
       if (el('input').value.trim() === content) el('input').value = '';
-      pendingSend = null; closeMentions();
+      pendingSend = null; closeMentions(); controls?.sent();
       if (attachedImages.map(i => i.data).join('|') === imageKey) { attachedImages = []; renderImagePreview(); }
       await refreshConversation(); await refreshChats(token); el('log').scrollTop = el('log').scrollHeight;
     } catch(e) { if (valid(token) && active === chat) error(e.message + ' Your message is kept here for retry.'); }
@@ -424,5 +433,16 @@
     catch(e) { if (valid(token)) error(e.message); }
     finally { polling = false; }
   }, 2000);
+  function closeChat() {
+    controls?.reset(); reportSnapshots.clear(); selection++; active=null; messages=[];tasks=[];
+    if(imageDialog.open)imageDialog.close();el('full-image').removeAttribute('src');el('download-image').removeAttribute('href');
+    participants=[];attachedImages=[];renderImagePreview();pendingSend=null;el('input').value='';
+    el('messages').replaceChildren();el('tasks').replaceChildren();el('active').hidden=true;
+    el('welcome').hidden=false;el('layout').classList.remove('chat-open');renderChats();
+  }
+  controls = window.createWorkforceControls({
+    state:()=>({active,chats,messages,participants}),error,select:selectChat,close:closeChat,
+    renderChats,renderMessages,refresh:async()=>{if(active)await refreshConversation(true);await refreshChats(generation);}
+  });
   window.workforceDashboard = {load,clear};
 })();

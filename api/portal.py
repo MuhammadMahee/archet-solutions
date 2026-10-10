@@ -137,7 +137,7 @@ def register_portal(app):
         limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload') else 32*1024
         if request.path.startswith('/api/internal/invoices/'):
             limit = 512 * 1024
-        if request.method == 'POST' and re.fullmatch(r'/api/internal/workforce/conversations/[0-9a-f-]{36}/messages', request.path):
+        if request.method in ('POST', 'PATCH') and re.fullmatch(r'/api/internal/workforce/conversations/[0-9a-f-]{36}/(messages|profile)', request.path):
             limit = 3 * 1024 * 1024
         if request.content_length and request.content_length>limit:
             raise PortalError('The upload or request is too large.',413)

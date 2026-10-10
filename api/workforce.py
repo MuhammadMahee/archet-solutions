@@ -64,6 +64,8 @@ def run_assignment(store, task_id, user):
 
 
 def register_workforce(app):
+    from api.workforce_controls import register_controls
+    register_controls(app, lambda: get_store())
     @app.errorhandler(sqlite3.Error)
     def workforce_storage_error(exc):
         app.logger.warning('Local workforce storage unavailable (%s)', type(exc).__name__)
@@ -146,6 +148,7 @@ def register_workforce(app):
         if hosted():
             store.expire()
         state = store.snapshot(valid_id(chat), g.portal_user['id'], after, before)
+        state.update(store.chat_controls(chat, g.portal_user))
         state['participants'] = conversation_people(state['member_ids'], state['agent_ids'])
         state['can_add_agents'] = g.portal_user['role'] == 'admin' or state['conversation']['creator_id'] == g.portal_user['id']
         return jsonify(state)
@@ -158,6 +161,9 @@ def register_workforce(app):
         images = upload_images(payload.get('images', []))
         content = text_field(payload, 'content', 4000, required=not images) or 'Please review the attached screenshot.'
         request_id = valid_id(text_field(payload, 'request_id', 36))
+        reply_seq = payload.get('reply_seq')
+        if reply_seq is not None and (type(reply_seq) != int or not 0 < reply_seq < 9223372036854775807):
+            raise PortalError('Invalid reply message.')
         invoke = payload.get('invoke_agents', True)
         if type(invoke) is not bool:
             raise PortalError('Invalid AI assignment preference.')
@@ -169,7 +175,7 @@ def register_workforce(app):
             invoke = any(p['kind'] == 'ai' for p in mentioned)
         portal.rate_limit('workforce-message', g.portal_user['id'], 60, 60)
         result = store.enqueue(valid_id(chat), g.portal_user, content, request_id,
-                               selected_model(store), invoke, [p['id'] for p in mentioned], images)
+                               selected_model(store), invoke, [p['id'] for p in mentioned], images, reply_seq)
         if result['task_id']:
             run_assignment(store, result['task_id'], g.portal_user)
         return jsonify(result), 201

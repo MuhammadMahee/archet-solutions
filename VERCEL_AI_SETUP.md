@@ -68,6 +68,43 @@ can coordinate the request or add bots.
 Migration `013_workforce_agents_mentions.sql` adds private tables for group bot
 membership and message mentions. Existing chats keep Manager and Operations.
 
+### Chat, group and message controls
+
+Use a conversation's arrow or right-click it for archive, mute, pin, read/unread,
+favorites and custom lists. The header menu adds search, selection, starred and
+pinned messages, themes, export, clear and exit. Personal settings persist per
+employee; **Clear chat** hides existing history only for that employee.
+Mute suppresses the app's unread/mention badges for the selected duration; it
+does not configure browser push notifications or operating-system alerts.
+
+Click the group heading for group info, member search, descriptions, photos,
+media/reports, links, member tags and member changes. The creator and portal
+administrators who belong to the group can edit its profile, add/remove existing
+employees, create a similar group and generate/revoke invitations. Invitations
+expire after seven days and require an active signed-in portal account. Joining
+grants access to existing group history. A departing creator transfers group
+ownership to a remaining member, and departing/removed requesters' active tasks
+are cancelled. Private replies reuse a conversation between two existing peers
+who already share a group; automatic AI replies are unchecked when opening it.
+
+Each message has a menu (also available on right-click): reply, copy, reactions,
+forward, pin, star, download, read info, private reply, report and delete. Stars
+and **Delete for me** are personal. Authors or group managers can delete a
+message for everyone; only managers can pin group messages. Forwarding requires
+membership in both groups and copies attachments/saved reports into the target
+group's permissions without invoking AI. Reactions and read positions persist.
+
+Disappearing messages can be off, 24 hours, 7 days or 90 days. The setting applies
+to new messages; expired content is excluded from history, AI context, downloads
+and exports. It is logical expiry, not guaranteed physical database erasure;
+downloaded or forwarded copies may remain. Export downloads up to 5,000 visible
+messages as JSON with authenticated media references. Search and media/star/pin
+collections return up to 200 matches. Reports are saved for portal administrators
+under **Group info → Reported items**; no external notification is sent.
+
+Migration `015_workforce_chat_controls.sql` creates private controls tables.
+Voice/video calling is not connected.
+
 ### Screenshots and image replies
 
 Use **Attach**, paste a screenshot into the composer, or drop an image onto it.

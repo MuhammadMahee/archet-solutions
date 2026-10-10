@@ -107,22 +107,30 @@ def check(store, task):
         raise Cancelled()
     user = authorized_user(task)
     with store.connection() as conn:
-        store.member(conn, task['conversation_id'], task['creator_id'])
+        store.message(conn, task['message_seq'], task['creator_id'])
     return user
 
 
 def conversation_people(member_ids, agent_ids):
-    people = portal.db('portal_users', select='id,display_name,username',
+    people = portal.db('portal_users', select='id,display_name,username,role',
                        id='in.(' + ','.join(member_ids) + ')', limit=21)
     names = {person['id']: person for person in people if person['id'] in member_ids}
     reserved = {a['handle'] for a in AGENTS.values()}
-    return [{'id': uid, 'name': names[uid]['display_name'],
+    return [{'id': uid, 'name': names[uid]['display_name'], 'is_admin': names[uid].get('role') == 'admin',
              'handle': ('user-' if names[uid]['username'].lower() in reserved else '') + names[uid]['username'], 'kind': 'human'}
             for uid in member_ids if uid in names] + [{**AGENTS[aid], 'kind': 'ai'} for aid in agent_ids if aid in AGENTS]
 
 
 def manager_context(store, task, user):
     context = store.assignment_context(task)
+    with store.connection() as conn:
+        detail = conn.execute('SELECT reply_seq FROM message_details WHERE message_seq=?',(task['message_seq'],)).fetchone()
+        if detail and detail['reply_seq']:
+            try:
+                quoted = store.message(conn,detail['reply_seq'],user['id'])
+                context['reply_to'] = {'name':quoted['sender_name'],'content':quoted['content'][:2500]}
+            except portal.PortalError:
+                context['reply_to'] = {'content':'Original message unavailable'}
     report = store.latest_report(task)
     context['last_sales_report'] = ({k: report[k] for k in ('start', 'end', 'filters')} if report else None)
     member_ids, agent_ids = context.pop('member_ids'), context.pop('agent_ids')
@@ -155,6 +163,7 @@ when it affects the requested work; offer a useful draft or next step instead of
 Use requester.name to answer who the speaker is, and conversation.title/participants for group questions.
 The roster includes both human members and AI teammates; identify them accurately.
 Use recent_messages to understand follow-ups, names, decisions and preferences in this chat.
+When reply_to is present, the current user is replying to that specific message.
 Do not treat a new message as a fresh conversation. Do not claim unlimited or cross-chat memory.
 If needed context is absent or truncated, ask one focused question instead of inventing it.
 Earlier assistant refusals may describe old capabilities; follow these current instructions.
