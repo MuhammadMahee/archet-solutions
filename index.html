@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="/assets/quota.css">
 <link rel="stylesheet" href="/assets/rest.css">
 <link rel="stylesheet" href="/assets/invoices.css">
+<link rel="stylesheet" href="/assets/workforce.css">
 </head>
 <body>
 <div id="boot" class="boot" role="status">Opening your workspace…</div>
@@ -49,6 +50,7 @@
       <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
       <button data-page="quota"><span class="nav-icon">◈</span>Quota Update</button>
       <button data-page="callingtree"><span class="nav-icon">▦</span>Calling Tree</button>
+      <button data-page="workforce"><span class="nav-icon">◉</span>AI Workforce</button>
       <button data-page="invoices" id="invoices-nav" hidden><span class="nav-icon">▧</span>Invoices</button>
       <button data-page="overview" class="active"><span class="nav-icon">◫</span>Overview</button>
       <button data-page="quotes"><span class="nav-icon">▤</span>Quote inbox</button>
@@ -60,6 +62,30 @@
   <main class="main">
     <header class="topbar"><div class="topbar-start"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Hide sidebar">☰</button><span>ARCHET &nbsp; / &nbsp; INTERNAL</span></div><span><i class="live-dot"></i>Team workspace</span></header>
     <div id="notice" class="notice" role="status" hidden></div>
+    <section id="page-workforce" hidden>
+      <header class="wf-hero"><div><div class="wf-eyebrow">PEOPLE + POSSIBILITIES</div><h1>AI Workforce<span>.</span></h1><p>Your team’s next pair of hands.</p></div><div class="wf-hero-actions"><button id="wf-directory" class="subtle">AI employees <span>↗</span></button><button id="wf-settings" class="subtle">Connection &amp; models</button></div></header>
+      <div id="wf-demo" class="wf-banner" hidden>DEMO WORKSPACE · Sample accounts and sales only. Isolated test workspace.</div>
+      <div id="wf-error" class="wf-banner wf-error" role="alert" hidden></div>
+      <div class="wf-layout" id="wf-layout">
+        <aside class="wf-inbox" aria-label="Conversations">
+          <div class="wf-inbox-head"><div><h2>Conversations</h2><span id="wf-chat-count">Your private workspace</span></div><button id="wf-new" class="wf-square" aria-label="New conversation">＋</button></div>
+          <label class="wf-search"><span aria-hidden="true">⌕</span><input id="wf-search" type="search" placeholder="Search conversations" aria-label="Search conversations"></label>
+          <div class="wf-list-label">YOUR CHATS <span>HUMAN + AI</span></div>
+          <div id="wf-chats" class="wf-chats"></div>
+          <footer class="wf-inbox-footer"><span class="wf-dot" id="wf-worker-dot"></span><div><strong id="wf-worker">Checking AI connection</strong><small id="wf-model-label">AI assistance, shared with your team</small></div></footer>
+        </aside>
+        <div class="wf-conversation">
+          <div id="wf-welcome" class="wf-welcome"><div class="wf-orbit"><span class="wf-orbit-main">A<span>↗</span></span><span class="wf-orbit-small">OP</span></div><div class="wf-eyebrow">A LITTLE HELP. A LOT OF POSSIBILITY.</div><h2>Good work starts<br>with a conversation.</h2><p>Create a chat with your AI Manager and Operations agent. Ask a sales question and follow the work as it happens.</p><button id="wf-start" class="primary">Start a conversation <span>↗</span></button><div class="wf-welcome-note">Saved sales data · Local AI · Your existing account</div></div>
+          <div id="wf-active" class="wf-active" hidden>
+            <header class="wf-chat-head"><button id="wf-back" class="wf-square" aria-label="Back to conversations">←</button><div class="wf-chat-avatar">A↗</div><div class="wf-chat-heading"><h2 id="wf-title"></h2><p id="wf-members"></p></div><span class="wf-private">MEMBERS ONLY</span></header>
+            <div class="wf-chat-tools"><label><span aria-hidden="true">⌕</span><input id="wf-message-search" type="search" placeholder="Find in loaded messages" aria-label="Find in loaded messages"></label><span>AI messages are labeled</span></div>
+            <div id="wf-log" class="wf-log" role="log" aria-label="Conversation messages" aria-live="polite"><button id="wf-older" class="subtle" hidden>Load earlier messages</button><div id="wf-messages"></div></div>
+            <div id="wf-tasks" class="wf-tasks" aria-label="AI assignments"></div>
+            <form id="wf-composer" class="wf-composer"><label class="sr-only" for="wf-input">Message AI employees</label><textarea id="wf-input" rows="2" maxlength="4000" placeholder="Ask your team to look into something…" required></textarea><div class="wf-composer-bottom"><label class="wf-assign"><input id="wf-invoke" type="checkbox" checked> Assign to AI Manager</label><span class="wf-enter-hint">Enter to send · Shift + Enter for a new line</span><button type="submit" class="primary" id="wf-send" aria-label="Send message">Send ↗</button></div></form>
+          </div>
+        </div>
+      </div>
+    </section>
     <section id="page-invoices" hidden>
       <div class="inv-hero">
         <div class="inv-hero-copy"><div class="inv-eyebrow">ARCHET SOLUTIONS PRIVATE LIMITED</div><h1>Invoices<span>.</span></h1><p>Your markets. Your numbers. One clear picture.</p><div class="inv-access"><span aria-hidden="true">◆</span> Mahee’s private workspace</div></div>
@@ -210,6 +236,7 @@ function signedOut(message = '') {
   if (window.callingTree) window.callingTree.clear();
   if (window.quotaDashboard) window.quotaDashboard.clear();
   window.invoiceDashboard?.clear();
+  window.workforceDashboard?.clear();
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   currentUser = null; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
   ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
@@ -245,7 +272,7 @@ function enterWorkspace(user, freshLogin = false) {
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
   $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice('');
   $('invoices-nav').hidden = !window.invoiceDashboard.allowed();
-  const initial=location.hash.slice(1);showPage(['sales','quota','callingtree','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')||(initial==='invoices'&&window.invoiceDashboard.allowed())?initial:'sales');
+  const initial=location.hash.slice(1)||(location.pathname==='/ai-workforce'?'workforce':'');showPage(['sales','quota','callingtree','workforce','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')||(initial==='invoices'&&window.invoiceDashboard.allowed())?initial:'sales');
 }
 async function showPage(name) {
   if (!currentUser || currentUser.rest_mode) return;
@@ -255,9 +282,10 @@ async function showPage(name) {
   history.replaceState(null,'','#'+name);
   document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
   document.body.classList.toggle('invoices-mode', name === 'invoices');
+  document.body.classList.toggle('workforce-mode', name === 'workforce');
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
   notice('');
-  try { if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
+  try { if (name === 'workforce') await window.workforceDashboard.load(); else if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
   catch (error) { notice(error.message, true); }
 }
 function quoteTable(rows) {
@@ -329,6 +357,7 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
 <script src="/assets/workspace.js"></script>
 <script src="/assets/rest.js"></script>
 <script src="/assets/invoices.js"></script>
+<script src="/assets/workforce.js"></script>
 <script>api('me').then(data => enterWorkspace(data.user)).catch(error => signedOut(error.message === 'Please sign in.' ? '' : error.message));</script>
 </body>
 </html>

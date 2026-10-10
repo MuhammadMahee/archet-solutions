@@ -7,3 +7,4 @@ api/creds.py
 tests
 test-results
 leads.json
+.data

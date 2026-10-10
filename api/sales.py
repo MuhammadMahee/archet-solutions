@@ -368,7 +368,7 @@ def metric_fills(rows):
     return fills
 
 
-def report_data(start, end):
+def report_data(start, end, filters=None):
     with connect() as conn, conn.transaction():
         conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
         raw = conn.execute('''select p.*, (p.loaded_at<i.loaded_at or i.status='error') as stale
@@ -380,14 +380,15 @@ def report_data(start, end):
         roster=active_roster(conn)
         catalog=source_catalog(conn)
     rows = restrict_to_roster(aggregate(raw),roster,catalog,imports,start,end)
-    dealer = request.args.get('dealer', '')
+    filters = request.args if filters is None else filters
+    dealer = filters.get('dealer', '')
     if dealer and dealer not in COLORS:
         raise PortalError('Unknown dealer.')
     relevant = [i for i in imports if not dealer or SOURCES[i['source_id']] == dealer]
     if dealer:
         rows = [r for r in rows if r['dealer'] == dealer]
     markets = sorted({r['market'] for r in rows})
-    market, store_id = request.args.get('market', ''), request.args.get('store', '')
+    market, store_id = filters.get('market', ''), filters.get('store', '')
     if market:
         rows = [r for r in rows if r['market'] == market]
     stores = [{'id': r['dealer'] + ':' + r['store_id'], 'name': r['store']} for r in rows]

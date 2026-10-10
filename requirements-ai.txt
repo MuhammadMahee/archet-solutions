@@ -1,0 +1,11 @@
+# Optional local AI Workforce development dependencies.
+# Keep these separate from the portal's production deployment requirements.
+-r requirements.txt
+ollama==0.6.3
+langgraph==1.2.14
+langgraph-checkpoint-sqlite==3.1.1
+flask-sock==0.7.0
+pypdf==6.20.0
+python-docx==1.2.0
+pandas==3.0.6
+matplotlib==3.11.2

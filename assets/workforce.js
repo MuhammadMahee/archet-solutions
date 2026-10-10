@@ -1,0 +1,213 @@
+'use strict';
+(() => {
+  const el = name => document.getElementById('wf-' + name);
+  const endpoint = 'workforce/';
+  let generation = 0, selection = 0, active = null, chats = [], messages = [], tasks = [], status = null;
+  let polling = false, ticks = 0, pendingSend = null, sending = false;
+  const seen = new Map();
+  const valid = token => token === generation && currentUser && !currentUser.rest_mode && page === 'workforce';
+  const error = message => { el('error').textContent = message || ''; el('error').hidden = !message; };
+  const uuid = () => crypto.randomUUID();
+  function dialog(name, title, bodyHTML) {
+    const node = document.createElement('dialog'); node.id = 'wf-' + name; node.className = 'wf-dialog';
+    node.innerHTML = '<div class="wf-close-row"><h2>' + title + '</h2><button type="button" class="subtle close" aria-label="Close ' + title + '">×</button></div>' + bodyHTML;
+    node.querySelector('.close').onclick = () => node.close(); document.body.append(node); return node;
+  }
+  const newDialog = dialog('new-dialog', 'Start a conversation', '<form id="wf-new-form"><p>Your AI Manager and Operations agent will join this conversation.</p><div class="field"><label for="wf-new-title">Conversation name</label><input id="wf-new-title" required maxlength="80" placeholder="Daily operations"></div><div class="field" id="wf-people-field" hidden><label for="wf-people">Add team members (optional)</label><select id="wf-people" multiple aria-describedby="wf-people-help"></select><p id="wf-people-help">Hold Ctrl or Command to select multiple people. Leave empty for a private AI chat.</p></div><p id="wf-new-error" class="error" role="alert"></p><div class="actions"><button type="submit" class="primary">Create conversation</button></div></form>');
+  const directory = dialog('directory-dialog', 'Your AI employees', '<p>Two specialists, one conversation. Their responses are always marked as AI.</p><div id="wf-employees"></div><p>More departments and company integrations will be added in later releases.</p>');
+  const settings = dialog('settings-dialog', 'Connection & models', '<div id="wf-connection" class="wf-connection"></div><form id="wf-model-form"><div class="field"><label for="wf-model">Default AI model</label><select id="wf-model"></select></div><p>Changes apply to new assignments. Current assignments keep their original model.</p><p id="wf-settings-error" class="error" role="alert"></p><button class="primary" type="submit" id="wf-model-save">Save model</button></form><p id="wf-worker-help">Start the AI worker on your company AI computer to process queued assignments.</p><div id="wf-integrations" class="wf-connection"></div>');
+  const auditDialog = dialog('audit-dialog', 'Assignment activity', '<div id="wf-audit-content"></div>');
+
+  function worker(online) {
+    el('worker').textContent = status?.provider === 'vercel' ? 'AI runs on Vercel' : online ? 'AI worker online' : 'AI worker offline - jobs stay queued';
+    el('worker-dot').classList.toggle('online', online);
+  }
+  function renderChats() {
+    const query = el('search').value.trim().toLowerCase();
+    const filtered = chats.filter(chat => (chat.title + ' ' + (chat.preview || '')).toLowerCase().includes(query));
+    el('chat-count').textContent = chats.length + (chats.length === 1 ? ' conversation' : ' conversations');
+    const html = filtered.length ? filtered.map(chat => '<button class="wf-chat ' + (active === chat.id ? 'selected' : '') + '" data-chat="' + escapeHTML(chat.id) + '" aria-pressed="' + (active === chat.id) + '"><span class="wf-chat-avatar">A↗</span><span class="wf-chat-copy"><strong>' + escapeHTML(chat.title) + '</strong><p>' + escapeHTML(chat.working ? 'AI assignment in progress…' : chat.preview || 'AI Manager & Operations') + '</p></span>' + (chat.last_seq > (seen.get(chat.id) || 0) && active !== chat.id ? '<span class="wf-chat-new" aria-label="Unread messages"></span>' : '') + '</button>').join('') : '<div class="wf-empty-chat">' + (chats.length ? 'No matching conversations.' : 'Your next conversation starts here.<br>Use + to create a private chat or group.') + '</div>';
+    if (el('chats').innerHTML !== html) el('chats').innerHTML = html;
+  }
+  function markup(text) {
+    // Escape all model/user content first. Only small formatting primitives are supported.
+    return escapeHTML(text).split(/(```[\s\S]*?```)/g).map(part => {
+      if (part.startsWith('```')) return '<pre><code>' + part.slice(3, -3).replace(/^[a-zA-Z0-9_+-]+\n/, '') + '</code></pre>';
+      return part.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    }).join('');
+  }
+  function sourceSummary(report) {
+    if (!report) return '';
+    const money = report.accessory_usd === null ? 'Unavailable' : new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'}).format(Number(report.accessory_usd));
+    const coverage = report.coverage;
+    return '<div class="wf-source"><strong>SOURCE TOTALS &middot; ' + escapeHTML(report.start) + ' to ' + escapeHTML(report.end) + '</strong><span>' + escapeHTML(report.store_count) + ' matching stores &middot; ' + escapeHTML(report.total_boxes ?? 'Unavailable') + ' total boxes</span><span>' + escapeHTML(money) + ' in accessory sales</span><small>Import coverage: ' + escapeHTML(coverage.complete) + '/' + escapeHTML(coverage.expected) + ' source-days &middot; ' + escapeHTML(coverage.retained) + ' retained records. Missing source data may make totals incomplete.</small></div>';
+  }
+  function renderMessages(stick = false) {
+    const log = el('log'), nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 90;
+    const query = el('message-search').value.toLowerCase();
+    const visible = messages.filter(m => (m.content + ' ' + m.sender_name).toLowerCase().includes(query));
+    el('messages').innerHTML = visible.length ? '<div class="wf-date">' + escapeHTML(new Date(visible[0].created_at).toLocaleDateString(undefined, {weekday:'long',month:'long',day:'numeric'})) + '</div>' + visible.map(m => {
+      const own = m.sender_id === currentUser.id, ai = m.kind === 'ai';
+      const initials = ai ? m.sender_id === 'ai-manager' ? 'AM' : 'OP' : m.sender_name.slice(0,2).toUpperCase();
+      return '<article class="wf-message ' + (own ? 'own ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + markup(m.content) + '</div>' + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
+    }).join('') : '<div class="wf-empty-chat">' + (query ? 'No matching loaded messages.' : 'Your AI team is ready for an assignment.<button type="button" class="wf-suggestion" id="wf-example">Summarize yesterday’s saved sales for all stores.</button>') + '</div>';
+    if (stick || nearBottom) log.scrollTop = log.scrollHeight;
+  }
+  function renderTasks() {
+    el('tasks').innerHTML = tasks.slice(0,10).map(task => {
+      const own = task.creator_id === currentUser.id, running = ['pending','running'].includes(task.status);
+      const retryable = ['failed','cancelled'].includes(task.status) && task.attempts < 3;
+      return '<div class="wf-task" data-status="' + escapeHTML(task.status) + '"><span class="wf-task-status">' + escapeHTML(task.status) + '</span><div class="wf-task-info"><strong>' + escapeHTML(task.step) + '</strong>' + (task.error ? '<small>' + escapeHTML(task.error) + '</small>' : '') + '</div><div class="wf-task-actions">' + (task.has_report ? '<a href="/api/internal/workforce/tasks/' + task.id + '/report.csv" download>↓ Sales CSV</a>' : '') + (own && running ? '<button data-task="' + task.id + '" data-action="cancel">Cancel</button>' : '') + (own && task.status === 'pending' && status?.execution === 'request' ? '<button data-task="' + task.id + '" data-action="run">Start</button>' : '') + (own && retryable ? '<button data-task="' + task.id + '" data-action="retry">Retry</button>' : '') + '<button data-audit="' + task.id + '" aria-label="View assignment activity">Activity</button></div></div>';
+    }).join('');
+  }
+  async function refreshChats(token) {
+    const data = await api(endpoint + 'conversations');
+    if (!valid(token)) return;
+    chats = data.conversations; worker(data.worker_online); renderChats();
+  }
+  async function refreshConversation(initial = false) {
+    const chat = active, token = generation, selected = selection;
+    if (!chat) return;
+    const last = initial ? 0 : (messages.at(-1)?.seq || 0);
+    const data = await api(endpoint + 'conversations/' + chat + (last ? '?after=' + last : ''));
+    if (!valid(token) || active !== chat || selection !== selected) return;
+    if (initial) messages = [];
+    const known = new Set(messages.map(m => m.seq));
+    const added = data.messages.filter(m => !known.has(m.seq));
+    messages.push(...added); messages.sort((a,b) => a.seq - b.seq);
+    const taskChanged = JSON.stringify(tasks) !== JSON.stringify(data.tasks);
+    tasks = data.tasks;
+    el('title').textContent = data.conversation.title;
+    el('members').textContent = 'AI Manager, Operations · ' + data.member_ids.length + (data.member_ids.length === 1 ? ' team member' : ' team members');
+    if (initial) el('older').hidden = !data.has_older;
+    seen.set(chat, messages.at(-1)?.seq || 0);
+    if (initial || added.length) renderMessages(initial);
+    if (initial || taskChanged) renderTasks();
+    renderChats();
+  }
+  async function selectChat(id) {
+    selection++; active = id; messages = []; tasks = []; pendingSend = null;
+    el('input').value = ''; el('message-search').value = ''; el('older').hidden = true;
+    el('welcome').hidden = true; el('active').hidden = false; el('layout').classList.add('chat-open');
+    el('title').textContent = 'Opening conversation…'; el('members').textContent = '';
+    el('messages').innerHTML = '<div class="wf-empty-chat">Loading messages…</div>'; el('tasks').replaceChildren();
+    renderChats(); error('');
+    try { await refreshConversation(true); } catch (e) { if (currentUser && active === id) error(e.message); }
+  }
+  async function load() {
+    const token = ++generation; error(''); sending = false; el('send').disabled = false;
+    try {
+      const [info] = await Promise.all([api(endpoint + 'status'), refreshChats(token)]);
+      if (!valid(token)) return;
+      status = info; worker(info.worker_online); el('model-label').textContent = info.model + (info.provider === 'vercel' ? ' - Vercel AI Gateway' : ' - local model'); el('demo').hidden = !info.demo;
+      if (info.error) error(info.error);
+      if (active) await refreshConversation(true);
+    } catch (e) { if (valid(token)) error(e.message); }
+  }
+  function clear() {
+    generation++; selection++; active = null; chats = []; messages = []; tasks = []; status = null; pendingSend = null; sending = false; seen.clear();
+    el('chats').replaceChildren(); el('messages').replaceChildren(); el('tasks').replaceChildren();
+    el('input').value = ''; el('search').value = ''; el('message-search').value = ''; el('new-form').reset(); el('people').replaceChildren();
+    el('audit-content').replaceChildren(); el('employees').replaceChildren();
+    el('active').hidden = true; el('welcome').hidden = false; el('demo').hidden = true; el('layout').classList.remove('chat-open');
+    el('send').disabled = false; error('');
+    [newDialog,directory,settings,auditDialog].forEach(d => { if (d.open) d.close(); });
+  }
+  async function newChat() {
+    const token = generation;
+    el('new-form').reset(); el('new-error').textContent = ''; el('people').replaceChildren();
+    el('people-field').hidden = currentUser.role !== 'admin';
+    newDialog.showModal(); el('new-title').focus();
+    if (currentUser.role === 'admin') {
+      try {
+        const data = await api('users');
+        if (!valid(token)) return;
+        data.users.filter(u => u.id !== currentUser.id && u.active && !u.rest_mode).forEach(u => el('people').append(new Option(u.display_name, u.id)));
+      } catch(e) { if (valid(token)) el('new-error').textContent = e.message; }
+    }
+  }
+  el('new').onclick = newChat; el('start').onclick = newChat;
+  el('new-form').onsubmit = event => { event.preventDefault(); const token = generation; submit(event.target, 'wf-new-error', async () => {
+    const members = [...el('people').selectedOptions].map(o => o.value);
+    const data = await api(endpoint + 'conversations', 'POST', {title:el('new-title').value,member_ids:members});
+    if (!valid(token)) return;
+    newDialog.close(); await refreshChats(token); if (valid(token)) await selectChat(data.id);
+  }); };
+  el('chats').onclick = event => { const button = event.target.closest('[data-chat]'); if (button) selectChat(button.dataset.chat); };
+  el('search').oninput = renderChats;
+  el('message-search').oninput = () => renderMessages();
+  el('back').onclick = () => el('layout').classList.remove('chat-open');
+  el('messages').onclick = event => { if (event.target.closest('#wf-example')) { el('input').value = 'Summarize yesterday’s saved sales for all stores.'; el('input').focus(); } };
+  el('input').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); el('composer').requestSubmit(); } };
+  el('composer').onsubmit = async event => {
+    event.preventDefault(); if (!active || sending) return;
+    const content = el('input').value.trim(), chat = active, token = generation, invoke = el('invoke').checked;
+    if (!content) return;
+    if (!pendingSend || pendingSend.chat !== chat || pendingSend.content !== content || pendingSend.invoke !== invoke) pendingSend = {chat,content,invoke,id:uuid()};
+    const outgoing = pendingSend;
+    sending = true; el('send').disabled = true; error('');
+    try {
+      await api(endpoint + 'conversations/' + chat + '/messages', 'POST', {content,request_id:outgoing.id,invoke_agents:invoke});
+      if (!valid(token) || active !== chat) return;
+      if (el('input').value.trim() === content) el('input').value = '';
+      pendingSend = null;
+      await refreshConversation(); await refreshChats(token); el('log').scrollTop = el('log').scrollHeight;
+    } catch(e) { if (valid(token) && active === chat) error(e.message + ' Your message is kept here for retry.'); }
+    finally { if (token === generation) { sending = false; el('send').disabled = false; } }
+  };
+  el('older').onclick = async () => {
+    const chat = active, selected = selection, token = generation;
+    el('older').disabled = true;
+    try {
+      const data = await api(endpoint + 'conversations/' + chat + '?before=' + messages[0].seq);
+      if (!valid(token) || active !== chat || selected !== selection) return;
+      const beforeHeight = el('log').scrollHeight, beforeTop = el('log').scrollTop;
+      const known = new Set(messages.map(m => m.seq)); messages.unshift(...data.messages.filter(m => !known.has(m.seq)));
+      el('older').hidden = !data.has_older; renderMessages(); el('log').scrollTop = beforeTop + el('log').scrollHeight - beforeHeight;
+    } catch(e) { if (valid(token)) error(e.message); } finally { el('older').disabled = false; }
+  };
+  el('tasks').onclick = async event => {
+    const button = event.target.closest('button'); if (!button) return;
+    const token = generation;
+    button.disabled = true;
+    try {
+      if (button.dataset.audit) {
+        const data = await api(endpoint + 'tasks/' + button.dataset.audit + '/audit');
+        if (!valid(token)) return;
+        el('audit-content').innerHTML = data.events.map(item => '<div class="wf-employee"><div><h3>' + escapeHTML(item.event.replaceAll('.', ' · ')) + '</h3><p>' + escapeHTML(new Date(item.created_at).toLocaleString()) + '</p><p>' + escapeHTML(item.details === '{}' ? '' : item.details) + '</p></div></div>').join('');
+        auditDialog.showModal();
+      } else {
+        await api(endpoint + 'tasks/' + button.dataset.task + '/' + button.dataset.action, 'POST', {});
+        if (valid(token)) await refreshConversation();
+      }
+    } catch(e) { if (valid(token)) error(e.message); } finally { button.disabled = false; }
+  };
+  el('directory').onclick = () => {
+    el('employees').innerHTML = (status?.employees || []).map(agent => '<div class="wf-employee"><div class="wf-chat-avatar">' + escapeHTML(agent.initials) + '</div><div><h3>' + escapeHTML(agent.name) + ' <span class="wf-ai-label">AI</span></h3><small>' + escapeHTML(agent.department) + '</small><p>' + escapeHTML(agent.description) + '</p></div></div>').join('') || '<p>Connect to the workforce server to see employees.</p>';
+    directory.showModal();
+  };
+  el('settings').onclick = async () => {
+    const token = generation; el('settings-error').textContent = ''; el('connection').textContent = 'Checking connection…'; settings.showModal();
+    el('model-save').hidden = currentUser.role !== 'admin'; el('model').disabled = currentUser.role !== 'admin';
+    try {
+      const info = await api(endpoint + 'status'); if (!valid(token)) return; status = info;
+      el('connection').textContent = info.provider === 'vercel' ? 'Vercel AI Gateway: ' + (info.ai_configured ? 'Configured' : 'Needs setup') : 'Ollama: ' + (info.ollama_online ? 'Connected' : 'Unavailable') + ' - AI worker: ' + (info.worker_online ? 'Online' : 'Offline');
+      el('worker-help').textContent = info.provider === 'vercel' ? 'Assignments run on Vercel and are saved in Supabase. Prompts and selected sales summaries are sent to the hosted model. Usage draws from your Vercel AI Gateway credits.' : 'Start the AI worker on your company AI computer to process queued assignments.';
+      el('model').replaceChildren(...info.models.map(model => new Option(model, model)));
+      el('model').value = info.model; el('settings-error').textContent = info.error || '';
+      el('integrations').innerHTML = info.integrations.map(item => '<div>' + escapeHTML(item.name) + ': <strong>' + (item.connected ? 'Configured' : 'Not connected') + '</strong></div>').join('');
+    } catch(e) { if (valid(token)) el('settings-error').textContent = e.message; }
+  };
+  el('model-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'wf-settings-error', async () => {
+    const token = generation; await api(endpoint + 'settings', 'PATCH', {model:el('model').value});
+    if (valid(token)) { settings.close(); await load(); }
+  }); };
+  setInterval(async () => {
+    if (polling || document.hidden || !currentUser || currentUser.rest_mode || page !== 'workforce') return;
+    polling = true; const token = generation;
+    try { if (active) await refreshConversation(); if (++ticks % 5 === 0) await refreshChats(token); }
+    catch(e) { if (valid(token)) error(e.message); }
+    finally { polling = false; }
+  }, 2000);
+  window.workforceDashboard = {load,clear};
+})();

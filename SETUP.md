@@ -1,5 +1,13 @@
 # Archet internal workspace setup
 
+## AI Workforce
+
+The AI Workforce module is available at `/ai-workforce` or from the workspace
+sidebar. See [AI_SETUP.md](AI_SETUP.md) for the separate worker command, Ollama
+configuration, storage/access rules, tests, and production hosting requirements.
+This first slice supports AI Manager/Operations collaboration over saved sales.
+For Vercel deployment, follow [VERCEL_AI_SETUP.md](VERCEL_AI_SETUP.md).
+
 ## Sales Update and parallel RT-POS imports
 
 ### Calling Tree store list

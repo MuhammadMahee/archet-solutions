@@ -5,6 +5,13 @@ Serves the public website and the internal workspace by hostname.
 
 from flask import Flask, send_from_directory, request, jsonify, redirect
 import os
+import sys
+
+# Keep the documented `python api/index.py` entry point using the same package
+# modules as Flask and the background worker.
+if __name__ == '__main__' and not __package__:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from dotenv import load_dotenv
 import re
 import smtplib
@@ -197,10 +204,13 @@ register_calling_tree(app,lambda: sales_connect())
 register_quota(app)
 register_invoices(app)
 
+from api.workforce import register_workforce
+register_workforce(app)
+
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename not in ('source-sync.js', 'sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png', 'invoices.js', 'invoices.css', 'inter-variable.woff2', 'spacegrotesk-variable.woff2'):
+    if filename not in ('source-sync.js', 'sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png', 'invoices.js', 'invoices.css', 'inter-variable.woff2', 'spacegrotesk-variable.woff2', 'workforce.js', 'workforce.css'):
         return '', 404
     return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
 
@@ -219,6 +229,7 @@ def home():
 
 @app.get("/internal")
 @app.get("/internal/")
+@app.get("/ai-workforce")
 def internal():
     if not portal_host():
         return redirect("https://" + INTERNAL_HOST, code=302)

@@ -154,7 +154,7 @@ def register_portal(app):
     def security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
-        if request.path.startswith(("/api/internal/", "/internal")) or request.host.split(":")[0] == INTERNAL_HOST:
+        if request.path.startswith(("/api/internal/", "/internal", "/ai-workforce")) or request.host.split(":")[0] == INTERNAL_HOST:
             response.headers["Cache-Control"] = "no-store"
             response.headers["X-Robots-Tag"] = "noindex, nofollow"
             response.headers["X-Frame-Options"] = "DENY"

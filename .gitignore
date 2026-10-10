@@ -9,3 +9,4 @@ api/creds.py
 leads.json
 .venv/
 test-results/
+.data/
