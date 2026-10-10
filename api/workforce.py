@@ -1,5 +1,6 @@
 """AI Workforce endpoints reuse portal cookies, CSRF checks and account rules."""
 import csv
+import base64
 from io import StringIO
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ from api.workforce_agents import AGENTS, mentioned_people
 from api.workforce_store import Store
 from api.workforce_hosted import VercelAI, GroqAI, hosted, default_model, provider, model_setting, groq_model
 from api.workforce_postgres import PostgresStore
+from api.workforce_images import upload_images
 
 ROOT = Path(__file__).resolve().parents[1]
 _stores = {}
@@ -153,7 +155,8 @@ def register_workforce(app):
     def workforce_send(chat):
         store = get_store()
         payload = body()
-        content = text_field(payload, 'content', 4000)
+        images = upload_images(payload.get('images', []))
+        content = text_field(payload, 'content', 4000, required=not images) or 'Please review the attached screenshot.'
         request_id = valid_id(text_field(payload, 'request_id', 36))
         invoke = payload.get('invoke_agents', True)
         if type(invoke) is not bool:
@@ -166,10 +169,18 @@ def register_workforce(app):
             invoke = any(p['kind'] == 'ai' for p in mentioned)
         portal.rate_limit('workforce-message', g.portal_user['id'], 60, 60)
         result = store.enqueue(valid_id(chat), g.portal_user, content, request_id,
-                               selected_model(store), invoke, [p['id'] for p in mentioned])
+                               selected_model(store), invoke, [p['id'] for p in mentioned], images)
         if result['task_id']:
             run_assignment(store, result['task_id'], g.portal_user)
         return jsonify(result), 201
+
+    @app.get('/api/internal/workforce/images/<image_id>')
+    @require_user()
+    def workforce_image(image_id):
+        image = get_store().image(valid_id(image_id), g.portal_user['id'])
+        return Response(base64.b64decode(image['data']), mimetype=image['mime'], headers={
+            'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff',
+            'Content-Disposition': 'inline; filename="chat-image.' + ('png' if image['mime'] == 'image/png' else 'jpg') + '"'})
 
     @app.post('/api/internal/workforce/tasks/<task_id>/<action>')
     @require_user()

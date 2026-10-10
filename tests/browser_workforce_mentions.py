@@ -1,6 +1,8 @@
 """Real browser group bots and mentions; isolated accounts, storage and model."""
 from contextlib import ExitStack
 import json
+import base64
+from io import BytesIO
 import logging
 import os
 from pathlib import Path
@@ -8,6 +10,7 @@ import sys
 from tempfile import TemporaryDirectory
 from threading import Thread
 from unittest.mock import patch
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -23,8 +26,15 @@ class AgentModel:
         return [workforce_hosted.GROQ_MODEL]
     def local_model(self, model):
         pass
+    def describe_images(self, images):
+        assert images[0]['mime'] == 'image/png'
+        return 'The screenshot shows a green rectangle.'
     def chat(self, model, system, content, schema=None):
         if schema:
+            context = json.loads(content)
+            if 'image summary' in context['current_request']:
+                assert 'green rectangle' in context['uploaded_image_notes']
+                return json.dumps(dict(action='summary_image', message='A green rectangle.', agent_ids=[], url='', start='', end='', dealer='', market=''))
             return json.dumps(dict(action='add_agents', message='Add HR.', agent_ids=['ai-hr'],
                                    start='', end='', dealer='', market=''))
         assert 'HR Agent' in system
@@ -109,11 +119,39 @@ def main():
                 expect(member.locator('.wf-ping')).to_have_count(0)
                 member.locator('#wf-directory').click()
                 expect(member.locator('[data-add-agent]')).to_have_count(0)
+                image = BytesIO()
+                Image.new('RGB', (500, 300), '#309977').save(image, format='PNG')
+                page.locator('#wf-invoke').uncheck()
+                page.locator('#wf-image-input').set_input_files({'name':'screenshot.png','mimeType':'image/png','buffer':image.getvalue()})
+                expect(page.locator('#wf-image-preview img')).to_have_count(1)
+                page.get_by_role('button', name='Remove screenshot 1').click()
+                expect(page.locator('#wf-image-preview')).to_be_hidden()
+                page.locator('#wf-input').evaluate('''(input, data) => {
+                    const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+                    const transfer = new DataTransfer();
+                    transfer.items.add(new File([bytes], 'pasted.png', {type:'image/png'}));
+                    input.dispatchEvent(new ClipboardEvent('paste', {clipboardData:transfer, bubbles:true, cancelable:true}));
+                }''', base64.b64encode(image.getvalue()).decode())
+                expect(page.locator('#wf-image-preview img')).to_have_count(1)
+                page.locator('#wf-send').click()
+                expect(page.locator('.wf-message')).to_have_count(6)
+                expect(page.locator('.wf-chat-image')).to_have_count(1)
+                page.locator('.wf-chat-image').click()
+                expect(page.locator('#wf-full-image')).to_be_visible()
+                page.wait_for_function("document.getElementById('wf-full-image').naturalWidth === 500")
+                page.locator('#wf-image-dialog .close').click()
+                page.locator('#wf-invoke').check()
+                page.locator('#wf-input').fill('Send an image summary of that screenshot.')
+                page.locator('#wf-input').press('Enter')
+                expect(page.locator('.wf-message')).to_have_count(8)
+                expect(page.locator('.wf-chat-image')).to_have_count(2)
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                page.screenshot(path=str(artifacts / 'images-mobile.png'), full_page=True)
                 assert not errors, errors
                 member_context.close()
                 context.close()
                 browser.close()
-            print('PASS: add bot, persisted roster, specialist reply, keyboard and touch mentions, human ping, unread badge, safe rendering, mobile and member permissions.')
+            print('PASS: group bots, mentions, permissions, mobile, screenshot upload/paste/removal, private image viewer, vision context and bot image reply.')
         finally:
             server.shutdown()
             server.server_close()

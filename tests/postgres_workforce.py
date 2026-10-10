@@ -68,6 +68,7 @@ def main():
         }''')
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/012_ai_workforce.sql').read_text())
         page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/013_workforce_agents_mentions.sql').read_text())
+        page.evaluate('sql => db.exec(sql)', (ROOT / 'supabase/migrations/014_workforce_images.sql').read_text())
         store = PgStore(page)
         user = {'id': str(uuid4()), 'display_name': 'Sample employee', 'session_version': str(uuid4())}
         other = str(uuid4())
@@ -126,6 +127,17 @@ def main():
         ping = store.enqueue(cid, user, '@hr @teammate Hello', str(uuid4()), 'sample/model', False, ['ai-hr', other])
         assert set(store.snapshot(cid, other)['messages'][-1]['mention_ids']) == {'ai-hr', other}
         assert store.list_chats(other)[0]['mention_seq'] == ping['message_seq']
+        from api.workforce_images import text_image
+        picture = text_image('Test', 'Isolated PostgreSQL image')
+        image_task = store.enqueue(cid, user, 'Review image', str(uuid4()), 'sample/model', images=[picture])
+        claimed_image = store.claim('worker', image_task['task_id'])
+        uploaded = store.task_images(claimed_image)
+        assert len(uploaded) == 1
+        assert store.image(uploaded[0]['id'], other)['data'] == picture['data']
+        store.remember_images(claimed_image, 'Test image', uploaded)
+        assert store.task_images(claimed_image)[0]['analysis'] == 'Test image'
+        assert store.progress(claimed_image, 'Done', ('ai-manager', 'AI Manager'), 'Image response', complete=True, images=[picture])
+        assert len(store.snapshot(cid, other)['messages'][-1]['images']) == 1
         denied = page.evaluate('''async () => {
             await db.exec('SET ROLE anon');
             try { await db.query('SELECT * FROM archet_workforce.messages'); return false; }

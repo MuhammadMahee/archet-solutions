@@ -41,8 +41,9 @@ well as saved sales reporting. It receives the requester's display name, this
 group's title and member display names (including AI teammates), and up to 24
 preceding messages from this group. History is capped at 9,000 content characters,
 with at most 2,500 per message; older or longer context may need restating.
-It cannot execute code, change employee accounts, inspect files, browse, send
-external messages or act on unconnected business systems.
+It cannot execute code, change employee accounts, inspect arbitrary files, send
+external messages or act on unconnected business systems. It can read attached
+screenshots and capture an explicitly supplied public website as described below.
 
 ### Specialist bots and mentions
 
@@ -66,6 +67,36 @@ can coordinate the request or add bots.
 
 Migration `013_workforce_agents_mentions.sql` adds private tables for group bot
 membership and message mentions. Existing chats keep Manager and Operations.
+
+### Screenshots and image replies
+
+Use **Attach**, paste a screenshot into the composer, or drop an image onto it.
+Up to two PNG, JPEG or WebP images can accompany a message. The browser resizes
+images (source files up to 10 MB and 20 megapixels); the server validates and
+re-encodes them, strips metadata and stores at most 1 MB per image. Click a chat
+image to open or download it. Only current group members can fetch its bytes.
+Migration `014_workforce_images.sql` stores images in the private chat schema;
+the app limits total stored image bytes to 100 MB (base64/database overhead is
+additional). This uses the existing database without another storage account.
+
+In Groq mode, bots read attached images using `qwen/qwen3.8-27b` and the existing
+`GROQ_API_KEY`, with an 800-token output cap. Image content goes to Groq for this
+step; a bounded description is saved for follow-up questions. Free-plan model
+permissions and quotas still apply. Gateway and Ollama modes can share images,
+but image reading currently requires Groq.
+
+Ask `@manager Send our checklist as a summary image.` Bots render summary cards
+locally, and completed saved-sales reports include an image plus the full CSV.
+These are generated cards, not screenshots of an external application.
+
+Ask `@manager Send a screenshot of https://example.com`. Public website captures
+use [Microlink's free API](https://microlink.io/pricing), which currently allows
+25 requests per day without a key. Shared-service limits apply and captures may
+be cached. Only the exact public HTTPS URL in the current request is sent to
+Microlink; uploaded images, conversation text, cookies and credentials are not.
+URLs with query parameters, login credentials or private network addresses are
+rejected. This cannot capture your signed-in portal or interact with a website.
+There is no paid fallback or additional environment variable to configure.
 
 Prompts, this bounded chat context and selected sales summaries are sent to Groq. Groq documents that it does
 not retain inference content by default, with exceptions for reliability/abuse
@@ -120,13 +151,14 @@ exact hostname.
 ## Verify
 
 1. Open `/ai-workforce` on the internal portal domain and sign in.
-2. Open Connection & models. It should show Vercel AI Gateway as configured.
+2. Open Connection & models. It should show your chosen provider as configured.
    This checks configuration; the first assignment verifies the credentials.
 3. Create a chat and request yesterday's saved sales.
 4. Confirm the task completes, download its CSV, and compare with Sales Update.
 
 Assignments run during the authenticated send/retry request. Each attempt makes
-at most three model calls and one read-only sales query; model calls have a
+at most three text model calls, one optional vision call and one read-only sales query;
+model calls have a
 45-second socket timeout and the executor checks a 180-second model-call budget.
 Progress is committed between steps and the chat polls for it while processing.
 The database connection is closed before inference. No background thread is

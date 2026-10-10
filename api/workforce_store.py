@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS message_mentions (
  message_seq INTEGER NOT NULL REFERENCES messages(seq), recipient_id TEXT NOT NULL,
  PRIMARY KEY(message_seq,recipient_id));
 CREATE INDEX IF NOT EXISTS mentions_recipient ON message_mentions(recipient_id,message_seq);
+CREATE TABLE IF NOT EXISTS message_images (
+ id TEXT PRIMARY KEY, message_seq INTEGER NOT NULL REFERENCES messages(seq),
+ name TEXT NOT NULL, mime TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
+ size INTEGER NOT NULL, data TEXT NOT NULL, source TEXT NOT NULL, analysis TEXT NOT NULL DEFAULT '');
+CREATE INDEX IF NOT EXISTS images_message ON message_images(message_seq);
 PRAGMA user_version=1;
 """
 
@@ -122,13 +127,19 @@ class Store:
                                     (chat, before or 9223372036854775807)).fetchall()[::-1]
             messages = [dict(row) for row in rows]
             mentions = {}
+            images = {}
             if messages:
+                for item in conn.execute('''SELECT i.id,i.message_seq,i.name,i.mime,i.width,i.height,i.source FROM message_images i
+                    JOIN messages m ON m.seq=i.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=?''',
+                    (chat, messages[0]['seq'], messages[-1]['seq'])):
+                    images.setdefault(item['message_seq'], []).append(dict(item))
                 for item in conn.execute('''SELECT mm.message_seq,mm.recipient_id FROM message_mentions mm
                     JOIN messages m ON m.seq=mm.message_seq WHERE m.conversation_id=? AND m.seq>=? AND m.seq<=?''',
                     (chat, messages[0]['seq'], messages[-1]['seq'])):
                     mentions.setdefault(item['message_seq'], []).append(item['recipient_id'])
             for message in messages:
                 message['mention_ids'] = mentions.get(message['seq'], [])
+                message['images'] = images.get(message['seq'], [])
                 if message['report_ready']:
                     result = json.loads(conn.execute('SELECT result FROM tasks WHERE id=?', (message['task_id'],)).fetchone()['result'])
                     message['report_summary'] = {'store_count': len(result['rows']), 'total_boxes': result['totals'].get('total_boxes'),
@@ -162,12 +173,15 @@ class Store:
             conversation = self.member(conn, task['conversation_id'], task['creator_id'])
             members = [row['user_id'] for row in conn.execute(
                 'SELECT user_id FROM members WHERE conversation_id=?', (task['conversation_id'],))]
-            rows = conn.execute('''SELECT sender_name,kind,content,created_at FROM messages
+            rows = conn.execute('''SELECT seq,sender_name,kind,content,created_at FROM messages
                 WHERE conversation_id=? AND seq<? ORDER BY seq DESC LIMIT 25''',
                 (task['conversation_id'], task['message_seq'])).fetchall()
             agents = self.agent_ids(conn, task['conversation_id'])
             mentions = [r['recipient_id'] for r in conn.execute(
                 'SELECT recipient_id FROM message_mentions WHERE message_seq=?', (task['message_seq'],))]
+            image_notes = [dict(r) for r in conn.execute('''SELECT i.analysis,i.name FROM message_images i
+                JOIN messages m ON m.seq=i.message_seq WHERE m.conversation_id=? AND m.seq<? AND i.analysis<>''
+                ORDER BY m.seq DESC LIMIT 2''', (task['conversation_id'], task['message_seq']))]
         history, remaining = [], 9000
         limited = len(rows) > 24
         for row in rows[:24]:
@@ -182,6 +196,7 @@ class Store:
             remaining -= len(content)
         return {'title': conversation['title'], 'creator_id': conversation['creator_id'], 'member_ids': members,
                 'agent_ids': agents, 'mention_ids': mentions,
+                'earlier_image_notes': image_notes,
                 'recent_messages': history[::-1], 'history_limited': limited}
 
     @staticmethod
@@ -189,7 +204,7 @@ class Store:
         return {**{k: row[k] for k in ('id', 'creator_id', 'status', 'step', 'created_at', 'started_at', 'completed_at', 'error', 'attempts')},
                 'has_report': row['status'] == 'completed' and bool(row['result'])}
 
-    def enqueue(self, chat, user, content, request_id, model, invoke=True, mention_ids=None):
+    def enqueue(self, chat, user, content, request_id, model, invoke=True, mention_ids=None, images=None):
         with self.connection(True) as conn:
             self.member(conn, chat, user['id'])
             mentions = list(dict.fromkeys(mention_ids or []))
@@ -202,8 +217,9 @@ class Store:
             old = conn.execute('SELECT seq,task_id,content FROM messages WHERE conversation_id=? AND sender_id=? AND request_id=?',
                                (chat, user['id'], request_id)).fetchone()
             if old:
+                old_images = sorted(r['data'] for r in conn.execute('SELECT data FROM message_images WHERE message_seq=?', (old['seq'],)))
                 old_mentions = {r['recipient_id'] for r in conn.execute('SELECT recipient_id FROM message_mentions WHERE message_seq=?', (old['seq'],))}
-                if old['content'] != content or bool(old['task_id']) != invoke or old_mentions != set(mentions):
+                if old['content'] != content or bool(old['task_id']) != invoke or old_mentions != set(mentions) or old_images != sorted(i['data'] for i in (images or [])):
                     raise PortalError('This message ID was already used for another message.', 409)
                 return dict(message_seq=old['seq'], task_id=old['task_id'])
             if invoke and conn.execute("SELECT COUNT(*) AS count FROM tasks WHERE creator_id=? AND status IN ('pending','running')", (user['id'],)).fetchone()['count'] >= 5:
@@ -213,6 +229,7 @@ class Store:
             seq = conn.execute('''INSERT INTO messages(conversation_id,sender_id,sender_name,kind,content,created_at,task_id,request_id)
                 VALUES(?,?,?,?,?,?,?,?) RETURNING seq''', (chat, user['id'], user['display_name'], 'human', content, stamp, task, request_id)).fetchone()['seq']
             conn.executemany('INSERT INTO message_mentions VALUES(?,?)', [(seq, uid) for uid in mentions])
+            self.save_images(conn, seq, images or [])
             if invoke:
                 conn.execute('''INSERT INTO tasks(id,conversation_id,message_seq,creator_id,session_version,model,status,step,created_at)
                     VALUES(?,?,?,?,?,?,'pending','Waiting to start',?)''',
@@ -294,7 +311,7 @@ class Store:
             row = conn.execute('SELECT status,lease_owner FROM tasks WHERE id=?', (task['id'],)).fetchone()
             return bool(row and row['status'] == 'running' and row['lease_owner'] == task['lease_owner'])
 
-    def progress(self, task, step, sender=None, content=None, event=None, details=None, complete=False, result=None, agents=None, user=None):
+    def progress(self, task, step, sender=None, content=None, event=None, details=None, complete=False, result=None, agents=None, user=None, images=None):
         with self.connection(True) as conn:
             row = conn.execute('SELECT status,lease_owner FROM tasks WHERE id=?', (task['id'],)).fetchone()
             if not row or row['status'] != 'running' or row['lease_owner'] != task['lease_owner']:
@@ -311,8 +328,9 @@ class Store:
                 self.audit(conn, user['id'], 'agents.added', task['id'], {'agent_ids': agents})
                 content = 'Ready in this group: ' + ', '.join(AGENTS[a]['name'] + ' (@' + AGENTS[a]['handle'] + ')' for a in dict.fromkeys(agents)) + '. Mention a bot to ask for help. These bots can advise and draft; adding them does not connect private business records.'
             if sender and content:
-                conn.execute('''INSERT INTO messages(conversation_id,sender_id,sender_name,kind,content,created_at,task_id)
-                    VALUES(?,?,?,'ai',?,?,?)''', (task['conversation_id'], sender[0], sender[1], content, now(), task['id']))
+                seq = conn.execute('''INSERT INTO messages(conversation_id,sender_id,sender_name,kind,content,created_at,task_id)
+                    VALUES(?,?,?,'ai',?,?,?) RETURNING seq''', (task['conversation_id'], sender[0], sender[1], content, now(), task['id'])).fetchone()['seq']
+                self.save_images(conn, seq, images or [])
             conn.execute('UPDATE tasks SET step=? WHERE id=?', (step, task['id']))
             if event:
                 self.audit(conn, task['creator_id'], event, task['id'], details)
@@ -320,6 +338,45 @@ class Store:
                 conn.execute("UPDATE tasks SET status='completed',completed_at=?,result=?,lease_owner=NULL WHERE id=?", (now(), json.dumps(result) if result else None, task['id']))
                 self.audit(conn, task['creator_id'], 'task.completed', task['id'])
         return True
+
+    @staticmethod
+    def save_images(conn, seq, images):
+        if not images:
+            return
+        used = conn.execute('SELECT COALESCE(SUM(size),0) AS used FROM message_images').fetchone()['used']
+        if used + sum(i['size'] for i in images) > 100 * 1024 * 1024:
+            raise PortalError('Chat image storage is full (100 MB). Contact your administrator before adding more images.', 413)
+        for image in images:
+            conn.execute('INSERT INTO message_images(id,message_seq,name,mime,width,height,size,data,source) VALUES(?,?,?,?,?,?,?,?,?)',
+                         (str(uuid4()), seq, *[image[k] for k in ('name', 'mime', 'width', 'height', 'size', 'data', 'source')]))
+
+    def image(self, image_id, user):
+        with self.connection() as conn:
+            row = conn.execute('''SELECT i.*,m.conversation_id FROM message_images i
+                JOIN messages m ON m.seq=i.message_seq WHERE i.id=?''', (image_id,)).fetchone()
+            if not row:
+                raise PortalError('Image not found.', 404)
+            self.member(conn, row['conversation_id'], user)
+            return dict(row)
+
+    def task_images(self, task):
+        with self.connection() as conn:
+            self.member(conn, task['conversation_id'], task['creator_id'])
+            current = [dict(r) for r in conn.execute('SELECT * FROM message_images WHERE message_seq=?', (task['message_seq'],))]
+            if current:
+                return current
+            previous = conn.execute('''SELECT m.seq FROM messages m JOIN message_images i ON i.message_seq=m.seq
+                WHERE m.conversation_id=? AND m.seq<? AND m.kind='human' AND i.analysis=''
+                AND m.seq IN (SELECT seq FROM messages WHERE conversation_id=? AND seq<? ORDER BY seq DESC LIMIT 24)
+                ORDER BY m.seq DESC LIMIT 1''', (task['conversation_id'], task['message_seq'], task['conversation_id'], task['message_seq'])).fetchone()
+            return [dict(r) for r in conn.execute('SELECT * FROM message_images WHERE message_seq=?', (previous['seq'],))] if previous else []
+
+    def remember_images(self, task, analysis, images):
+        with self.connection(True) as conn:
+            self.member(conn, task['conversation_id'], task['creator_id'])
+            for image in images:
+                conn.execute('''UPDATE message_images SET analysis=? WHERE id=? AND message_seq IN
+                    (SELECT seq FROM messages WHERE conversation_id=?)''', (analysis[:3500], image['id'], task['conversation_id']))
 
     def fail(self, task, message):
         with self.connection(True) as conn:

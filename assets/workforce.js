@@ -5,6 +5,7 @@
   let generation = 0, selection = 0, active = null, chats = [], messages = [], tasks = [], status = null;
   let polling = false, ticks = 0, pendingSend = null, sending = false;
   let participants = [], canAddAgents = false, mentionOptions = [], mentionIndex = 0, mentionStart = -1;
+  let attachedImages = [], processingImages = false;
   const seen = new Map();
   const valid = token => token === generation && currentUser && !currentUser.rest_mode && page === 'workforce';
   const error = message => { el('error').textContent = message || ''; el('error').hidden = !message; };
@@ -18,6 +19,60 @@
   const directory = dialog('directory-dialog', 'Your AI employees', '<p>Add specialist bots to a group by asking @manager. Mention a joined bot to get its help.</p><div id="wf-employees"></div><p>Specialists advise and draft. Adding a bot does not connect private HR, finance or other business records.</p>');
   const settings = dialog('settings-dialog', 'Connection & models', '<div id="wf-connection" class="wf-connection"></div><form id="wf-model-form"><div class="field"><label for="wf-model">Default AI model</label><select id="wf-model"></select></div><p>Changes apply to new assignments. Current assignments keep their original model.</p><p id="wf-settings-error" class="error" role="alert"></p><button class="primary" type="submit" id="wf-model-save">Save model</button></form><p id="wf-worker-help">Start the AI worker on your company AI computer to process queued assignments.</p><div id="wf-integrations" class="wf-connection"></div>');
   const auditDialog = dialog('audit-dialog', 'Assignment activity', '<div id="wf-audit-content"></div>');
+  const imageDialog = dialog('image-dialog', 'Chat image', '<img id="wf-full-image" alt="Chat attachment"><a id="wf-download-image" download>Download image</a>');
+  const imageInput = document.createElement('input'); imageInput.type = 'file'; imageInput.multiple = true;
+  imageInput.accept = 'image/png,image/jpeg,image/webp'; imageInput.hidden = true; imageInput.id = 'wf-image-input';
+  const imageButton = document.createElement('button'); imageButton.type = 'button'; imageButton.className = 'wf-image-button';
+  imageButton.textContent = 'Attach'; imageButton.setAttribute('aria-label', 'Attach screenshots');
+  const imagePreview = document.createElement('div'); imagePreview.id = 'wf-image-preview'; imagePreview.className = 'wf-image-preview'; imagePreview.hidden = true;
+  el('composer').prepend(imageInput, imagePreview);
+  el('composer').querySelector('.wf-composer-bottom').prepend(imageButton);
+  el('input').required = false;
+  function renderImagePreview() {
+    imagePreview.hidden = !attachedImages.length;
+    imagePreview.replaceChildren();
+    attachedImages.forEach((attachment, index) => {
+      const item = document.createElement('div'), image = document.createElement('img'), remove = document.createElement('button');
+      image.src = attachment.preview; image.alt = 'Screenshot ready to send';
+      remove.type = 'button'; remove.textContent = '×'; remove.setAttribute('aria-label', 'Remove screenshot ' + (index + 1));
+      remove.onclick = () => { attachedImages.splice(index,1); renderImagePreview(); };
+      item.append(image, remove); imagePreview.append(item);
+    });
+  }
+  async function attachFiles(files) {
+    if (processingImages) return;
+    if (attachedImages.length + files.length > 2) return error('Attach up to two screenshots per message.');
+    const chat = active, token = generation; processingImages = true; imageButton.disabled = true;
+    try {
+      for (const file of files) {
+        if (!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw new Error('Choose a PNG, JPEG or WebP image under 10 MB.');
+        const bitmap = await createImageBitmap(file);
+        if (!valid(token) || active !== chat) { bitmap.close(); return; }
+        if (bitmap.width * bitmap.height > 20000000) { bitmap.close(); throw new Error('Use an image up to 20 megapixels.'); }
+        const scale = Math.min(1, 1600 / Math.max(bitmap.width,bitmap.height));
+        const canvas = document.createElement('canvas'); canvas.width = Math.max(1,Math.round(bitmap.width * scale)); canvas.height = Math.max(1,Math.round(bitmap.height * scale));
+        const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0,0,canvas.width,canvas.height); context.drawImage(bitmap,0,0,canvas.width,canvas.height); bitmap.close();
+        let preview = canvas.toDataURL('image/png');
+        if (preview.length > 1300000) preview = canvas.toDataURL('image/jpeg', .82);
+        if (preview.length > 1300000) throw new Error('This screenshot is too detailed. Crop it or use a smaller image.');
+        attachedImages.push({data:preview.split(',')[1], preview}); renderImagePreview();
+      }
+      error('');
+    } catch (e) { if (valid(token) && active === chat) error(e.message); }
+    finally { processingImages = false; imageButton.disabled = false; imageInput.value = ''; }
+  }
+  imageButton.onclick = () => imageInput.click();
+  imageInput.onchange = () => attachFiles([...imageInput.files]);
+  el('input').addEventListener('paste', event => {
+    const files = [...event.clipboardData.items].filter(i => i.kind === 'file' && i.type.startsWith('image/')).map(i => i.getAsFile());
+    if (files.length) { event.preventDefault(); attachFiles(files); }
+  });
+  el('composer').addEventListener('dragover', event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
+  el('composer').addEventListener('drop', event => { if (event.dataTransfer.files.length) { event.preventDefault(); attachFiles([...event.dataTransfer.files]); } });
+
+  function imageMarkup(images) {
+    return (images || []).map(image => '<button type="button" class="wf-chat-image" data-image="' + escapeHTML(image.id) + '" aria-label="Open ' + escapeHTML(image.name) + '"><img src="/api/internal/workforce/images/' + escapeHTML(image.id) + '" alt="' + escapeHTML(image.name) + '" loading="lazy"><small>' + escapeHTML(image.name) + '</small></button>').join('');
+  }
   const mentionMenu = document.createElement('div');
   mentionMenu.id = 'wf-mention-menu'; mentionMenu.className = 'wf-mention-menu'; mentionMenu.hidden = true;
   mentionMenu.setAttribute('role', 'listbox'); mentionMenu.setAttribute('aria-label', 'Mention a teammate');
@@ -120,7 +175,7 @@
     el('messages').innerHTML = visible.length ? '<div class="wf-date">' + escapeHTML(new Date(visible[0].created_at).toLocaleDateString(undefined, {weekday:'long',month:'long',day:'numeric'})) + '</div>' + visible.map(m => {
       const own = m.sender_id === currentUser.id, ai = m.kind === 'ai';
       const initials = ai ? (status?.employees?.find(a => a.id === m.sender_id)?.initials || 'AI') : m.sender_name.slice(0,2).toUpperCase();
-      return '<article class="wf-message ' + (own ? 'own ' : '') + ((m.mention_ids || []).includes(currentUser.id) ? 'mentioned ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + messageMarkup(m) + '</div>' + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
+      return '<article class="wf-message ' + (own ? 'own ' : '') + ((m.mention_ids || []).includes(currentUser.id) ? 'mentioned ' : '') + (m.sender_id === 'ai-operations' ? 'operations' : '') + '"><span class="wf-message-icon" aria-hidden="true">' + escapeHTML(initials) + '</span><div class="wf-bubble"><div class="wf-sender">' + escapeHTML(own ? 'You' : m.sender_name) + (ai ? '<span class="wf-ai-label">AI</span>' : '') + '</div><div class="wf-content">' + messageMarkup(m) + '</div>' + imageMarkup(m.images) + sourceSummary(m.report_summary) + (m.report_ready ? '<a class="wf-report" href="/api/internal/workforce/tasks/' + escapeHTML(m.task_id) + '/report.csv" download>&#8595; Download source report</a>' : '') + '<time class="wf-time" datetime="' + escapeHTML(m.created_at) + '" title="' + escapeHTML(new Date(m.created_at).toLocaleString()) + '">' + escapeHTML(new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})) + '</time></div></article>';
     }).join('') : '<div class="wf-empty-chat">' + (query ? 'No matching loaded messages.' : 'Your AI team is ready for an assignment.<button type="button" class="wf-suggestion" id="wf-example">Summarize yesterday’s saved sales for all stores.</button>') + '</div>';
     if (stick || nearBottom) log.scrollTop = log.scrollHeight;
   }
@@ -158,6 +213,7 @@
     renderChats();
   }
   async function selectChat(id) {
+    attachedImages = []; renderImagePreview();
     selection++; active = id; messages = []; tasks = []; pendingSend = null; participants = []; canAddAgents = false; closeMentions();
     el('input').value = ''; el('message-search').value = ''; el('older').hidden = true;
     el('welcome').hidden = true; el('active').hidden = false; el('layout').classList.add('chat-open');
@@ -177,14 +233,15 @@
     } catch (e) { if (valid(token)) error(e.message); }
   }
   function clear() {
-    participants = []; canAddAgents = false; closeMentions();
+    participants = []; canAddAgents = false; closeMentions(); attachedImages = []; renderImagePreview();
+    el('full-image').removeAttribute('src');
     generation++; selection++; active = null; chats = []; messages = []; tasks = []; status = null; pendingSend = null; sending = false; seen.clear();
     el('chats').replaceChildren(); el('messages').replaceChildren(); el('tasks').replaceChildren();
     el('input').value = ''; el('search').value = ''; el('message-search').value = ''; el('new-form').reset(); el('people').replaceChildren();
     el('audit-content').replaceChildren(); el('employees').replaceChildren();
     el('active').hidden = true; el('welcome').hidden = false; el('demo').hidden = true; el('layout').classList.remove('chat-open');
     el('send').disabled = false; error('');
-    [newDialog,directory,settings,auditDialog].forEach(d => { if (d.open) d.close(); });
+    [newDialog,directory,settings,auditDialog,imageDialog].forEach(d => { if (d.open) d.close(); });
   }
   async function newChat() {
     const token = generation;
@@ -210,7 +267,14 @@
   el('search').oninput = renderChats;
   el('message-search').oninput = () => renderMessages();
   el('back').onclick = () => el('layout').classList.remove('chat-open');
-  el('messages').onclick = event => { if (event.target.closest('#wf-example')) { el('input').value = 'Summarize yesterday’s saved sales for all stores.'; el('input').focus(); } };
+  el('messages').onclick = event => {
+    const button = event.target.closest('[data-image]');
+    if (button) {
+      const url = '/api/internal/workforce/images/' + button.dataset.image;
+      el('full-image').src = url; el('download-image').href = url; imageDialog.showModal();
+    }
+    if (event.target.closest('#wf-example')) { el('input').value = 'Summarize yesterday saved sales for all stores.'; el('input').focus(); }
+  };
   el('input').onkeydown = event => {
     if (event.isComposing) return;
     if (!mentionMenu.hidden) {
@@ -223,17 +287,20 @@
     if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); el('composer').requestSubmit(); }
   };
   el('composer').onsubmit = async event => {
-    event.preventDefault(); if (!active || sending) return;
+    event.preventDefault(); if (!active || sending || processingImages) return;
     const content = el('input').value.trim(), chat = active, token = generation, invoke = el('invoke').checked;
-    if (!content) return;
-    if (!pendingSend || pendingSend.chat !== chat || pendingSend.content !== content || pendingSend.invoke !== invoke) pendingSend = {chat,content,invoke,id:uuid()};
+    if (!content && !attachedImages.length) return;
+    const images = attachedImages.map(i => ({data:i.data}));
+    const imageKey = images.map(i => i.data).join('|');
+    if (!pendingSend || pendingSend.chat !== chat || pendingSend.content !== content || pendingSend.invoke !== invoke || pendingSend.imageKey !== imageKey) pendingSend = {chat,content,invoke,imageKey,id:uuid()};
     const outgoing = pendingSend;
     sending = true; el('send').disabled = true; error('');
     try {
-      await api(endpoint + 'conversations/' + chat + '/messages', 'POST', {content,request_id:outgoing.id,invoke_agents:invoke});
+      await api(endpoint + 'conversations/' + chat + '/messages', 'POST', {content,request_id:outgoing.id,invoke_agents:invoke,images});
       if (!valid(token) || active !== chat) return;
       if (el('input').value.trim() === content) el('input').value = '';
       pendingSend = null; closeMentions();
+      if (attachedImages.map(i => i.data).join('|') === imageKey) { attachedImages = []; renderImagePreview(); }
       await refreshConversation(); await refreshChats(token); el('log').scrollTop = el('log').scrollHeight;
     } catch(e) { if (valid(token) && active === chat) error(e.message + ' Your message is kept here for retry.'); }
     finally { if (token === generation) { sending = false; el('send').disabled = false; } }

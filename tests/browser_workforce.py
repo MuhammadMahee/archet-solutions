@@ -130,7 +130,7 @@ def main():
                 page.locator('#wf-input').fill('<img src=x onerror="alert(1)"> **safe text**')
                 page.locator('#wf-input').press('Enter')
                 expect(page.locator('.wf-message')).to_have_count(5)
-                assert page.locator('#wf-messages img').count() == 0
+                assert page.locator('#wf-messages img:not([src^="/api/internal/workforce/images/"])').count() == 0
                 page.locator('#wf-message-search').fill('safe text')
                 expect(page.locator('.wf-message')).to_have_count(1)
                 page.locator('#wf-message-search').fill('')

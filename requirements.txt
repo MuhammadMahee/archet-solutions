@@ -4,3 +4,4 @@ psycopg[binary]==3.3.6
 xlrd==2.0.2
 openpyxl==3.1.5
 tzdata==2026.2
+Pillow==12.3.0

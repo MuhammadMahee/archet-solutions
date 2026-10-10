@@ -137,6 +137,8 @@ def register_portal(app):
         limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload') else 32*1024
         if request.path.startswith('/api/internal/invoices/'):
             limit = 512 * 1024
+        if request.method == 'POST' and re.fullmatch(r'/api/internal/workforce/conversations/[0-9a-f-]{36}/messages', request.path):
+            limit = 3 * 1024 * 1024
         if request.content_length and request.content_length>limit:
             raise PortalError('The upload or request is too large.',413)
         if not request.path.startswith("/api/internal/"):
@@ -158,7 +160,7 @@ def register_portal(app):
             response.headers["Cache-Control"] = "no-store"
             response.headers["X-Robots-Tag"] = "noindex, nofollow"
             response.headers["X-Frame-Options"] = "DENY"
-            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         return response
 
     @app.post("/api/internal/login")
