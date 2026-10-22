@@ -204,13 +204,16 @@ register_calling_tree(app,lambda: sales_connect())
 register_quota(app)
 register_invoices(app)
 
+from api.store_hours import register_store_hours
+register_store_hours(app)
+
 from api.workforce import register_workforce
 register_workforce(app)
 
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename not in ('source-sync.js', 'sales-snapshot.js', 'sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png', 'invoices.js', 'invoices.css', 'inter-variable.woff2', 'spacegrotesk-variable.woff2', 'workforce.js', 'workforce-controls.js', 'workforce.css'):
+    if filename not in ('store-hours.js', 'store-hours.css', 'store-hours-snapshot.js', 'source-sync.js', 'sales-snapshot.js', 'sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png', 'invoices.js', 'invoices.css', 'inter-variable.woff2', 'spacegrotesk-variable.woff2', 'workforce.js', 'workforce-controls.js', 'workforce.css'):
         return '', 404
     return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
 

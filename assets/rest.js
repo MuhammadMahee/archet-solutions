@@ -17,6 +17,7 @@
     shownVersion = version;
     window.salesDashboard?.clear(); window.callingTree?.clear(); window.quotaDashboard?.clear();
     window.invoiceDashboard?.clear();
+    window.storeHoursDashboard?.clear();
     window.workforceDashboard?.clear();
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
     quotes = []; users = []; editingUser = editingQuote = null; offset = 0;

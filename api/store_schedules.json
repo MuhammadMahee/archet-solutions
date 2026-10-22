@@ -1,0 +1,778 @@
+{
+  "source": "OPENING TIMING FOR ALL DEALERS.xlsx",
+  "sheets": {
+    "weekday": "MON TO SAT: E/F",
+    "saturday": "MON TO SAT: G/H",
+    "sunday": "SUN: E/F"
+  },
+  "adjustments": [
+    "User confirmed on 2026-10-22: Connect Monday-Saturday opening is 10:00 AM, correcting workbook values of 10:00 PM."
+  ],
+  "mapping_notes": [
+    "Workbook ARM WIRELESS stores are portal AMQ (DF Wireless). GLENVIEW matches AMQ N1329B at 630 Milwaukee Ave, Glenview.",
+    "Workbook TALKALOT WIRELESS / LEE ST matches portal ARM 317-002 at 1458 Lee St.",
+    "Unmatched workbook stores are retained here but do not expand the active Calling Tree."
+  ],
+  "stores": [
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "SUPREME",
+      "market": "DALLAS",
+      "store": "GILMER",
+      "portal_dealer": "SRH",
+      "portal_store_id": "TXD2121A",
+      "weekday": {
+        "opening_time": "09:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "09:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "SUPREME",
+      "market": "DALLAS",
+      "store": "LOOP",
+      "portal_dealer": "SRH",
+      "portal_store_id": "TXD510A",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "SUPREME",
+      "market": "LOUISANA",
+      "store": "LA EEND",
+      "portal_dealer": "SRH",
+      "portal_store_id": "TXLS222A",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "SUPREME",
+      "market": "LOUISANA",
+      "store": "LA BENTON",
+      "portal_dealer": "SRH",
+      "portal_store_id": "TXLS835A",
+      "weekday": {
+        "opening_time": "09:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "09:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "TALKALOT WIRELESS",
+      "market": "CHICAGO",
+      "store": "LEE ST",
+      "portal_dealer": "ARM",
+      "portal_store_id": "317-002",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "ARM WIRELESS",
+      "market": "CHICAGO",
+      "store": "MT PROSPECT",
+      "portal_dealer": "AMQ",
+      "portal_store_id": "N1310C",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "ARM WIRELESS",
+      "market": "CHICAGO",
+      "store": "GLENVIEW",
+      "portal_dealer": "AMQ",
+      "portal_store_id": "N1329B",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "18:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "ARM WIRELESS",
+      "market": "CHICAGO",
+      "store": "WEST CHICAGO",
+      "portal_dealer": "AMQ",
+      "portal_store_id": "N1311B",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "ARM WIRELESS",
+      "market": "CHICAGO",
+      "store": "BLUE ISLAND",
+      "portal_dealer": "AMQ",
+      "portal_store_id": "N1301A",
+      "weekday": {
+        "opening_time": "09:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "09:00:00",
+        "closing_time": "19:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "REPAIR SHOP",
+      "company": "THE FIX",
+      "market": "UTAH",
+      "store": "HARRISVILLE",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "18:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "REPAIR SHOP",
+      "company": "THE FIX",
+      "market": "UTAH",
+      "store": "RIVERDALE",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "18:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "REPAIR SHOP",
+      "company": "THE FIX",
+      "market": "UTAH",
+      "store": "LAYTON",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "18:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "REPAIR SHOP",
+      "company": "THE FIX",
+      "market": "CHICAGO",
+      "store": "PRIME",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "18:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "TOTAL WIRELESS",
+      "company": "ARBF",
+      "market": "TOTAL",
+      "store": "EULESS",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "TOTAL WIRELESS",
+      "company": "ARBF",
+      "market": "TOTAL",
+      "store": "JACKSBORO",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "TOTAL WIRELESS",
+      "company": "ARBF",
+      "market": "TOTAL",
+      "store": "GANNAN",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "09:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "09:00:00",
+        "closing_time": "19:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "TOTAL WIRELESS",
+      "company": "ARBF",
+      "market": "TOTAL",
+      "store": "BENBROOK",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "17:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "DALLAS",
+      "store": "824 E BELT LINE RD",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-DAL46",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "19:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "DALLAS",
+      "store": "3007 CARRIER PKWY",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-DAL47",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "19:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "DALLAS",
+      "store": "3250 W. PLEASANT RUN RD",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-DAL54",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "19:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "DALLAS",
+      "store": "1512 S BELT LINE RD",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-DAL56",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "19:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "DALLAS",
+      "store": "1450 W PLEASANT RUN RD",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-DAL55",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "19:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "HOUSTON",
+      "store": "2717 61ST ST",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-HOU027",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "HOUSTON",
+      "store": "803 E NASA PARKWAY SUITE 130",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-HOU025",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "HOUSTON",
+      "store": "1805 GARTH RD STE 1805",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-HOU026",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "HOUSTON",
+      "store": "5102 BROADWAY ST STE G",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-HOU028",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "HOUSTON",
+      "store": "7058 BISSONNET ST",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-HOU029",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "HOUSTON",
+      "store": "6911 MARTIN LUTHER KING BLVD",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-HOU035",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "19:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "HOUSTON",
+      "store": "5104 HARRISBURG BLVD STE 300",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-HOU036",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "RENO",
+      "store": "1940 E WILLIAM",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-REN01",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "RENO",
+      "store": "4385 NEIL RD",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-REN02",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "RENO",
+      "store": "421 KEYSTONE AVE",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-REN03",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "RENO",
+      "store": "667 N MCCARRAN BLVD",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-REN04",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "RENO",
+      "store": "2900 CLEAR ACRE LN",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-REN06",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "METRO BY T-MOBILE",
+      "company": "CONNECT WIRELESS",
+      "market": "RENO",
+      "store": "1901 SILVERADA BLVD 2C",
+      "portal_dealer": "Connect",
+      "portal_store_id": "NTG-REN05",
+      "weekday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "saturday": {
+        "opening_time": "10:00:00",
+        "closing_time": "20:00:00"
+      },
+      "sunday": {
+        "opening_time": "12:00:00",
+        "closing_time": "18:00:00"
+      }
+    },
+    {
+      "carrier": "SMOKE SHOP",
+      "company": "SMOKE MAGIC",
+      "market": "DALLAS",
+      "store": "MAGIC 1",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "09:00:00",
+        "closing_time": "23:00:00"
+      },
+      "saturday": {
+        "opening_time": "09:00:00",
+        "closing_time": "23:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "20:00:00"
+      }
+    },
+    {
+      "carrier": "SMOKE SHOP",
+      "company": "SMOKE MAGIC",
+      "market": "DALLAS",
+      "store": "MAGIC 2",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "09:00:00",
+        "closing_time": "22:00:00"
+      },
+      "saturday": {
+        "opening_time": "09:00:00",
+        "closing_time": "00:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "22:00:00"
+      }
+    },
+    {
+      "carrier": "SMOKE SHOP",
+      "company": "SMOKE MAGIC",
+      "market": "DALLAS",
+      "store": "MAGIC 3",
+      "portal_dealer": null,
+      "portal_store_id": null,
+      "weekday": {
+        "opening_time": "09:00:00",
+        "closing_time": "22:00:00"
+      },
+      "saturday": {
+        "opening_time": "09:00:00",
+        "closing_time": "00:00:00"
+      },
+      "sunday": {
+        "opening_time": "11:00:00",
+        "closing_time": "22:00:00"
+      }
+    }
+  ]
+}

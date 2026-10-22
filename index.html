@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <link rel="stylesheet" href="/assets/sales.css">
+<link rel="stylesheet" href="/assets/store-hours.css">
 <title>Archet | Internal Workspace</title>
 <link rel="icon" href="/archet-logo-dark.png">
 <style>
@@ -48,6 +49,8 @@
     <div class="workspace-label">WORKSPACE</div>
     <nav class="nav" aria-label="Workspace navigation">
       <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
+      <button data-page="storehours"><span class="nav-icon">◷</span>Opening / Closing Form</button>
+      <button data-page="storehoursreport"><span class="nav-icon">▤</span>Opening / Closing Report</button>
       <button data-page="quota"><span class="nav-icon">◈</span>Quota Update</button>
       <button data-page="callingtree"><span class="nav-icon">▦</span>Calling Tree</button>
       <button data-page="workforce"><span class="nav-icon">◉</span>AI Workforce</button>
@@ -167,6 +170,8 @@
       <div id="quota-tables"></div>
       <p class="sales-footnote">Voice actual = new activations + reactivations − BTS − HSI. Upgrade goals and actuals appear in their own table and are excluded from Summary quota. MIM goals count toward quota; MIM actuals are 0, as in SPDI.<br>Accessory trend projects the saved month-to-date average across the full month. Per-day goal uses remaining days after today (Central time). Overall average = (quota growth + projected accessory achievement) ÷ 2. ARBF accessory goals appear in ACC GOALS; its overall score and ranking use quota growth only. Combined ACC GOALS, accessory sales and trend include all stores; accessory achievement calculations exclude ARBF. Rankings restart within each dealer and market; incomplete data gives provisional results.</p>
     </section>
+    <section id="page-storehours" hidden></section>
+    <section id="page-storehoursreport" hidden></section>
     <section id="page-callingtree" hidden>
       <div class="sales-hero"><div><div class="sales-eyebrow">STORE DIRECTORY</div><h1>Calling Tree</h1><p>The store list used by Sales Update, snapshots, and Excel exports.</p></div><button class="subtle" data-page="sales">View sales →</button></div>
       <div id="tree-message" class="sales-message" role="status" hidden></div>
@@ -233,6 +238,7 @@ function notice(message, error = false) { $('notice').textContent = message; $('
 function signedOut(message = '') {
   window.accountRest?.hide();
   if (window.salesDashboard) window.salesDashboard.clear();
+  window.storeHoursDashboard?.clear();
   if (window.callingTree) window.callingTree.clear();
   if (window.quotaDashboard) window.quotaDashboard.clear();
   window.invoiceDashboard?.clear();
@@ -272,7 +278,7 @@ function enterWorkspace(user, freshLogin = false) {
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
   $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice('');
   $('invoices-nav').hidden = !window.invoiceDashboard.allowed();
-  const initial=location.hash.slice(1)||(location.pathname==='/ai-workforce'?'workforce':'');showPage(['sales','quota','callingtree','workforce','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')||(initial==='invoices'&&window.invoiceDashboard.allowed())?initial:'sales');
+  const initial=location.hash.slice(1)||(location.pathname==='/ai-workforce'?'workforce':'');showPage(['sales','storehours','storehoursreport','quota','callingtree','workforce','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')||(initial==='invoices'&&window.invoiceDashboard.allowed())?initial:'sales');
 }
 async function showPage(name) {
   if (!currentUser || currentUser.rest_mode) return;
@@ -280,12 +286,12 @@ async function showPage(name) {
   if (name === 'invoices' && !window.invoiceDashboard.allowed()) return;
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
-  document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
+  document.body.classList.toggle('sales-mode', ['sales','storehours','storehoursreport','callingtree','quota'].includes(name));
   document.body.classList.toggle('invoices-mode', name === 'invoices');
   document.body.classList.toggle('workforce-mode', name === 'workforce');
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
   notice('');
-  try { if (name === 'workforce') await window.workforceDashboard.load(); else if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
+  try { if (name === 'storehours' || name === 'storehoursreport') await window.storeHoursDashboard.load(name); else if (name === 'workforce') await window.workforceDashboard.load(); else if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
   catch (error) { notice(error.message, true); }
 }
 function quoteTable(rows) {
@@ -351,6 +357,8 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
 }); };
 </script>
 <script src="/assets/source-sync.js"></script>
+<script src="/assets/store-hours-snapshot.js"></script>
+<script src="/assets/store-hours.js"></script>
 <script src="/assets/sales-snapshot.js"></script>
 <script src="/assets/sales.js"></script>
 <script src="/assets/calling-tree.js"></script>

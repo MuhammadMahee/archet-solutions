@@ -113,7 +113,7 @@ def read_source(opener, req, limit, *, deadline=None):
             time.sleep(delay)
 
 
-def open_source(cookies, *, deadline=None):
+def open_source(cookies, *, deadline=None, report_url=REPORT_URL):
     """Ignore shared FW_SessionID: RT-POS must issue a NEW session per account."""
     jar = CookieJar()
     for name in ('sec85952EAF_id', 'sec85952EAF_pd'):
@@ -124,7 +124,7 @@ def open_source(cookies, *, deadline=None):
                               False, '/newbdi', True, True, None, True, None, None, {}, False))
     opener = build_opener(SameHostRedirect(), HTTPCookieProcessor(jar))
     opener.addheaders = [('User-Agent', 'Mozilla/5.0 (compatible; ArchetSales/1.0)')]
-    html = read_source(opener, REPORT_URL, 2 * 1024 * 1024, deadline=deadline).decode('utf-8', errors='replace')
+    html = read_source(opener, report_url, 2 * 1024 * 1024, deadline=deadline).decode('utf-8', errors='replace')
     if 'frmStart' not in html or 'frmEnd' not in html:
         raise ReportError('cookies_expired')
     return opener
