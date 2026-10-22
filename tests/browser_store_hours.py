@@ -1,5 +1,6 @@
 """Browser checks against isolated source and review fixtures; no production writes."""
 import base64
+import json
 from copy import deepcopy
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -15,54 +16,81 @@ from werkzeug.serving import make_server
 from api import index, portal, store_hours as sh
 from test_portal import FakeStore
 from test_store_hours import sample_rows
+from test_store_hours_directory import workbook
+from api.store_hours_directory import parse_schedule_workbook, map_schedule_rows
+from api.portal import PortalError
 
 
 def main():
     fake = FakeStore()
     saved = {}
+    manual = []
+    uploaded = []
+    preview_rows = []
+    directory = [dict(dealer=r['dealer'],store_id=r['store_id'],market=r['market'],store=r['store']) for r in sample_rows()]
+    directory = list({(s['dealer'],s['store_id']):s for s in directory}.values())
+    directory += [dict(dealer='AMQ',store_id='N1329B',market='CHICAGO',store='GLENVIEW'),
+                  dict(dealer='The Fix',store_id='WB-PRIME',market='CHICAGO',store='PRIME',source_id=None),
+                  dict(dealer='Smoke Magic',store_id='WB-MAGIC',market='DALLAS',store='MAGIC 1',source_id=None)]
+    def row_key(row): return row['dealer'],row['store_id'],row['date'],row.get('employee_key','')
     def fixture(start, end):
         rows = sample_rows()
-        rows += sh.build_rows([dict(dealer='AMQ', store_id='N1329B', market='CHICAGO', store='GLENVIEW')],
-                              [], [], [], start, end)
+        rows += sh.build_rows(directory[3:], [], [], [], start, end, manual)
         # Include a fully reviewed row to verify all screenshot colors.
         rows[0].update(closing_time='20:00:00', camera_out='19:58:00', closing_status='Early')
         for row in rows:
-            row.update(saved.get((row['dealer'], row['store_id'], row['date']), {}))
+            row.update(saved.get(row_key(row), {}))
         dealer, market = request.args.get('dealer'), request.args.get('market')
         if dealer: rows = [r for r in rows if r['dealer'] == dealer]
         markets = sorted({r['market'] for r in rows})
         if market: rows = [r for r in rows if r['market'] == market]
-        stores = [dict(id=r['dealer']+':'+r['store_id'], name=r['store']) for r in rows]
+        stores = list({r['dealer']+':'+r['store_id']:dict(id=r['dealer']+':'+r['store_id'],name=r['store']) for r in rows}.values())
         if request.args.get('store'): rows = [r for r in rows if r['dealer']+':'+r['store_id'] == request.args['store']]
         return dict(rows=rows, start=start.isoformat(), end=end.isoformat(), today='2026-10-20', earliest='2026-10-01',
-                    dealers=list(sh.COLORS), markets=markets, stores=stores, updated_at=None, coverage={'complete': 2, 'expected': 2, 'errors': []})
+                    dealers=sorted({s['dealer'] for s in directory}), directory=directory, manual_store_count=2, markets=markets, stores=stores, updated_at=None, coverage={'complete': 2, 'expected': 2, 'errors': []})
     def save(payload, user_id):
         row = deepcopy(payload)
         row.update(sh.evaluate(row))
         row['revision'] += 1
-        saved[(row['dealer'], row['store_id'], row['date'])] = row
+        saved[row_key(row)] = row
         return row['revision']
+    def add_employee(payload,user_id):
+        key=sh.employee_key(payload['employee'])
+        if any(m['dealer']==payload['dealer'] and m['store_id']==payload['store_id'] and m['report_date'].isoformat()==payload['date'] and m['employee_key']==key for m in manual):
+            raise PortalError('This employee already has a row for this store and date.',409)
+        manual.append(dict(dealer=payload['dealer'],store_id=payload['store_id'],report_date=date.fromisoformat(payload['date']),employee_key=key,employee=payload['employee']))
+        return key
+    def preview(payload,user_id):
+        preview_rows[:] = map_schedule_rows(parse_schedule_workbook(base64.b64decode(payload['content'])),directory)
+        return dict(preview_id='test-preview',rows=preview_rows,added=1,updated=0,corrected=0)
+    def apply_upload(payload,user_id):
+        directory.extend(preview_rows)
+        return len(preview_rows)
     server = make_server('127.0.0.1', 0, index.app, threaded=True)
     origin = f'http://127.0.0.1:{server.server_port}'
-    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])):
+    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload):
         Thread(target=server.serve_forever, daemon=True).start()
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch()
                 ctx = browser.new_context(viewport={'width': 1600, 'height': 1050}, permissions=['clipboard-read', 'clipboard-write'])
                 page = ctx.new_page()
-                page.clock.install(time=datetime(2026, 10, 20, 17, tzinfo=timezone.utc))
+                page.clock.set_fixed_time(datetime(2026, 10, 20, 17, tzinfo=timezone.utc))
                 errors = []
                 page.on('pageerror', lambda err: errors.append(str(err)))
                 page.goto(origin+'/internal#storehours')
                 page.locator('#login-username').fill('Mahee')
                 page.locator('#login-password').fill('TestPass123')
                 page.locator('#login-form button[type=submit]').click()
-                expect(page.locator('#sh-total')).to_have_text('4')
+                expect(page.locator('#sh-total')).to_have_text('7')
                 expect(page.locator('#sh-copy')).to_be_hidden()
-                expect(page.locator('#sh-pending')).to_have_text('3')
-                page.locator('#sh-dealer').select_option('Connect')
-                expect(page.locator('#sh-total')).to_have_text('2')
+                expect(page.locator('#sh-pending')).to_have_text('6')
+                page.locator('#sh-dealer-trigger').click()
+                assert page.evaluate("() => Math.abs(document.querySelector('#sh-dealer-trigger').getBoundingClientRect().left-document.querySelector('.sh-picker-menu:not([hidden])').getBoundingClientRect().left)<2")
+                page.screenshot(path=str(ROOT/'test-results/store-hours-dropdown.png'))
+                page.get_by_role('combobox',name='Search dealer').fill('connect')
+                page.get_by_role('combobox',name='Search dealer').press('Enter')
+                expect(page.locator('#sh-total')).to_have_text('3')
                 row = page.locator('#sh-table tbody tr').nth(1)
                 row.locator('[data-column=camera_in] input').fill('10:07:00')
                 expect(row.locator('[data-column=opening_status]')).to_have_text('Schedule required')
@@ -94,7 +122,7 @@ def main():
                 page.screenshot(path=str(ROOT/'test-results/store-hours-calendar.png'), full_page=True)
                 page.locator('#sh-date-apply').click()
                 expect(page.locator('#sh-date')).to_contain_text('Oct 1, 2026')
-                expect(page.locator('#sh-total')).to_have_text('2')
+                expect(page.locator('#sh-total')).to_have_text('3')
                 page.locator('#sh-sync').click()
                 expect(page.locator('#sh-message')).to_contain_text('including the last extracted date')
                 page.locator('#sh-dealer').select_option('AMQ')
@@ -109,6 +137,38 @@ def main():
                 sunday = page.locator('#sh-table tbody tr').filter(has_text='Oct 18, 2026')
                 expect(sunday.locator('[data-column=opening_time] input')).to_have_value('12:00:00')
                 expect(sunday.locator('[data-column=closing_time] input')).to_have_attribute('title', 'Sunday workbook hours: 6:00:00 PM. Clear and save to restore this time.')
+                page.locator('#sh-dealer').select_option('The Fix')
+                expect(page.locator('#sh-total')).to_have_text('20')
+                page.locator('#sh-add').click()
+                expect(page.locator('#sh-employee-dialog')).to_be_visible()
+                page.locator('#sh-employee-store-trigger').click()
+                page.get_by_role('combobox',name='Search store',exact=True).fill('PRIME')
+                page.get_by_role('combobox',name='Search store',exact=True).press('Enter')
+                page.locator('#sh-employee-name').fill('Manual Employee')
+                page.locator('#sh-employee-date').fill('2026-10-20')
+                page.locator('#sh-employee-submit').click()
+                expect(page.locator('#sh-message')).to_contain_text('Employee added')
+                expect(page.locator('#sh-total')).to_have_text('1')
+                expect(page.locator('#sh-table tbody')).to_contain_text('Manual Employee')
+                expect(page.locator('#sh-table tbody')).to_contain_text('No Clock In')
+                page.locator('#sh-add').click()
+                page.locator('#sh-employee-name').fill('Manual Employee')
+                page.locator('#sh-employee-submit').click()
+                expect(page.locator('#sh-employee-error')).to_contain_text('already has a row')
+                page.locator('#sh-employee-cancel').click()
+                page.locator('#sh-manage').click()
+                page.locator('#sh-file').set_input_files(dict(name='new-stores.xlsx',mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer=workbook(company='NEW WIRELESS',store='FUTURE STORE')))
+                expect(page.locator('#sh-upload-count')).to_contain_text('1 new store')
+                expect(page.locator('#sh-upload-table')).to_contain_text('FUTURE STORE')
+                page.screenshot(path=str(ROOT/'test-results/store-hours-upload.png'),full_page=True)
+                page.locator('#sh-upload-apply').click()
+                expect(page.locator('#sh-message')).to_contain_text('Workbook applied')
+                page.locator('#sh-upload-close').click()
+                page.locator('#sh-dealer-trigger').click()
+                page.get_by_role('combobox',name='Search dealer').fill('New Wireless')
+                page.get_by_role('combobox',name='Search dealer').press('Enter')
+                expect(page.locator('#sh-table tbody')).to_contain_text('FUTURE STORE')
+                expect(page.locator('#sh-table [data-column=opening_time] input')).to_have_value('10:00:00')
                 page.set_viewport_size({'width': 390, 'height': 844})
                 page.screenshot(path=str(ROOT/'test-results/store-hours-mobile.png'), full_page=True)
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')

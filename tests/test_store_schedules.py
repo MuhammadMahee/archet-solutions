@@ -100,8 +100,9 @@ def test_camera_saves_store_only_explicit_schedule_overrides(monkeypatch, openin
             calls.append(params)
             return SimpleNamespace(fetchone=lambda: {'revision': 1})
     monkeypatch.setattr(sh, 'connect', lambda: nullcontext(DB()))
-    monkeypatch.setattr(sh, 'active_roster', lambda conn: [store()])
+    monkeypatch.setattr(sh, 'roster_with_schedules', lambda conn: [store()])
+    monkeypatch.setattr(sh, 'store_day_rows', lambda *args: [{'employee_key': '', 'revision': 0}])
     sh.save_review(dict(dealer='Connect', store_id='NTG-DAL46', date='2026-10-18', revision=0,
                         opening_time=opening, closing_time=closing, camera_in='11:10', camera_out='18:59'), 'user')
-    assert calls[0][3:5] == expected
-    assert calls[0][5:7] == (time(11, 10), time(18, 59))
+    assert calls[-1][4:6] == expected
+    assert calls[-1][6:8] == (time(11, 10), time(18, 59))

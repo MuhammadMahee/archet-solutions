@@ -3,24 +3,26 @@
   const root=document.createElement('div');root.className='sh-root';
   root.innerHTML=`<div class="sh-hero"><div><div class="sh-eyebrow">STORE OPERATIONS</div><h1 id="sh-title">Store Opening / Closing</h1><p id="sh-subtitle"></p></div><button class="sh-link" id="sh-switch" type="button"></button></div>
     <div class="sh-filters"><label>Dealer<select id="sh-dealer"><option value="">All dealers</option></select></label><label>Market<select id="sh-market"><option value="">All markets</option></select></label><label>Store<select id="sh-store"><option value="">All stores</option></select></label><label>Report period<button id="sh-date" class="sh-button sh-date-trigger" type="button" aria-haspopup="dialog">Today <span>▦</span></button></label><div class="sh-actions"><button id="sh-reload" class="sh-button" type="button">Reload</button><button id="sh-copy" class="sh-button" type="button">Copy Snapshot</button><button id="sh-excel" class="sh-button sh-primary" type="button">Download Excel</button></div></div>
-    <div class="sh-summary"><div class="sh-stat"><span>Store records</span><b id="sh-total">—</b><small>In the selected period</small></div><div class="sh-stat sh-late"><span>Late openings</span><b id="sh-late">—</b><small>1+ minute after opening</small></div><div class="sh-stat sh-pending"><span>Pending opening reviews</span><b id="sh-pending">—</b><small>Camera or schedule needed</small></div><div class="sh-stat"><span>Late opening chargebacks</span><b id="sh-chargebacks">—</b><small>Assessed Connect charges only</small></div></div>
+    <div class="sh-summary"><div class="sh-stat"><span>Employee rows</span><b id="sh-total">—</b><small id="sh-store-count">In the selected period</small></div><div class="sh-stat sh-late"><span>Late openings</span><b id="sh-late">—</b><small>1+ minute after opening</small></div><div class="sh-stat sh-pending"><span>Pending reviews</span><b id="sh-pending">—</b><small>Camera or schedule needed</small></div><div class="sh-stat"><span>Employee chargebacks</span><b id="sh-chargebacks">—</b><small>Assessed Connect charges only</small></div></div>
     <div class="sh-note" id="sh-note">Hours follow the workbook’s Monday–Friday, Saturday, or Sunday schedule for each report date. You can override hours for an individual date; clear an override and save to restore workbook hours. Stores without a matching schedule stay unset. Missing camera times stay <strong>Pending camera review</strong>.</div>
-    <div class="sh-toolbar"><span id="sh-coverage" role="status">Loading time punches…</span><div class="sh-actions"><strong id="sh-unsaved"></strong><button class="sh-button" id="sh-discard" type="button" hidden>Discard changes</button><button class="sh-button" id="sh-save-all" type="button" hidden>Save changes</button><button class="sh-button sh-primary" id="sh-sync" type="button" hidden>Sync sources</button></div></div>
-    <div id="sh-message" class="sh-message" role="status" hidden></div><div class="sh-table-wrap"><table class="sh-table" id="sh-table"><thead></thead><tbody></tbody></table><div class="sh-empty" id="sh-empty" hidden>No stores in this selection. Upload an active Calling Tree to include every store.</div></div>
+    <div class="sh-tools"><label class="sh-search-label"><span>⌕</span><input id="sh-search" type="search" placeholder="Search employees or stores" aria-label="Search employees or stores"></label><div class="sh-actions"><button class="sh-button" id="sh-manage" type="button" hidden>↑ Upload schedules</button><button class="sh-button sh-primary" id="sh-add" type="button">＋ Add employee</button></div></div>
+    <section class="sh-upload" id="sh-upload" hidden aria-label="Upload store schedules"><div class="sh-upload-head"><div><div class="sh-eyebrow">STORE DIRECTORY & HOURS</div><h2>Keep every store up to date</h2><p>Upload your MON TO SAT and SUN workbook to add dealers, stores, and weekly hours. Existing stores and camera reviews are kept.</p></div><button class="sh-button" type="button" id="sh-upload-close" aria-label="Close schedule upload">×</button></div><div class="sh-upload-select"><label for="sh-file">Schedule workbook (.xlsx, up to 2 MB)</label><input id="sh-file" type="file" accept=".xlsx"><span id="sh-upload-status" role="status"></span></div><div id="sh-upload-preview" hidden><div class="sh-upload-confirm"><strong id="sh-upload-count"></strong><button id="sh-upload-apply" type="button" class="sh-button sh-primary">Apply workbook</button></div><p id="sh-upload-corrections"></p><div class="sh-upload-scroll"><table class="sh-table" id="sh-upload-table"><thead><tr><th>Change</th><th>Dealer</th><th>Market</th><th>Store</th><th>Monday–Friday</th><th>Saturday</th><th>Sunday</th></tr></thead><tbody></tbody></table></div></div></section>
+    <div class="sh-toolbar"><span id="sh-coverage" role="status">Loading time punches…</span><div class="sh-actions"><strong id="sh-unsaved"></strong><button class="sh-button" id="sh-discard" type="button" hidden>Discard changes</button><button class="sh-button" id="sh-save-all" type="button" hidden>Save changes</button><button class="sh-button" id="sh-sync" type="button" hidden>↻ Sync sources</button></div></div>
+    <div id="sh-message" class="sh-message" role="status" hidden></div><div class="sh-table-wrap"><table class="sh-table" id="sh-table"><thead></thead><tbody></tbody></table><div class="sh-empty" id="sh-empty" hidden>No stores in this selection. Adjust the filters or upload a schedule workbook to add stores.</div></div>
     <div class="sh-page-controls"><button class="sh-button" id="sh-prev" type="button">← Previous</button><span id="sh-page-label"></span><button class="sh-button" id="sh-next" type="button">Next →</button></div>
-    <p class="sh-footnote">Camera times determine status. Late: ≥1 minute after opening · Early: ≥1 minute before closing.<br>Connect only: Houston / Reno ≥5 minutes late; Dallas ≥10 minutes late → −$10. RT Clockin is the earliest punch and Employee is that employee; RT Clockout is the latest punch for the store/date. Times use the store’s local clock.<br>Snapshots and Excel include all saved rows in the selected filters. Amber cells need review; Pending chargebacks are unassessed, not $0.</p>`;
+    <p class="sh-footnote">Each employee has a separate daily row. Repeated shifts use that employee’s earliest RT clock-in and latest RT clock-out. Times use the store’s local clock.<br>Camera times determine status: late ≥1 minute after opening; early ≥1 minute before closing. Connect chargebacks apply per employee: Houston / Reno ≥5 minutes late; Dallas ≥10 minutes late → −$10.<br>Snapshots and Excel include every saved employee row matching your filters. Amber cells need review. Stores without an RT-POS source support manual entries.</p>`;
   $('page-storehours').append(root);
   const el=id=>$('sh-'+id),{columns,text,tone}=window.storeHoursSnapshot;
   const fields=['opening_time','closing_time','camera_in','camera_out'];
   let data=null,mode='storehours',sequence=0,syncSequence=0,syncing=false,saving=false,pageIndex=0;
   let currentDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   let start=currentDay,end=currentDay,earliest=currentDay.slice(0,8)+'01',preset='Today';
-  const drafts=new Map(),key=row=>[row.date,row.dealer,row.store_id].join('|');
+  const drafts=new Map(),key=row=>JSON.stringify([row.date,row.dealer,row.store_id,row.employee_key||'']);
   const dayDate=s=>new Date(s+'T12:00:00'),iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const shift=(s,n)=>{const d=dayDate(s);d.setDate(d.getDate()+n);return iso(d);};
   const dateLabel=s=>dayDate(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   function message(value='',error=false){el('message').textContent=value;el('message').hidden=!value;el('message').classList.toggle('is-error',error);}
-  function params(){return new URLSearchParams({start,end,dealer:el('dealer').value,market:el('market').value,store:el('store').value});}
+  function params(){return new URLSearchParams({start,end,dealer:el('dealer').value,market:el('market').value,store:el('store').value,search:el('search').value.trim()});}
   function options(id,values,placeholder){const select=el(id),selected=select.value;select.replaceChildren(new Option(placeholder,''));values.forEach(v=>select.add(new Option(typeof v==='string'?v:v.name,typeof v==='string'?v:v.id)));select.value=selected;}
   function evaluate(row){
     const sec=v=>v?v.split(':').reduce((sum,v,i)=>sum+Number(v)*[3600,60,1][i],0):null;
@@ -34,6 +36,7 @@
   function render(){
     if(!data)return;
     const editing=mode==='storehours',rows=data.rows;
+    el('store-count').textContent=new Set(rows.map(r=>r.dealer+':'+r.store_id)).size+' stores in this selection';
     el('total').textContent=rows.length;el('late').textContent=rows.filter(r=>r.opening_status==='Late').length;
     el('pending').textContent=rows.filter(r=>['Pending camera review','Schedule required'].includes(r.opening_status)).length;
     const charge=rows.reduce((s,r)=>s+(r.chargeback||0),0);el('chargebacks').textContent=charge<0?'−$'+Math.abs(charge):'$0';
@@ -49,8 +52,9 @@
           if(k==='opening_time'||k==='closing_time')input.title=row['scheduled_'+k]?`${row.schedule_period} workbook hours: ${text(k,row['scheduled_'+k])}. Clear and save to restore this time.`:'No matching workbook schedule. Enter a time for this date.';
           input.oninput=()=>{const draft={...(drafts.get(key(saved))||saved),[k]:input.value||null};const preview={...draft};['opening_time','closing_time'].forEach(field=>{if(!preview[field])preview[field]=saved['scheduled_'+field]||null;});Object.assign(draft,evaluate(preview));drafts.set(key(saved),draft);tr.classList.add('sh-dirty');tr.querySelector('button').disabled=saving;['store_status','opening_status','closing_status','chargeback'].forEach(col=>{const cell=tr.querySelector(`[data-column="${col}"]`);cell.textContent=text(col,draft[col]);cell.className='sh-'+tone(col,draft[col]);});updateDirty();};td.append(input);
         }else{td.textContent=text(k,row[k]);const state=tone(k,row[k]);if(state)td.className='sh-'+state;}
-        if(['rt_clockin','rt_clockout'].includes(k)&&saved.source_status!=='complete')td.title='Source not fully synced. This value may be missing or from an earlier sync.';
-        if(k==='store')td.title=row.dealer+' · '+row.store_id;
+        if(['rt_clockin','rt_clockout'].includes(k)&&saved.source_status!=='complete')td.title=saved.source_status==='manual_only'?'This store has no connected RT-POS source. Add employees manually.':'Source not fully synced. This value may be missing or from an earlier sync.';
+        if(k==='store'){td.title=row.dealer+' · '+row.store_id;const tag=document.createElement('small');tag.className='sh-dealer-tag';tag.textContent=row.dealer;td.append(tag);}
+        if(k==='employee'&&row.manual){const tag=document.createElement('small');tag.className='sh-manual-tag';tag.textContent='Manual';td.append(tag);}
         tr.append(td);
       });
       if(editing){const td=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='sh-row-save';button.textContent='Save';button.disabled=!drafts.has(key(saved))||saving;button.setAttribute('aria-label','Save '+row.store+' '+row.date);button.onclick=()=>save([key(saved)]);td.append(button);tr.append(td);}
@@ -59,7 +63,7 @@
     el('empty').hidden=!!rows.length;el('table').hidden=!rows.length;
     el('page-label').textContent=rows.length?`${pageIndex*100+1}–${Math.min((pageIndex+1)*100,rows.length)} of ${rows.length} records`:'0 records';
     el('prev').disabled=pageIndex===0;el('next').disabled=(pageIndex+1)*100>=rows.length;
-    const coverage=data.coverage;el('coverage').textContent=`${coverage.complete}/${coverage.expected} source days synced${data.updated_at?' · Updated '+new Date(data.updated_at).toLocaleString():''}${coverage.complete<coverage.expected?' · Incomplete source data':''}`;
+    const coverage=data.coverage;el('coverage').textContent=`${coverage.complete}/${coverage.expected} source days synced${data.manual_store_count?' · '+data.manual_store_count+' stores with manual entries':''}${data.updated_at?' · Updated '+new Date(data.updated_at).toLocaleString():''}${coverage.complete<coverage.expected?' · Incomplete source data':''}`;
     el('copy').disabled=el('excel').disabled=!rows.length;updateDirty();
   }
   function updateMode(){
@@ -69,6 +73,7 @@
     el('switch').textContent=editing?'View report →':'← Edit camera reviews';
     el('note').hidden=!editing;el('copy').hidden=el('excel').hidden=editing;
     el('sync').hidden=currentUser?.role!=='admin';
+    el('manage').hidden=currentUser?.role!=='admin';el('add').hidden=!editing;
     el('date').replaceChildren(document.createTextNode(preset==='Custom'?`${dateLabel(start)} – ${dateLabel(end)}`:preset));
     const icon=document.createElement('span');icon.textContent='▦';el('date').append(icon);
   }
@@ -88,6 +93,7 @@
   el('discard').onclick=()=>{drafts.clear();message('Unsaved changes discarded.');load();};
   el('switch').onclick=()=>showPage(mode==='storehours'?'storehoursreport':'storehours');
   el('reload').onclick=()=>load();
+  let searchTimer;el('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{pageIndex=0;load();},300);};
   el('dealer').onchange=()=>{el('market').value='';el('store').value='';pageIndex=0;load();};
   el('market').onchange=()=>{el('store').value='';pageIndex=0;load();};el('store').onchange=()=>{pageIndex=0;load();};
   el('prev').onclick=()=>{pageIndex--;render();};el('next').onclick=()=>{pageIndex++;render();};
@@ -106,6 +112,45 @@
       await load();if(id!==syncSequence||!currentUser)return;
       message(result.status==='busy'?'Another time-punch sync is running. Reload after it finishes.':result.remaining?`${result.remaining} source days could not be fetched. Saved data was kept; click Sync sources to retry. ${[...new Set((result.workers||[]).map(w=>w.error).filter(Boolean))].join(', ')}`:'Time punches synced, including the last extracted date.',!!result.remaining);
     }catch(error){if(id===syncSequence)message(error.message,true);}finally{if(id===syncSequence){syncing=false;el('sync').disabled=false;el('sync').textContent='Sync sources';}}
+  };
+
+  const employeeDialog=document.createElement('dialog');employeeDialog.className='sh-editor-dialog';employeeDialog.id='sh-employee-dialog';employeeDialog.setAttribute('aria-labelledby','sh-employee-heading');
+  employeeDialog.innerHTML=`<form id="sh-employee-form"><div class="sh-upload-head"><div><div class="sh-eyebrow">MANUAL ENTRY</div><h2 id="sh-employee-heading">Add an employee row</h2></div><button id="sh-employee-close" class="sh-button" type="button" aria-label="Close add employee">×</button></div><p>Add someone missing from the timesheet. Their RT punches will stay empty until they appear in a future sync.</p><label>Store<select id="sh-employee-store" required></select></label><div class="sh-editor-fields"><label>Report date<input id="sh-employee-date" type="date" required></label><label>Employee name<input id="sh-employee-name" autocomplete="off" maxlength="160" placeholder="First and last name" required></label></div><p id="sh-employee-error" class="sh-form-error" role="alert" hidden></p><div class="sh-editor-footer"><button id="sh-employee-cancel" class="sh-button" type="button">Cancel</button><button id="sh-employee-submit" class="sh-button sh-primary" type="submit">Add employee</button></div></form>`;
+  document.body.append(employeeDialog);
+  el('add').onclick=()=>{
+    if(!data?.directory?.length){message('Load the store directory before adding an employee.',true);return;}
+    const select=el('employee-store');select.replaceChildren();data.directory.forEach(s=>select.add(new Option(`${s.dealer} · ${s.market} · ${s.store}`,JSON.stringify([s.dealer,s.store_id]))));
+    const selected=data.directory.find(s=>s.dealer+':'+s.store_id===el('store').value)||data.directory.find(s=>s.dealer===el('dealer').value);
+    if(selected)select.value=JSON.stringify([selected.dealer,selected.store_id]);select.dispatchEvent(new Event('picker-sync'));
+    el('employee-date').max=currentDay;el('employee-date').value=end;el('employee-name').value='';el('employee-error').hidden=true;employeeDialog.showModal();el('employee-name').focus();
+  };
+  el('employee-close').onclick=el('employee-cancel').onclick=()=>employeeDialog.close();
+  el('employee-form').onsubmit=async event=>{
+    event.preventDefault();const userId=currentUser?.id,[dealer,store_id]=JSON.parse(el('employee-store').value),day=el('employee-date').value;
+    el('employee-submit').disabled=true;el('employee-error').hidden=true;
+    try{await api('store-hours/employees','POST',{dealer,store_id,date:day,employee:el('employee-name').value});if(currentUser?.id!==userId)return;employeeDialog.close();start=end=day;preset=dateLabel(day);el('search').value='';el('dealer').value=dealer;el('market').value='';el('store').replaceChildren(new Option('Selected store',dealer+':'+store_id));el('store').value=dealer+':'+store_id;pageIndex=0;await load();message('Employee added. Enter their camera times and save the review.');}
+    catch(error){if(currentUser?.id===userId){el('employee-error').textContent=error.message;el('employee-error').hidden=false;}}
+    finally{el('employee-submit').disabled=false;}
+  };
+  let uploadSequence=0,uploadPreview=null;
+  el('manage').onclick=()=>{el('upload').hidden=!el('upload').hidden;};el('upload-close').onclick=()=>{el('upload').hidden=true;};
+  el('file').onchange=async()=>{
+    const file=el('file').files[0],id=++uploadSequence;uploadPreview=null;el('upload-preview').hidden=true;
+    if(!file)return;
+    if(file.size>2*1024*1024||!file.name.toLowerCase().endsWith('.xlsx')){el('upload-status').textContent='Choose an .xlsx workbook smaller than 2 MB.';return;}
+    el('upload-status').textContent='Reading workbook and matching stores…';
+    try{const content=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(new Error('Could not read the file.'));reader.readAsDataURL(file);});
+      const result=await api('store-hours/schedules/preview','POST',{filename:file.name,content});if(id!==uploadSequence||!currentUser)return;
+      uploadPreview=result.preview_id;el('upload-status').textContent=file.name;el('upload-count').textContent=`${result.added} new ${result.added===1?'store':'stores'} · ${result.updated} existing ${result.updated===1?'store':'stores'} updated`;
+      el('upload-corrections').textContent=result.corrected?`${result.corrected} Connect opening times corrected from 10:00 PM to the confirmed 10:00 AM schedule.`:'All omitted stores and saved camera reviews will be retained.';
+      const body=el('upload-table').querySelector('tbody');body.replaceChildren();result.rows.forEach(row=>{const tr=document.createElement('tr');[row.action,row.dealer,row.market,row.store,...['weekday','saturday','sunday'].map(p=>`${text('opening_time',row.schedules[p].opening_time)} – ${text('closing_time',row.schedules[p].closing_time)}`)].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td);});body.append(tr);});el('upload-preview').hidden=false;
+    }catch(error){if(id===uploadSequence)el('upload-status').textContent=error.message;}
+  };
+  el('upload-apply').onclick=async()=>{
+    if(!uploadPreview)return;const id=uploadSequence;el('upload-apply').disabled=true;
+    try{const result=await api('store-hours/schedules/apply','POST',{preview_id:uploadPreview});if(id!==uploadSequence||!currentUser)return;uploadPreview=null;el('upload-preview').hidden=true;el('file').value='';el('upload-status').textContent=`Saved schedules for ${result.count} stores.`;await load();message('Workbook applied. Dealers, stores, and schedules are up to date.');}
+    catch(error){if(id===uploadSequence)el('upload-status').textContent=error.message;}
+    finally{el('upload-apply').disabled=false;}
   };
 
   // Two-stage range selector: preset cards followed by one From/To calendar.
@@ -140,6 +185,6 @@
   el('date-clear').onclick=()=>{draftStart=draftEnd='';selecting='from';drawCalendar();};
   el('date-apply').onclick=()=>{if(!draftStart||!draftEnd){el('date-error').textContent='Select both From and To dates.';el('date-error').hidden=false;return;}applyRange(draftStart,draftEnd,'Custom');};
   dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeDate();}});
-  function clear(){sequence++;syncSequence++;syncing=saving=false;data=null;drafts.clear();dialog.close();el('table').querySelector('tbody').replaceChildren();['dealer','market','store'].forEach(id=>options(id,[],`All ${id==='store'?'stores':id==='market'?'markets':'dealers'}`));el('sync').disabled=false;el('sync').textContent='Sync sources';start=end=currentDay;preset='Today';pageIndex=0;message();['total','late','pending','chargebacks'].forEach(id=>el(id).textContent='—');updateDirty();}
+  function clear(){sequence++;syncSequence++;uploadSequence++;uploadPreview=null;clearTimeout(searchTimer);employeeDialog.close();el('employee-form').reset();el('employee-store').replaceChildren();el('upload').hidden=true;el('upload-preview').hidden=true;el('upload-table').querySelector('tbody').replaceChildren();el('file').value='';el('upload-status').textContent='';el('search').value='';syncing=saving=false;data=null;drafts.clear();dialog.close();el('table').querySelector('tbody').replaceChildren();['dealer','market','store'].forEach(id=>options(id,[],`All ${id==='store'?'stores':id==='market'?'markets':'dealers'}`));el('sync').disabled=false;el('sync').textContent='↻ Sync sources';start=end=currentDay;preset='Today';pageIndex=0;message();['total','late','pending','chargebacks'].forEach(id=>el(id).textContent='—');updateDirty();}
   window.storeHoursDashboard={load,clear,snapshot,evaluate};
 })();

@@ -62,7 +62,7 @@
     opened.menu.style.top = upwards ? 'auto' : rect.bottom + 6 + 'px';
     opened.menu.style.bottom = upwards ? innerHeight - rect.top + 6 + 'px' : 'auto';
   }
-  for (const id of ['sales-dealer','sales-market','sales-store','sales-period','tree-dealer','quota-month','quota-dealer','quota-market','quota-store']) {
+  for (const id of ['sales-dealer','sales-market','sales-store','sales-period','tree-dealer','quota-month','quota-dealer','quota-market','quota-store','sh-dealer','sh-market','sh-store','sh-employee-store']) {
     const select = document.getElementById(id);
     const label = select.parentElement.firstChild.textContent.trim();
     const trigger = document.createElement('button');
@@ -81,7 +81,9 @@
     search.setAttribute('role','combobox'); search.setAttribute('aria-expanded','true'); search.setAttribute('aria-autocomplete','list');
     const list = document.createElement('div'); list.className = 'picker-list'; list.id = id + '-options'; list.setAttribute('role','listbox'); list.setAttribute('aria-label',label);
     search.setAttribute('aria-controls',list.id);
-    searchWrap.append(icon, search); menu.append(searchWrap, list); document.body.append(menu);
+    searchWrap.append(icon, search); menu.append(searchWrap, list); (select.closest('dialog') || document.body).append(menu);
+    if (id.startsWith('sh-')) menu.classList.add('sh-picker-menu');
+    select.closest('dialog')?.addEventListener('close', () => closePicker());
     const picker = {trigger, menu};
     let options = [], active = 0;
     function highlight() {

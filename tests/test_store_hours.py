@@ -104,11 +104,14 @@ def sample_rows():
 
 def test_roster_includes_missing_stores_keeps_dealers_separate_and_multiple_shifts():
     rows = sample_rows()
-    assert len(rows) == 3
+    assert len(rows) == 4
     assert rows[0]['employee'] == 'Opening Employee'
-    assert rows[0]['rt_clockout'] == '2026-10-20T20:00:00'
+    assert rows[0]['rt_clockout'] == '2026-10-20T14:00:00'
     assert rows[0]['chargeback'] == -10
-    for row in rows[1:]:
+    assert rows[1]['employee'] == 'Closing Employee'
+    assert rows[1]['rt_clockout'] == '2026-10-20T20:00:00'
+    assert rows[1]['opening_status'] == 'Pending camera review'
+    for row in rows[2:]:
         assert row['employee'] == '-'
         assert row['rt_clockin'] is row['rt_clockout'] is None
         assert sh.display_value('rt_clockin', row['rt_clockin']) == 'No Clock In'
@@ -144,8 +147,8 @@ def test_excel_columns_missing_values_colors_and_formula_safety():
     assert sheet['D3'].data_type == 's'
     assert sheet['N3'].value == -10
     assert sheet['I3'].fill.fgColor.rgb.endswith('FFC7CE')
-    assert sheet['H4'].value == 'No Clock In' and sheet['L4'].value == 'No Clock Out'
-    assert sheet['N4'].value == 'Pending'
+    assert sheet['H5'].value == 'No Clock In' and sheet['L5'].value == 'No Clock Out'
+    assert sheet['N5'].value == 'Pending'
 
 
 def test_endpoints_auth_and_sync_admin_only(client, monkeypatch):

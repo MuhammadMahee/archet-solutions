@@ -2,6 +2,8 @@
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 import csv
+import base64
+import binascii
 from datetime import date, datetime, time as wall_time, timedelta
 from hashlib import sha256
 from io import BytesIO, StringIO
@@ -11,6 +13,9 @@ import re
 import time
 from urllib.parse import urlencode
 from urllib.request import Request
+from pathlib import PureWindowsPath
+from uuid import UUID
+from psycopg.types.json import Jsonb
 
 from flask import g, jsonify, request, send_file
 from openpyxl import Workbook
@@ -21,6 +26,8 @@ import xlrd
 from api.calling_tree import active_roster, clean
 from api.portal import PortalError, body, require_user
 from api.store_schedules import scheduled_hours
+from api.store_hours_directory import (roster_with_schedules, hours_for_store, parse_schedule_workbook,
+                                       map_schedule_rows, DEALER_LABELS, SOURCE_IDS)
 from api.sales import (SOURCES, COLORS, MAX_REPORT_BYTES, ReportError, connect,
                        open_source, read_source, source_error, today)
 
@@ -236,7 +243,11 @@ def iso_time(value):
     return value.isoformat() if value is not None else None
 
 
-def build_rows(roster, punches, reviews, imports, start, end):
+def employee_key(name):
+    return 'person:' + ' '.join(name.split()).casefold() if name and name != '-' else ''
+
+
+def build_rows(roster, punches, reviews, imports, start, end, manual_employees=()):
     by_id = defaultdict(list)
     by_name = defaultdict(list)
     name_counts = Counter((s['dealer'], s['store'].strip().upper()) for s in roster)
@@ -244,7 +255,14 @@ def build_rows(roster, punches, reviews, imports, start, end):
         dealer = SOURCES[punch['source_id']]
         by_id[(dealer, punch['store_id'], punch['report_date'])].append(punch)
         by_name[(dealer, punch['store'].strip().upper(), punch['report_date'])].append(punch)
-    saved = {(r['dealer'], r['store_id'], r['report_date']): r for r in reviews}
+    saved = {(r['dealer'], r['store_id'], r['report_date'], r.get('employee_key', '')): r for r in reviews}
+    reviewed_keys = defaultdict(set)
+    for rd, rs, rday, key in saved:
+        if key:
+            reviewed_keys[rd, rs, rday].add(key)
+    manual = defaultdict(dict)
+    for entry in manual_employees:
+        manual[entry['dealer'], entry['store_id'], entry['report_date']][entry['employee_key']] = entry['employee']
     loaded = {(r['source_id'], r['report_date']): r for r in imports}
     source_ids = {dealer: source for source, dealer in SOURCES.items()}
     rows = []
@@ -252,26 +270,45 @@ def build_rows(roster, punches, reviews, imports, start, end):
         day = start + timedelta(days=n)
         for store in roster:
             dealer, sid = store['dealer'], store['store_id']
-            records = by_id.get((dealer, sid, day), [])
+            source = store.get('source_id', source_ids.get(dealer))
+            records = by_id.get((dealer, sid, day), []) if source else []
             name = store['store'].strip().upper()
-            if not records and name_counts[dealer, name] == 1:
+            if source and not records and name_counts[dealer, name] == 1:
                 records = by_name.get((dealer, name, day), [])
-            first = min(records, key=lambda r: r['clock_in']) if records else None
-            outs = [r['clock_out'] for r in records if r['clock_out']]
-            review = saved.get((dealer, sid, day), {})
-            schedule = scheduled_hours(store, day)
-            imported = loaded.get((source_ids[dealer], day), {})
-            row = dict(date=day.isoformat(), dealer=dealer, market=store['market'], store=store['store'], store_id=sid,
-                       employee=first['employee'] if first else '-',
-                       rt_clockin=first['clock_in'].isoformat() if first else None,
-                       rt_clockout=max(outs).isoformat() if outs else None,
-                       revision=review.get('revision', 0), source_status=imported.get('status', 'not_synced'),
-                       schedule_period=schedule['period'],
-                       scheduled_opening_time=iso_time(schedule.get('opening_time')),
-                       scheduled_closing_time=iso_time(schedule.get('closing_time')),
-                       **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
-            row.update(evaluate(row))
-            rows.append(row)
+            grouped = defaultdict(list)
+            for record in sorted(records, key=lambda r: (r['clock_in'], r['employee'])):
+                grouped[employee_key(record['employee'])].append(record)
+            manual_names = manual[dealer, sid, day]
+            for key in sorted(manual_names):
+                grouped.setdefault(key, [])
+            # Preserve reviews whose imported employee temporarily disappears after a re-sync.
+            for key in sorted(reviewed_keys[dealer, sid, day]):
+                grouped.setdefault(key, [])
+            if not grouped:
+                grouped[''] = []
+            schedule = hours_for_store(store, day)
+            imported = loaded.get((source, day), {})
+            for index, (key, shifts) in enumerate(grouped.items()):
+                first = shifts[0] if shifts else None
+                outs = [r['clock_out'] for r in shifts if r['clock_out']]
+                review = saved.get((dealer, sid, day, key), {})
+                # A legacy store-level review belongs only to the first employee, never all employees.
+                if not review and index == 0:
+                    review = saved.get((dealer, sid, day, ''), {})
+                employee = first['employee'] if first else manual_names.get(key, key.removeprefix('person:') or '-')
+                row = dict(date=day.isoformat(), dealer=dealer, market=store['market'], store=store['store'], store_id=sid,
+                           employee=employee, employee_key=key, manual=key in manual_names,
+                           rt_clockin=first['clock_in'].isoformat() if first else None,
+                           rt_clockout=max(outs).isoformat() if outs else None,
+                           revision=review.get('revision', 0), source_status=imported.get('status', 'not_synced') if source else 'manual_only',
+                           schedule_period=schedule['period'],
+                           scheduled_opening_time=iso_time(schedule.get('opening_time')),
+                           scheduled_closing_time=iso_time(schedule.get('closing_time')),
+                           **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
+                row.update(evaluate(row))
+                rows.append(row)
+                if len(rows) > 20000:
+                    raise PortalError('Select a shorter date range or fewer stores (up to 20,000 employee rows).')
     return rows
 
 
@@ -288,9 +325,11 @@ def report_range():
 
 def report_data(start, end):
     with connect() as conn:
-        roster = active_roster(conn)
+        roster = roster_with_schedules(conn)
         punches = conn.execute('select * from public.store_time_punches where report_date between %s and %s', (start, end)).fetchall()
         reviews = conn.execute('select * from public.store_hours_reviews where report_date between %s and %s', (start, end)).fetchall()
+        reviews += conn.execute('select * from public.store_hours_employee_reviews where report_date between %s and %s', (start, end)).fetchall()
+        manual = conn.execute('select * from public.store_hours_manual_employees where report_date between %s and %s', (start, end)).fetchall()
         imports = conn.execute('select * from public.store_hours_imports where report_date between %s and %s', (start, end)).fetchall()
         earliest = conn.execute('select min(report_date) as day from public.store_hours_imports').fetchone()['day']
     dealer, market, sid = (request.args.get(k, '') for k in ('dealer', 'market', 'store'))
@@ -301,13 +340,19 @@ def report_data(start, end):
     selected = [s for s in selected if not sid or s['dealer'] + ':' + s['store_id'] == sid]
     if len(selected) * ((end-start).days+1) > 20000:
         raise PortalError('Select a dealer, market, or shorter date range (up to 20,000 rows).')
-    rows = build_rows(selected, punches, reviews, imports, start, end)
-    relevant_sources = {s for s, d in SOURCES.items() if d in {r['dealer'] for r in selected}}
+    rows = build_rows(selected, punches, reviews, imports, start, end, manual)
+    query = request.args.get('search', '').strip().casefold()
+    if query:
+        rows = [r for r in rows if query in ' '.join(r[k] for k in ('employee','store','dealer','market')).casefold()]
+    relevant_sources = {r.get('source_id') for r in selected if r.get('source_id')}
     relevant = [i for i in imports if i['source_id'] in relevant_sources]
     updated = max((i['loaded_at'] for i in relevant if i['loaded_at']), default=None)
     return dict(rows=rows, start=start.isoformat(), end=end.isoformat(), today=today().isoformat(),
                 earliest=(earliest or today().replace(day=1)).isoformat(),
-                dealers=list(COLORS), markets=markets, stores=stores,
+                dealers=[{'id': d, 'name': DEALER_LABELS.get(d, d)} for d in sorted({s['dealer'] for s in roster})],
+                markets=markets, stores=stores,
+                directory=[{k: s[k] for k in ('dealer','store_id','market','store')} for s in roster],
+                manual_store_count=sum(not s.get('source_id') for s in selected),
                 updated_at=updated.isoformat() if updated else None,
                 coverage={'complete': sum(i['status'] == 'complete' for i in relevant),
                           'expected': len(relevant_sources) * ((end-start).days+1),
@@ -363,7 +408,8 @@ def excel_report(data):
                    ('Rules', 'Late: 1 minute after opening. Early: 1 minute before closing.'),
                    ('Connect chargebacks', 'Houston/Reno: 5 minutes; Dallas: 10 minutes. Charge: -$10.'),
                    ('Pending', 'Camera review and scheduled hours are required. RT punches do not determine compliance.'),
-                   ('RT aggregation', 'Earliest clock-in and its employee; latest clock-out per store/day.'),
+                   ('RT aggregation', 'One row per unique employee/store/date. Earliest clock-in and latest clock-out for that employee.'),
+                   ('Chargeback scope', 'Assessed separately for each late employee, using their camera-in time.'),
                    ('Schedules', 'OPENING TIMING FOR ALL DEALERS.xlsx: Monday-Friday, Saturday, Sunday; date-specific overrides take priority.'),
                    ('Schedule correction', 'Connect Monday-Saturday opening is 10:00 AM, confirmed by the user.'),
                    ('Times', 'Source and camera times are store-local wall times.')]:
@@ -376,53 +422,144 @@ def excel_report(data):
     return output
 
 
-def save_review(payload, user_id):
+def store_day_rows(conn, store, day):
+    punches = conn.execute('select * from public.store_time_punches where report_date=%s', (day,)).fetchall()
+    args = (store['dealer'], store['store_id'], day)
+    reviews = conn.execute('select * from public.store_hours_reviews where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
+    reviews += conn.execute('select * from public.store_hours_employee_reviews where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
+    manual = conn.execute('select * from public.store_hours_manual_employees where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
+    return build_rows([store], punches, reviews, [], day, day, manual)
+
+
+def review_identity(payload):
     dealer, sid = payload.get('dealer'), payload.get('store_id')
     try:
         day = date.fromisoformat(payload.get('date', ''))
     except (ValueError, TypeError):
         raise PortalError('Choose a valid report date.') from None
-    revision = payload.get('revision', 0)
-    if day > today() or dealer not in SOURCES.values() or not isinstance(sid, str) or not sid or len(sid) > 100:
+    if day > today() or not all(isinstance(v, str) and 0 < len(v) <= 160 for v in (dealer, sid)):
         raise PortalError('Choose a valid store and date.')
-    if type(revision) is not int or revision < 0:
+    return dealer, sid, day
+
+
+def lock_store_day(conn, dealer, sid, day):
+    conn.execute('select pg_advisory_xact_lock(hashtextextended(%s,0))',
+                 (json.dumps([dealer, sid, day.isoformat()]),))
+
+
+def save_review(payload, user_id):
+    dealer, sid, day = review_identity(payload)
+    key, revision = payload.get('employee_key', ''), payload.get('revision', 0)
+    if not isinstance(key, str) or len(key) > 500 or type(revision) is not int or revision < 0:
         raise PortalError('Reload this review before editing.')
     times = {}
-    for key in TIME_FIELDS:
-        value = payload.get(key)
+    for field in TIME_FIELDS:
+        value = payload.get(field)
         if value is None or value == '':
-            times[key] = None
+            times[field] = None
         elif isinstance(value, str) and re.fullmatch(r'\d{2}:\d{2}(:\d{2})?', value):
             try:
-                times[key] = wall_time.fromisoformat(value)
+                times[field] = wall_time.fromisoformat(value)
             except ValueError:
                 raise PortalError('Enter valid opening, closing, and camera times.') from None
         else:
             raise PortalError('Enter valid opening, closing, and camera times.')
     with connect() as conn:
         with conn.transaction():
-            store = next((s for s in active_roster(conn) if s['dealer'] == dealer and s['store_id'] == sid), None)
+            lock_store_day(conn, dealer, sid, day)
+            store = next((s for s in roster_with_schedules(conn) if s['dealer'] == dealer and s['store_id'] == sid), None)
             if store is None:
-                raise PortalError('This store is no longer in the active Calling Tree.', 409)
-            schedule = scheduled_hours(store, day)
-            # Saving a camera observation must not freeze inherited workbook hours.
-            # Only a time differing from the recurring schedule is a date-specific override.
-            for key in ('opening_time', 'closing_time'):
-                if times[key] == schedule.get(key):
-                    times[key] = None
-            result = conn.execute('''insert into public.store_hours_reviews
-                (dealer,store_id,report_date,opening_time,closing_time,camera_in,camera_out,updated_by)
-                select %s,%s,%s,%s,%s,%s,%s,%s where %s=0
-                on conflict(dealer,store_id,report_date) do nothing returning revision''',
-                (dealer, sid, day, *(times[k] for k in TIME_FIELDS), user_id, revision)).fetchone()
-            if not result:
-                result = conn.execute('''update public.store_hours_reviews set opening_time=%s,closing_time=%s,
-                    camera_in=%s,camera_out=%s,updated_by=%s,updated_at=now(),revision=revision+1
-                    where dealer=%s and store_id=%s and report_date=%s and revision=%s returning revision''',
-                    (*(times[k] for k in TIME_FIELDS), user_id, dealer, sid, day, revision)).fetchone()
-            if not result:
-                raise PortalError('Someone updated this review. Reload the page before saving again.', 409)
+                raise PortalError('This store is no longer in the directory.', 409)
+            row = next((r for r in store_day_rows(conn, store, day) if r['employee_key'] == key), None)
+            if row is None:
+                raise PortalError('This employee row has changed. Reload before saving.', 409)
+            if row['revision'] != revision:
+                raise PortalError('Someone updated this review. Discard changes and reload before saving again.', 409)
+            schedule = hours_for_store(store, day)
+            for field in ('opening_time', 'closing_time'):
+                if times[field] == schedule.get(field):
+                    times[field] = None
+            result = conn.execute('''insert into public.store_hours_employee_reviews
+                (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,updated_by,revision)
+                values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                on conflict(dealer,store_id,report_date,employee_key) do update set
+                opening_time=excluded.opening_time,closing_time=excluded.closing_time,
+                camera_in=excluded.camera_in,camera_out=excluded.camera_out,
+                updated_by=excluded.updated_by,updated_at=now(),revision=excluded.revision returning revision''',
+                (dealer, sid, day, key, *(times[k] for k in TIME_FIELDS), user_id, revision + 1)).fetchone()
     return result['revision']
+
+
+def add_manual_employee(payload, user_id):
+    dealer, sid, day = review_identity(payload)
+    name = payload.get('employee')
+    if not isinstance(name, str) or not name.strip() or len(name) > 160 or name.strip() == '-':
+        raise PortalError('Enter an employee name (up to 160 characters).')
+    name = ' '.join(name.split())
+    key = employee_key(name)
+    with connect() as conn:
+        with conn.transaction():
+            lock_store_day(conn, dealer, sid, day)
+            store = next((s for s in roster_with_schedules(conn) if s['dealer'] == dealer and s['store_id'] == sid), None)
+            if not store:
+                raise PortalError('Choose a store from the directory.')
+            rows = store_day_rows(conn, store, day)
+            if any(r['employee_key'] == key for r in rows):
+                raise PortalError('This employee already has a row for this store and date.', 409)
+            if len(rows) >= 100:
+                raise PortalError('A store can have up to 100 employee rows per date.')
+            conn.execute('''insert into public.store_hours_manual_employees
+                (dealer,store_id,report_date,employee_key,employee,created_by) values(%s,%s,%s,%s,%s,%s)''',
+                (dealer, sid, day, key, name, user_id))
+    return key
+
+
+def preview_schedule_upload(payload, user_id):
+    filename, content = payload.get('filename'), payload.get('content')
+    if not isinstance(filename, str) or len(filename) > 250 or not filename.lower().endswith('.xlsx'):
+        raise PortalError('Choose an .xlsx schedule workbook.')
+    if not isinstance(content, str) or len(content) > 2800000:
+        raise PortalError('Choose a workbook smaller than 2 MB.')
+    try:
+        raw = base64.b64decode(content, validate=True)
+    except (ValueError, binascii.Error):
+        raise PortalError('The upload was incomplete. Choose the workbook again.') from None
+    parsed = parse_schedule_workbook(raw)
+    with connect() as conn:
+        rows = map_schedule_rows(parsed, roster_with_schedules(conn))
+        conn.execute("delete from public.store_hours_uploads where applied_at is null and uploaded_at<now()-interval '1 day'")
+        preview = conn.execute('''insert into public.store_hours_uploads(filename,rows,uploaded_by)
+            values(%s,%s,%s) returning id''', (PureWindowsPath(filename).name, Jsonb(rows), user_id)).fetchone()['id']
+    return dict(preview_id=str(preview), rows=rows, added=sum(r['action'] == 'Add' for r in rows),
+                updated=sum(r['action'] == 'Update' for r in rows), corrected=sum(bool(r.get('corrected_connect_opening')) for r in rows))
+
+
+def apply_schedule_upload(payload, user_id):
+    try:
+        preview = str(UUID(str(payload.get('preview_id', ''))))
+    except ValueError:
+        raise PortalError('Preview the workbook before applying it.') from None
+    with connect() as conn:
+        with conn.transaction():
+            conn.execute('select pg_advisory_xact_lock(731043260928)')
+            upload = conn.execute('''select * from public.store_hours_uploads where id=%s and uploaded_by=%s
+                and (uploaded_at>now()-interval '1 day' or applied_at is not null) for update''', (preview, user_id)).fetchone()
+            if not upload:
+                raise PortalError('This preview expired. Preview the workbook again.', 409)
+            if upload['applied_at']:
+                return len(upload['rows'])
+            # Revalidate identity before writing in case another upload added stores since preview.
+            remapped = map_schedule_rows(upload['rows'], roster_with_schedules(conn))
+            if [(r['dealer'],r['store_id']) for r in remapped] != [(r['dealer'],r['store_id']) for r in upload['rows']]:
+                raise PortalError('The directory changed. Preview this workbook again.', 409)
+            with conn.cursor() as cur:
+                cur.executemany('''insert into public.store_hours_directory
+                    (dealer,store_id,market,store,company,carrier,source_id,schedules) values(%s,%s,%s,%s,%s,%s,%s,%s)
+                    on conflict(dealer,store_id) do update set market=excluded.market,store=excluded.store,
+                    company=excluded.company,carrier=excluded.carrier,schedules=excluded.schedules,updated_at=now()''',
+                    [(r['dealer'],r['store_id'],r['market'],r['store'],r['company'],r['carrier'],r['source_id'],Jsonb(r['schedules'])) for r in remapped])
+            conn.execute('update public.store_hours_uploads set applied_at=now() where id=%s', (preview,))
+    return len(remapped)
 
 
 def register_store_hours(app):
@@ -440,6 +577,21 @@ def register_store_hours(app):
     @require_user()
     def review_report():
         return jsonify(status='saved', revision=save_review(body(), g.portal_user['id']))
+
+    @app.post('/api/internal/store-hours/employees')
+    @require_user()
+    def create_employee():
+        return jsonify(status='saved', employee_key=add_manual_employee(body(), g.portal_user['id']))
+
+    @app.post('/api/internal/store-hours/schedules/preview')
+    @require_user(admin=True)
+    def preview_schedules():
+        return jsonify(preview_schedule_upload(body(), g.portal_user['id']))
+
+    @app.post('/api/internal/store-hours/schedules/apply')
+    @require_user(admin=True)
+    def apply_schedules():
+        return jsonify(status='saved', count=apply_schedule_upload(body(), g.portal_user['id']))
 
     @app.get('/api/internal/store-hours/export')
     @require_user()
