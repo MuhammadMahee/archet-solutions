@@ -14,6 +14,7 @@ from flask import request
 from playwright.sync_api import sync_playwright, expect
 from werkzeug.serving import make_server
 from api import index, portal, store_hours as sh
+from api import store_hours_sheet as sheet
 from test_portal import FakeStore
 from test_store_hours import sample_rows
 from test_store_hours_directory import workbook
@@ -21,13 +22,24 @@ from api.store_hours_directory import parse_schedule_workbook, map_schedule_rows
 from api.portal import PortalError
 
 
-def main(grid_check=None):
+def main(grid_check=None, spreadsheet=False):
     fake = FakeStore()
     saved = {}
     versions = []
     manual = []
     uploaded = []
     preview_rows = []
+    sheet_config = {'columns':[], 'revision':0}
+    def column_change(payload,user_id):
+        if payload['action']=='add':
+            sheet_config['columns'].append(dict(id='custom_'+str(len(sheet_config['columns'])+1),name=payload['name'],format=payload.get('format','text')))
+        else:
+            column=next(c for c in sheet_config['columns'] if c['id']==payload['id'])
+            if payload['action']=='delete': column['deleted']=True
+            else: column['name']=payload['name']
+        sheet_config['revision']+=1
+        versions.append(dict(id=str(len(versions)+1),transaction_id='1',recorded_at='2026-10-23T12:00:00+00:00',kind='sheet',operation='UPDATE',dealer='*',store_id='__sheet__',store='Shared spreadsheet',market='',report_date=None,employee='',actor_name='Mahee',before_data={'columns':[]},after_data=deepcopy(sheet_config)))
+        return deepcopy(sheet_config)
     directory = [dict(dealer=r['dealer'],store_id=r['store_id'],market=r['market'],store=r['store']) for r in sample_rows()]
     directory = list({(s['dealer'],s['store_id']):s for s in directory}.values())
     directory += [dict(dealer='AMQ',store_id='N1329B',market='CHICAGO',store='GLENVIEW'),
@@ -75,7 +87,8 @@ def main(grid_check=None):
         return dict(versions=rows[:2],next_cursor=rows[1]['id'] if len(rows)>2 else None,tracking_started='2026-10-23T00:00:00+00:00')
     server = make_server('127.0.0.1', 0, index.app, threaded=True)
     origin = f'http://127.0.0.1:{server.server_port}'
-    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history):
+    from contextlib import nullcontext
+    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history), patch.object(sheet,'settings',lambda *args:deepcopy(sheet_config)), patch.object(sheet,'change_column',column_change), patch.object(sh,'connect',lambda:nullcontext(None)):
         Thread(target=server.serve_forever, daemon=True).start()
         try:
             with sync_playwright() as p:
@@ -85,11 +98,12 @@ def main(grid_check=None):
                 page.clock.set_fixed_time(datetime(2026, 10, 20, 17, tzinfo=timezone.utc))
                 errors = []
                 page.on('pageerror', lambda err: errors.append(str(err)))
-                page.goto(origin+'/internal#storehours')
-                page.locator('#login-username').fill('Mahee')
-                page.locator('#login-password').fill('TestPass123')
-                page.locator('#login-form button[type=submit]').click()
-                expect(page.locator('#sh-total')).to_have_text('7')
+                page.goto(origin+('/spreadsheet' if spreadsheet else '/internal#storehours'))
+                page.locator('#sheet-username' if spreadsheet else '#login-username').fill('Mahee')
+                page.locator('#sheet-password' if spreadsheet else '#login-password').fill('TestPass123')
+                page.locator('#sheet-login-form button[type=submit]' if spreadsheet else '#login-form button[type=submit]').click()
+                if spreadsheet: expect(page.locator('#sheet-row-count')).to_contain_text('7 rows')
+                else: expect(page.locator('#sh-total')).to_have_text('7')
                 if grid_check:
                     grid_check(page)
                     assert not errors, errors

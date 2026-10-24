@@ -1,5 +1,5 @@
 'use strict';
-window.createStoreHoursHistory=function({root,params,request}){
+window.createStoreHoursHistory=function({root,params,request,columnLabels=()=>({})}){
   const button=document.createElement('button');button.type='button';button.id='sh-history';button.className='sh-button';button.textContent='Version history';
   root.querySelector('.sh-tools .sh-actions').prepend(button);
   const dialog=document.createElement('dialog');dialog.id='sh-history-dialog';dialog.className='sh-grid-dialog sh-history-dialog';dialog.setAttribute('aria-labelledby','sh-history-title');
@@ -7,7 +7,7 @@ window.createStoreHoursHistory=function({root,params,request}){
   document.body.append(dialog);
   const get=id=>dialog.querySelector('#sh-history-'+id),list=get('list'),status=get('status');
   let generation=0,cursor=null,query=null,busy=false;
-  const labels={review:'Employee review',legacy_review:'Store review',employee:'Employee entry',schedule:'Store schedule',source:'RT-POS punches'};
+  const labels={review:'Employee review',legacy_review:'Store review',employee:'Employee entry',schedule:'Store schedule',source:'RT-POS punches',sheet:'Spreadsheet columns'};
   const time=value=>value??'Not entered';
   const prettyDate=value=>value?new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value)):'—';
   function values(kind,data){
@@ -17,8 +17,11 @@ window.createStoreHoursHistory=function({root,params,request}){
         'Closing time override':data.closing_time??'Workbook default','Camera out':time(data.camera_out),'Review revision':String(data.revision)};
       for(const [key,label] of [['date','Date'],['market','Market'],['store','Store'],['employee','Employee'],['store_status','Store opening status'],['rt_clockin','RT clock-in'],['opening_status','Opening punctuality'],['rt_clockout','RT clock-out'],['closing_status','Closing status'],['chargeback','Chargeback']])
         out[label+' correction']=Object.hasOwn(data.cell_overrides||{},key)?String(data.cell_overrides[key]??'Blank / pending'):'Source / automatic';
+      for(const [key,value] of Object.entries(data.custom_cells||{}))out['Cell · '+(columnLabels()[key]||key)]=value??'Blank';
+      for(const [key,value] of Object.entries(data.cell_formats||{}))out['Format · '+(columnLabels()[key]||key)]=JSON.stringify(value);
       return out;
     }
+    if(kind==='sheet')return Object.fromEntries((data.columns||[]).map(c=>['Column '+c.id,`${c.name} · ${c.format} · ${c.deleted?'Removed (values retained)':'Active'}`]));
     if(kind==='employee')return {'Employee':data.employee};
     if(kind==='source')return {'RT-POS punches':data.punches.length?data.punches.map(p=>`${p.employee}: ${p.clock_in??'No Clock In'} → ${p.clock_out??'No Clock Out'}`).join('\n'):'No punches'};
     const out={'Company':data.company,'Store':data.store,'Market':data.market,'Carrier':data.carrier};
@@ -29,7 +32,7 @@ window.createStoreHoursHistory=function({root,params,request}){
   function draw(version){
     const details=document.createElement('details');details.className='sh-version';const summary=document.createElement('summary');
     const heading=document.createElement('strong');heading.textContent=`#${version.id} · ${labels[version.kind]||version.kind}${version.operation==='BASELINE'?' · Initial snapshot':version.operation==='DELETE'?' · Removed from current data':''}`;
-    const identity=document.createElement('span');identity.textContent=`${version.dealer} · ${version.store} · ${version.report_date||'Recurring hours'}${version.employee&&version.employee!=='-'?' · '+version.employee:''}`;
+    const identity=document.createElement('span');identity.textContent=version.kind==='sheet'?'Shared column layout · all stores and dates':`${version.dealer} · ${version.store} · ${version.report_date||'Recurring hours'}${version.employee&&version.employee!=='-'?' · '+version.employee:''}`;
     const author=document.createElement('small');author.textContent=`${prettyDate(version.recorded_at)} · ${version.actor_name}`;summary.append(heading,identity,author);details.append(summary);
     const before=values(version.kind,version.before_data),after=values(version.kind,version.after_data);
     const table=document.createElement('table');table.className='sh-version-values';const head=document.createElement('thead'),tr=document.createElement('tr');

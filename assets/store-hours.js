@@ -12,6 +12,7 @@
     <div class="sh-page-controls"><button class="sh-button" id="sh-prev" type="button">← Previous</button><span id="sh-page-label"></span><button class="sh-button" id="sh-next" type="button">Next →</button></div>
     <p class="sh-footnote">Each employee has a separate daily row. Repeated shifts use that employee’s earliest RT clock-in and latest RT clock-out. Times use the store’s local clock.<br>Automatic rules (unless manually overridden): late ≥1 minute after opening; early ≥1 minute before closing. Connect chargebacks apply per employee: Houston / Reno ≥5 minutes late; Dallas ≥10 minutes late → −$10.<br>Snapshots and Excel include every saved employee row matching your filters. Amber cells need review. Stores without an RT-POS source support manual entries.</p>`;
   $('page-storehours').append(root);
+  const sheetLink=document.createElement('a');sheetLink.href='/spreadsheet';sheetLink.className='sh-button';sheetLink.textContent='Open spreadsheet ↗';root.querySelector('.sh-hero').append(sheetLink);
   const el=id=>$('sh-'+id),{columns,text,tone}=window.storeHoursSnapshot;
   const fields=['opening_time','closing_time','camera_in','camera_out'];
   let sheet,historyPanel;

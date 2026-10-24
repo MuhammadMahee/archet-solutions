@@ -20,8 +20,9 @@
     return '';
   }
   function render(data,filters={}){
+    const sheetColumns=data.columns||columns;
     if(data.rows.length>500)throw new Error('Choose a smaller date range or store filter to copy up to 500 rows in one readable snapshot. Excel includes all filtered rows.');
-    const widths=[150,150,310,270,210,142,150,150,210,142,150,150,210,250];
+    const widths=[150,150,310,270,210,142,150,150,210,142,150,150,210,250,...Array(Math.max(0,sheetColumns.length-columns.length)).fill(220)];
     const tableWidth=widths.reduce((a,b)=>a+b,0),pad=32,width=tableWidth+64,top=164,head=54,rowHeight=44;
     const tableHeight=head+data.rows.length*rowHeight,height=top+tableHeight+94;
     const canvas=document.createElement('canvas'),scale=Math.min(1920/width,15000/height);
@@ -54,7 +55,7 @@
       const isHead=n<0,y=isHead?top:top+head+n*rowHeight,h=isHead?head:rowHeight;
       ctx.fillStyle=isHead?theme[0]:n%2?'#f7fafc':'#fff';ctx.fillRect(pad,y,tableWidth,h);
       let x=pad;
-      columns.forEach(([key,heading],i)=>{
+      sheetColumns.forEach(([key,heading],i)=>{
         const state=isHead?'':tone(key,row[key]);
         const fill=isHead?theme[0]:({good:'#c6efce',bad:'#ffc7ce',wait:'#fff2d5'}[state]||(n%2?'#f7fafc':'#fff'));
         raised(x+4,y+5,widths[i]-8,h-10,fill,isHead);

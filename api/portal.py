@@ -137,6 +137,8 @@ def register_portal(app):
         limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload','/api/internal/store-hours/schedules/preview') else 32*1024
         if request.path.startswith('/api/internal/invoices/'):
             limit = 512 * 1024
+        if request.path == '/api/internal/store-hours/review':
+            limit = 512 * 1024
         if request.method in ('POST', 'PATCH') and re.fullmatch(r'/api/internal/workforce/conversations/[0-9a-f-]{36}/(messages|profile)', request.path):
             limit = 3 * 1024 * 1024
         if request.content_length and request.content_length>limit:
@@ -156,7 +158,7 @@ def register_portal(app):
     def security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
-        if request.path.startswith(("/api/internal/", "/internal", "/ai-workforce")) or request.host.split(":")[0] == INTERNAL_HOST:
+        if request.path.startswith(("/api/internal/", "/internal", "/spreadsheet", "/ai-workforce")) or request.host.split(":")[0] == INTERNAL_HOST:
             response.headers["Cache-Control"] = "no-store"
             response.headers["X-Robots-Tag"] = "noindex, nofollow"
             response.headers["X-Frame-Options"] = "DENY"

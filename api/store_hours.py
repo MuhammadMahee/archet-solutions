@@ -355,6 +355,8 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                            **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
                 row['source_date'] = day.isoformat()
                 row['cell_overrides'] = overrides
+                row['custom_cells'] = review.get('custom_cells') or {}
+                row['cell_formats'] = review.get('cell_formats') or {}
                 row['schedule_overrides'] = {f: review.get(f) is not None for f in ('opening_time', 'closing_time')}
                 row['source_values'] = {k: row[k] for k in OVERRIDE_FIELDS if k in row}
                 row.update({k: v for k, v in overrides.items() if k not in ('store_status','opening_status','closing_status','chargeback')})
@@ -426,6 +428,8 @@ def report_data(start, end):
     included = {(r['dealer'],r['store_id']) for r in rows}
     selected = [s for s in selected if (s['dealer'],s['store_id']) in included]
     query = request.args.get('search', '').strip().casefold()
+    if request.path.startswith('/api/internal/store-hours/sheet'):
+        query = ''
     if query:
         rows = [r for r in rows if query in ' '.join(r[k] for k in ('employee','store','dealer','market')).casefold()]
     relevant_sources = {r.get('source_id') for r in selected if r.get('source_id')}
@@ -456,14 +460,15 @@ def display_value(key, value):
 
 def excel_report(data):
     book = Workbook()
+    columns = data.get('columns', COLUMNS)
     sheet = book.active
     sheet.title = 'Store Opening Closing'
     sheet.append([f"STORE OPENING / CLOSING | {data['start']} to {data['end']}"])
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(COLUMNS))
-    sheet.append([heading for _, heading in COLUMNS])
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(columns))
+    sheet.append([heading for _, heading in columns])
     for row in data['rows']:
-        sheet.append([row[key] if key == 'chargeback' and row[key] is not None else display_value(key, row[key]) for key, _ in COLUMNS])
-        for col, (key, _) in enumerate(COLUMNS, 1):
+        sheet.append([row.get(key) if key == 'chargeback' and row.get(key) is not None else display_value(key, row.get(key)) for key, _ in columns])
+        for col, (key, _) in enumerate(columns, 1):
             cell = sheet.cell(sheet.max_row, col)
             if isinstance(cell.value, str):
                 cell.data_type = 's'  # Imported names are never executable Excel formulas.
@@ -475,16 +480,19 @@ def excel_report(data):
                 cell.fill = PatternFill('solid', fgColor='C6EFCE')
             if key in ('rt_clockin', 'rt_clockout') and not row[key]:
                 cell.font = Font(color='C00000')
+            if 'columns' in data:
+                from api.store_hours_sheet import format_excel_cell
+                format_excel_cell(cell, row.get(key), {**({'number_format':data['column_formats'][key]} if key in data.get('column_formats',{}) else {}), **(row.get('cell_formats') or {}).get(key,{})})
     for row in sheet.iter_rows(min_row=1, max_row=2):
         for cell in row:
             cell.fill = PatternFill('solid', fgColor='203C66')
             cell.font = Font(color='FFFFFF', bold=True)
             cell.alignment = Alignment(horizontal='center')
     widths = [14, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25]
-    for n, width in enumerate(widths, 1):
+    for n, width in enumerate(widths + [24] * (len(columns)-len(COLUMNS)), 1):
         sheet.column_dimensions[get_column_letter(n)].width = width
     sheet.freeze_panes = 'E3'
-    sheet.auto_filter.ref = f'A2:N{sheet.max_row}'
+    sheet.auto_filter.ref = f'A2:{get_column_letter(len(columns))}{sheet.max_row}'
     meta = book.create_sheet('Report details')
     for values in [('Source', REPORT_URL), ('From', data['start']), ('To', data['end']),
                    ('Latest sync', data['updated_at'] or 'Not synced'),
@@ -533,6 +541,8 @@ def lock_store_day(conn, dealer, sid, day):
 
 
 def save_review(payload, user_id):
+    if any(field in payload and not isinstance(payload[field], dict) for field in ('custom_cells','cell_formats')):
+        raise PortalError('Choose valid spreadsheet cells and formats.')
     dealer, sid, day = review_identity({**payload, 'date': payload.get('source_date', payload.get('date'))})
     overrides = validate_cell_overrides(payload['cell_overrides']) if 'cell_overrides' in payload else None
     key, revision = payload.get('employee_key', ''), payload.get('revision', 0)
@@ -563,6 +573,11 @@ def save_review(payload, user_id):
                 raise PortalError('Someone updated this review. Discard changes and reload before saving again.', 409)
             if overrides is None:
                 overrides = row.get('cell_overrides') or {}
+            custom_cells, cell_formats = row.get('custom_cells') or {}, row.get('cell_formats') or {}
+            if any(payload.get(field) or row.get(field) for field in ('custom_cells','cell_formats')):
+                from api.store_hours_sheet import settings, validate_row_extras
+                config = settings(conn, True)
+                custom_cells, cell_formats = validate_row_extras(payload, row, config, {k for k,_ in COLUMNS})
             effective_day = date.fromisoformat(overrides.get('date', day.isoformat()))
             schedule = hours_for_store(store, effective_day)
             for field in ('opening_time', 'closing_time'):
@@ -571,14 +586,14 @@ def save_review(payload, user_id):
                     times[field] = None
             conn.execute("select set_config('archet.store_hours_employee',%s,true)", (row.get('employee', ''),))
             result = conn.execute('''insert into public.store_hours_employee_reviews
-                (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,updated_by,revision,cell_overrides)
-                values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,updated_by,revision,cell_overrides,custom_cells,cell_formats)
+                values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 on conflict(dealer,store_id,report_date,employee_key) do update set
                 opening_time=excluded.opening_time,closing_time=excluded.closing_time,
                 camera_in=excluded.camera_in,camera_out=excluded.camera_out,
                 updated_by=excluded.updated_by,updated_at=now(),revision=excluded.revision,
-                cell_overrides=excluded.cell_overrides returning revision''',
-                (dealer, sid, day, key, *(times[k] for k in TIME_FIELDS), user_id, revision + 1, Jsonb(overrides))).fetchone()
+                cell_overrides=excluded.cell_overrides,custom_cells=excluded.custom_cells,cell_formats=excluded.cell_formats returning revision''',
+                (dealer, sid, day, key, *(times[k] for k in TIME_FIELDS), user_id, revision + 1, Jsonb(overrides),Jsonb(custom_cells),Jsonb(cell_formats))).fetchone()
     return result['revision']
 
 
@@ -668,23 +683,23 @@ def version_history(start, end):
         value = request.args.get(parameter, '')
         if value:
             if column == 'market':
-                clauses.append("(market=%s or before_data->'cell_overrides'->>'market'=%s or after_data->'cell_overrides'->>'market'=%s)")
+                clauses.append("(kind='sheet' or market=%s or before_data->'cell_overrides'->>'market'=%s or after_data->'cell_overrides'->>'market'=%s)")
                 args.extend([value] * 3)
             else:
-                clauses.append(column + '=%s')
+                clauses.append('(' + column + "=%s or kind='sheet')")
                 args.append(value)
     store = request.args.get('store', '')
     if store:
         parts = store.split(':', 1)
         if len(parts) != 2 or not all(parts):
             raise PortalError('Choose a valid store.')
-        clauses.append('dealer=%s and store_id=%s')
+        clauses.append("((dealer=%s and store_id=%s) or kind='sheet')")
         args.extend(parts)
     search = request.args.get('search', '').strip()
     if search:
         clauses.append("strpos(lower(concat_ws(' ',employee,store,dealer,market,actor_name,"
                        "before_data->'punches',after_data->'punches',"
-                       "before_data->'cell_overrides',after_data->'cell_overrides')),lower(%s))>0")
+                       "before_data->'cell_overrides',after_data->'cell_overrides',before_data->'custom_cells',after_data->'custom_cells')),lower(%s))>0")
         args.append(search)
     if before:
         clauses.append('id<%s')
@@ -703,6 +718,8 @@ def version_history(start, end):
 
 
 def register_store_hours(app):
+    from api.store_hours_sheet import register
+    register(app)
     @app.get('/api/internal/store-hours')
     @require_user()
     def get_report():
