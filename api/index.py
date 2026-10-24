@@ -213,7 +213,7 @@ register_workforce(app)
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename not in ('store-hours-grid.js', 'store-hours.js', 'store-hours.css', 'store-hours-snapshot.js', 'source-sync.js', 'sales-snapshot.js', 'sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png', 'invoices.js', 'invoices.css', 'inter-variable.woff2', 'spacegrotesk-variable.woff2', 'workforce.js', 'workforce-controls.js', 'workforce.css'):
+    if filename not in ('store-hours-history.js', 'store-hours-grid.js', 'store-hours.js', 'store-hours.css', 'store-hours-snapshot.js', 'source-sync.js', 'sales-snapshot.js', 'sales.js', 'sales.css', 'calling-tree.js', 'workspace.js', 'workspace.css', 'quota.js', 'quota.css', 'rest.js', 'rest.css', 'rest-image-1.png', 'rest-image-2.png', 'rest-image-3.png', 'invoices.js', 'invoices.css', 'inter-variable.woff2', 'spacegrotesk-variable.woff2', 'workforce.js', 'workforce-controls.js', 'workforce.css'):
         return '', 404
     return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
 

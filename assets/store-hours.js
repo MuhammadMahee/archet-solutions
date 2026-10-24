@@ -14,7 +14,7 @@
   $('page-storehours').append(root);
   const el=id=>$('sh-'+id),{columns,text,tone}=window.storeHoursSnapshot;
   const fields=['opening_time','closing_time','camera_in','camera_out'];
-  let sheet;
+  let sheet,historyPanel;
   let data=null,mode='storehours',sequence=0,syncSequence=0,syncing=false,saving=false,pageIndex=0;
   let currentDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   let start=currentDay,end=currentDay,earliest=currentDay.slice(0,8)+'01',preset='Today';
@@ -80,7 +80,7 @@
   }
   async function load(name){
     if(typeof name==='string')mode=name;
-    updateMode();sheet?.reset();const id=++sequence;data=null;el('table').querySelector('tbody').replaceChildren();el('copy').disabled=el('excel').disabled=true;el('coverage').textContent='Loading time punches…';
+    updateMode();historyPanel?.clear();sheet?.reset();const id=++sequence;data=null;el('table').querySelector('tbody').replaceChildren();el('copy').disabled=el('excel').disabled=true;el('coverage').textContent='Loading time punches…';
     try{const result=await api('store-hours?'+params());if(id!==sequence||!currentUser)return;data=result;currentDay=result.today;earliest=result.earliest;options('dealer',result.dealers,'All dealers');options('market',result.markets,'All markets');options('store',result.stores,'All stores');render();}
     catch(error){if(id===sequence){el('coverage').textContent='Report could not be loaded.';message(error.message,true);}}
   }
@@ -186,7 +186,8 @@
   el('date-clear').onclick=()=>{draftStart=draftEnd='';selecting='from';drawCalendar();};
   el('date-apply').onclick=()=>{if(!draftStart||!draftEnd){el('date-error').textContent='Select both From and To dates.';el('date-error').hidden=false;return;}applyRange(draftStart,draftEnd,'Custom');};
   dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeDate();}});
-  function clear(){sheet?.reset();sequence++;syncSequence++;uploadSequence++;uploadPreview=null;clearTimeout(searchTimer);employeeDialog.close();el('employee-form').reset();el('employee-store').replaceChildren();el('upload').hidden=true;el('upload-preview').hidden=true;el('upload-table').querySelector('tbody').replaceChildren();el('file').value='';el('upload-status').textContent='';el('search').value='';syncing=saving=false;data=null;drafts.clear();dialog.close();el('table').querySelector('tbody').replaceChildren();['dealer','market','store'].forEach(id=>options(id,[],`All ${id==='store'?'stores':id==='market'?'markets':'dealers'}`));el('sync').disabled=false;el('sync').textContent='↻ Sync sources';start=end=currentDay;preset='Today';pageIndex=0;message();['total','late','pending','chargebacks'].forEach(id=>el(id).textContent='—');updateDirty();}
+  function clear(){historyPanel?.clear();sheet?.reset();sequence++;syncSequence++;uploadSequence++;uploadPreview=null;clearTimeout(searchTimer);employeeDialog.close();el('employee-form').reset();el('employee-store').replaceChildren();el('upload').hidden=true;el('upload-preview').hidden=true;el('upload-table').querySelector('tbody').replaceChildren();el('file').value='';el('upload-status').textContent='';el('search').value='';syncing=saving=false;data=null;drafts.clear();dialog.close();el('table').querySelector('tbody').replaceChildren();['dealer','market','store'].forEach(id=>options(id,[],`All ${id==='store'?'stores':id==='market'?'markets':'dealers'}`));el('sync').disabled=false;el('sync').textContent='↻ Sync sources';start=end=currentDay;preset='Today';pageIndex=0;message();['total','late','pending','chargebacks'].forEach(id=>el(id).textContent='—');updateDirty();}
+  historyPanel=window.createStoreHoursHistory({root,params,request:api});
   sheet=window.createStoreHoursGrid({
     root,table:el('table'),columns,fields,text,key,message,
     rows:()=>data?data.rows.slice(pageIndex*100,(pageIndex+1)*100).map(r=>mode==='storehours'?(drafts.get(key(r))||r):r):[],

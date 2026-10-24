@@ -24,6 +24,7 @@ from api.portal import PortalError
 def main(grid_check=None):
     fake = FakeStore()
     saved = {}
+    versions = []
     manual = []
     uploaded = []
     preview_rows = []
@@ -52,6 +53,7 @@ def main(grid_check=None):
         row = deepcopy(payload)
         row.update(sh.evaluate(row))
         row['revision'] += 1
+        versions.append(dict(id=str(len(versions)+1),transaction_id='1',recorded_at='2026-10-23T12:00:00+00:00',kind='review',operation='UPDATE',dealer=row['dealer'],store_id=row['store_id'],store='STORE ONE',market='HOUSTON',report_date=row['date'],employee='Closing Employee',actor_name='Mahee (@Mahee)',before_data=saved.get(row_key(row),dict(camera_in=None,camera_out=None,opening_time=None,closing_time=None,revision=0)),after_data=deepcopy(row)))
         saved[row_key(row)] = row
         return row['revision']
     def add_employee(payload,user_id):
@@ -66,9 +68,13 @@ def main(grid_check=None):
     def apply_upload(payload,user_id):
         directory.extend(preview_rows)
         return len(preview_rows)
+    def history(start,end):
+        before=int(request.args.get('before') or len(versions)+1)
+        rows=[v for v in reversed(versions) if int(v['id'])<before]
+        return dict(versions=rows[:2],next_cursor=rows[1]['id'] if len(rows)>2 else None,tracking_started='2026-10-23T00:00:00+00:00')
     server = make_server('127.0.0.1', 0, index.app, threaded=True)
     origin = f'http://127.0.0.1:{server.server_port}'
-    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload):
+    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history):
         Thread(target=server.serve_forever, daemon=True).start()
         try:
             with sync_playwright() as p:

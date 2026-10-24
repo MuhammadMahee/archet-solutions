@@ -2,12 +2,15 @@
 // A bounded spreadsheet editor over the existing review drafts and save API.
 window.createStoreHoursGrid = function(api) {
   const {root,table,columns,fields}=api, width=columns.length;
-  let anchor={r:0,c:0},active={r:0,c:0},signature='',editor=null,dragging=false,undo=[],redo=[],generation=0;
+  let anchor={r:0,c:0},active={r:0,c:0},signature='',editor=null,dragging=false,undo=[],redo=[],generation=0,extraRanges=[];
   const letter=c=>String.fromCharCode(65+c), address=p=>letter(p.c)+(p.r+1);
   const writable=c=>api.editing()&&fields.includes(columns[c]?.[0]);
   const cell=(r,c)=>table.tBodies[0]?.rows[r]?.cells[c];
   const value=(r,c)=>api.rows()[r]?.[columns[c][0]]??null;
   const bounds=()=>({top:Math.min(anchor.r,active.r),bottom:Math.max(anchor.r,active.r),left:Math.min(anchor.c,active.c),right:Math.max(anchor.c,active.c)});
+  const ranges=()=>[...extraRanges,bounds()].map(b=>({...b}));
+  const rangeLabel=b=>address({r:b.top,c:b.left})+(b.top===b.bottom&&b.left===b.right?'':':'+address({r:b.bottom,c:b.right}));
+  const singleRange=()=>{if(!extraRanges.length)return true;notice('Choose one continuous range for copy, cut, paste, or flash fill. Separate ranges support edits, clear, and fills.',true);return false;};
   const toolbar=document.createElement('div');toolbar.className='sh-sheet-tools';
   toolbar.innerHTML=`<label class="sh-address-label">Range<input id="sh-grid-address" aria-label="Cell or range" value="A1" placeholder="G1:G10" spellcheck="false"></label><span id="sh-grid-status" role="status" aria-live="polite">Select a cell to begin</span><div class="sh-sheet-buttons"><button type="button" data-grid="undo" title="Undo (Ctrl+Z)">↶ Undo</button><button type="button" data-grid="redo" title="Redo (Ctrl+Y)">↷ Redo</button><button type="button" data-grid="down" title="Fill down (Ctrl+D)">↓ Fill down</button><button type="button" data-grid="right" title="Fill right (Ctrl+R)">→ Fill right</button><button type="button" data-grid="flash" title="Flash fill preview (Ctrl+E)">Flash fill</button><button type="button" data-grid="commands">Commands <kbd>F8</kbd></button><button type="button" data-grid="tutorial">Tutorial</button></div>`;
   table.parentElement.before(toolbar);
@@ -31,14 +34,14 @@ window.createStoreHoursGrid = function(api) {
   function notice(text,error=false){api.message(text,error);}
   function clamp(p){return {r:Math.max(0,Math.min(p.r,api.rows().length-1)),c:Math.max(0,Math.min(p.c,width-1))};}
   function paint(focus=false){
-    const rows=api.rows(),b=bounds();
+    const rows=api.rows(),boxes=ranges();
     for(let r=0;r<table.tBodies[0]?.rows.length;r++)for(let c=0;c<width;c++){
-      const td=cell(r,c),selected=r>=b.top&&r<=b.bottom&&c>=b.left&&c<=b.right;
+      const td=cell(r,c),selected=boxes.some(b=>r>=b.top&&r<=b.bottom&&c>=b.left&&c<=b.right);
       td.classList.toggle('sh-cell-selected',selected);td.classList.toggle('sh-cell-active',r===active.r&&c===active.c);
       td.setAttribute('aria-selected',String(selected));td.tabIndex=r===active.r&&c===active.c?0:-1;
     }
-    rangeInput.value=rows.length?(address(anchor)===address(active)?address(active):`${address({r:b.top,c:b.left})}:${address({r:b.bottom,c:b.right})}`):'';
-    status.textContent=rows.length?`${(b.bottom-b.top+1)*(b.right-b.left+1)} cell(s) · ${columns[active.c][1]} · ${writable(active.c)?'Editable time':'Read only'} · Current page`:'No cells in this selection';
+    rangeInput.value=rows.length?boxes.map(rangeLabel).join(', '):'';
+    status.textContent=rows.length?`${selected().length} cell(s) in ${boxes.length} range(s) · ${columns[active.c][1]} · ${writable(active.c)?'Editable time':'Read only'} · Current page`:'No cells in this selection';
     toolbar.querySelector('[data-grid=undo]').disabled=!undo.length||api.busy()||!api.editing();
     toolbar.querySelector('[data-grid=redo]').disabled=!redo.length||api.busy()||!api.editing();
     ['down','right','flash'].forEach(id=>toolbar.querySelector(`[data-grid=${id}]`).disabled=!api.editing()||api.busy()||!rows.length);
@@ -47,12 +50,12 @@ window.createStoreHoursGrid = function(api) {
       const wrap=table.parentElement;if(active.c<3)wrap.scrollLeft=0;else{const edge=wrap.getBoundingClientRect().left+(cell(active.r,2)?.offsetWidth||0)+2,hidden=edge-target.getBoundingClientRect().left;if(hidden>0)wrap.scrollLeft-=hidden;}
     }
   }
-  function select(r,c,extend=false){if(!api.rows().length)return;active=clamp({r,c});if(!extend)anchor={...active};paint(true);}
+  function select(r,c,extend=false,add=false){if(!api.rows().length)return;if(add&&extraRanges.length<49)extraRanges.push(bounds());else if(!extend)extraRanges=[];active=clamp({r,c});if(!extend||add)anchor={...active};paint(true);}
   function resetHistory(){undo=[];redo=[];toolbar.querySelector('[data-grid=undo]').disabled=true;toolbar.querySelector('[data-grid=redo]').disabled=true;}
-  function reset(){generation++;cancelEdit();if(dialog.open)dialog.close();content.replaceChildren();title.textContent='';resetHistory();signature='';anchor=active={r:0,c:0};welcome.hidden=true;}
+  function reset(){generation++;cancelEdit();if(dialog.open)dialog.close();content.replaceChildren();title.textContent='';resetHistory();signature='';extraRanges=[];anchor=active={r:0,c:0};welcome.hidden=true;}
   function refresh(){
     const rows=api.rows(),next=JSON.stringify([api.editing(),rows.map(api.key)]);
-    if(next!==signature){generation++;cancelEdit();resetHistory();anchor={r:0,c:0};active={...anchor};signature=next;}
+    if(next!==signature){generation++;cancelEdit();resetHistory();extraRanges=[];anchor={r:0,c:0};active={...anchor};signature=next;}
     table.setAttribute('role','grid');table.setAttribute('aria-label','Opening and closing spreadsheet');table.setAttribute('aria-multiselectable','true');
     table.setAttribute('aria-rowcount',String(rows.length+1));table.setAttribute('aria-colcount',String(width));
     [...table.tHead.rows[0].cells].forEach((th,c)=>{if(c>=width)return;th.setAttribute('role','columnheader');const tag=document.createElement('span');tag.className='sh-column-letter';tag.textContent=letter(c);th.prepend(tag);});
@@ -79,7 +82,7 @@ window.createStoreHoursGrid = function(api) {
     if(!api.editing()){notice('Open the form to edit camera and schedule times.',true);return false;}
     const rows=api.rows();
     if(changes.some(x=>x.r<0||x.r>=rows.length||!writable(x.c))){notice('Only Opening Time, Camera In View, Closing Time, and Camera Out View can be edited.',true);return false;}
-    const items=changes.map(x=>({...x,before:value(x.r,x.c)})).filter(x=>x.before!==x.value);
+    const items=[...new Map(changes.map(x=>[`${x.r}:${x.c}`,x])).values()].map(x=>({...x,before:value(x.r,x.c)})).filter(x=>x.before!==x.value);
     if(!items.length){notice('No values changed.');return true;}
     undo.push(items);if(undo.length>100)undo.shift();redo=[];api.apply(items);paint(true);notice(`${label}: ${items.length} cell(s) updated. Review the changes, then Save changes.`);return true;
   }
@@ -87,10 +90,11 @@ window.createStoreHoursGrid = function(api) {
     if(api.busy()||!api.editing())return;const from=back?undo:redo,to=back?redo:undo,items=from.pop();if(!items)return;
     to.push(items);api.apply(items.map(x=>({...x,value:back?x.before:x.value})));paint(true);notice(back?'Last sheet edit undone. Save to persist this change.':'Sheet edit restored. Save to persist this change.');
   }
-  function selected(){const b=bounds(),out=[];for(let r=b.top;r<=b.bottom;r++)for(let c=b.left;c<=b.right;c++)out.push({r,c});return out;}
+  function selected(){const out=new Map();for(const b of ranges())for(let r=b.top;r<=b.bottom;r++)for(let c=b.left;c<=b.right;c++)out.set(`${r}:${c}`,{r,c});return [...out.values()];}
   function clearCells(){commit(selected().filter(x=>writable(x.c)).map(x=>({...x,value:null})),'Clear');}
   function fill(direction){
-    const b=bounds(),changes=[];
+    const changes=[];
+    for(const b of ranges()){
     if(direction==='down'){
       if(b.top===b.bottom){if(!b.top){notice('Select multiple rows, or a cell below the source row.',true);return;}b.top--;}
       for(let c=b.left;c<=b.right;c++)if(writable(c))for(let r=b.top+1;r<=b.bottom;r++)changes.push({r,c,value:value(b.top,c)});
@@ -98,6 +102,7 @@ window.createStoreHoursGrid = function(api) {
       if(b.left===b.right){if(!b.left){notice('Select multiple columns, or a cell to the right of the source.',true);return;}b.left--;}
       if(!writable(b.left)){notice('Fill right must start in an editable time column.',true);return;}
       for(let r=b.top;r<=b.bottom;r++)for(let c=b.left+1;c<=b.right;c++)if(writable(c))changes.push({r,c,value:value(r,b.left)});
+    }
     }
     if(!changes.length){notice('Select editable time cells to fill.',true);return;}commit(changes,direction==='down'?'Fill down':'Fill right');
   }
@@ -129,6 +134,7 @@ window.createStoreHoursGrid = function(api) {
     if(rows.length>100||rows.some(r=>r.length!==rows[0].length)||rows[0].length>width)throw new Error('Paste a rectangular range of up to 100 rows and 14 columns.');return rows;
   }
   function paste(raw){
+    if(!singleRange())return;
     try{const grid=matrix(raw),b=bounds(),height=grid.length,w=grid[0].length,selectedHeight=b.bottom-b.top+1,selectedWidth=b.right-b.left+1;
       const repeat=selectedHeight>=height&&selectedWidth>=w&&selectedHeight%height===0&&selectedWidth%w===0;
       const nr=repeat?selectedHeight:height,nc=repeat?selectedWidth:w,changes=[];
@@ -138,11 +144,12 @@ window.createStoreHoursGrid = function(api) {
     }catch(e){notice('Nothing pasted. '+e.message,true);}
   }
   async function clipboard(cut=false){
-    if(!api.rows().length)return;if(cut&&selected().some(x=>!writable(x.c))){notice('Cut a range containing only editable time cells.',true);return;}
+    if(!api.rows().length||!singleRange())return;if(cut&&selected().some(x=>!writable(x.c))){notice('Cut a range containing only editable time cells.',true);return;}
     const version=generation,items=selected();try{await navigator.clipboard.writeText(copyText());if(version!==generation)return;if(cut)commit(items.map(x=>({...x,value:null})),'Cut');else notice('Selected cells copied. Paste into Excel, Google Sheets, or another time range.');}catch{notice('Clipboard access is unavailable. Focus the selected cells and press Ctrl+C or Ctrl+X.',true);}
   }
   async function pasteClipboard(){const version=generation;try{const raw=await navigator.clipboard.readText();if(version===generation)paste(raw);}catch{notice('Focus a time cell and press Ctrl+V to paste.',true);}}
   function flash(){
+    if(!singleRange())return;
     const b=bounds();if(b.left!==b.right||!writable(b.left)||b.bottom-b.top<2){notice('Flash fill: select at least three cells in one time column. Enter the first two examples, leaving later cells blank.',true);return;}
     const seconds=v=>v===null?null:v.split(':').map(Number).reduce((sum,n,i)=>sum+n*[3600,60,1][i],0);
     const first=seconds(value(b.top,b.left)),second=seconds(value(b.top+1,b.left));if(first===null||second===null){notice('Enter two time examples at the top of the selected range first.',true);return;}
@@ -161,7 +168,7 @@ window.createStoreHoursGrid = function(api) {
   ];
   function command(name){
     const actions={down:()=>fill('down'),right:()=>fill('right'),flash,copy:()=>clipboard(),cut:()=>clipboard(true),paste:pasteClipboard,undo:()=>history(true),redo:()=>history(false),clear:clearCells,
-      edit:()=>beginEdit(),save:()=>{if(api.editing())api.save();else notice('Open the form to save edits.');},find:api.find,goto:()=>{rangeInput.focus();rangeInput.select();},all:()=>{anchor={r:0,c:0};active={r:api.rows().length-1,c:width-1};paint(true);},add:()=>{if(api.editing())api.add();else notice('Open the form to add an employee.');},download:api.download,commands:showCommands,tutorial:()=>tutorial(0)};
+      edit:()=>beginEdit(),save:()=>{if(api.editing())api.save();else notice('Open the form to save edits.');},find:api.find,goto:()=>{rangeInput.focus();rangeInput.select();},all:()=>{extraRanges=[];anchor={r:0,c:0};active={r:api.rows().length-1,c:width-1};paint(true);},add:()=>{if(api.editing())api.add();else notice('Open the form to add an employee.');},download:api.download,commands:showCommands,tutorial:()=>tutorial(0)};
     if(!api.rows().length&&!['commands','tutorial','find','add'].includes(name))return;
     actions[name]?.();
   }
@@ -169,36 +176,40 @@ window.createStoreHoursGrid = function(api) {
     const list=document.createElement('div');list.className='sh-command-list';commands.forEach(([key,label,shortcut,name])=>{const button=document.createElement('button');button.type='button';const k=document.createElement('kbd');k.textContent=key;const span=document.createElement('span');span.textContent=label;const small=document.createElement('small');small.textContent=shortcut;button.append(k,span,small);button.onclick=()=>{dialog.close();command(name);};list.append(button);});content.append(list);list.querySelector('button').focus();}
   dialog.addEventListener('keydown',e=>{if(dialogMode==='commands'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){const match=commands.find(x=>x[0]===e.key.toUpperCase());if(match){e.preventDefault();dialog.close();command(match[3]);}}});
   const lessons=[
-    ['Choose your rows','Filter by dealer, store, and date first. Each employee has an independent row. Selections and bulk edits cover the current page (up to 100 rows). Exports include all filtered saved rows.','Click a cell, then use arrows. Shift+arrows or drag selects a rectangle. Shift+click extends it. The Range box accepts G1:G10.'],
+    ['Choose your rows','Filter by dealer, store, and date first. Each employee has an independent row. Selections and bulk edits cover the current page (up to 100 rows). Exports include all filtered saved rows.','Click a cell, then use arrows. Shift+arrows or drag selects a rectangle. Hold Shift while clicking, dragging, or using arrows to extend a range. Ctrl/Command+click or drag adds a separate range. Both Ctrl+Space and Shift+Space select columns on this page. The Range box accepts G1:G10, K1:K10.'],
     ['Enter camera and schedule times','F / Opening Time, G / Camera In View, J / Closing Time, and K / Camera Out View are editable on the form. Other columns and the report view are read only.','Press F2, double-click, start typing, or use Edit cell (also on phones). Enter 9:02 AM or 14:30:00. Enter commits and moves down; Tab moves right; Escape cancels. Ctrl+Enter applies the typed time to selected editable cells. Clearing a schedule restores workbook hours after saving.'],
     ['Copy and paste','Use Ctrl+C / Ctrl+V for rectangular cells from Excel, Google Sheets, or this sheet. A single copied time fills the selected range. Paste is validated as a whole: an invalid time, read-only destination, or page overflow rejects the entire paste.','Ctrl+X cuts editable times. Delete clears editable cells. Ctrl+Z undoes an edit; Ctrl+Y or Ctrl+Shift+Z redoes it. Imported employee names and RT punches remain read only.'],
     ['Fill and preview patterns','Select a range and press Ctrl+D to repeat its top row downward, or Ctrl+R to repeat its leftmost time rightward. On one cell, these copy from directly above or left.','For flash fill, enter two time examples and select them plus blank cells below in the same column. Ctrl+E previews the repeated or evenly spaced time pattern. It fills blanks only after you apply the preview. Verify camera times against your observations.'],
-    ['Save your work','Edits remain drafts until Save changes or Ctrl+S succeeds. Undo covers the last 100 sheet operations and resets when you save, reload, change filters, or change pages. A page refresh or sign-out discards unsaved drafts.','F8 opens the command menu instead of Excel’s Alt ribbon. For example, F8 then D fills down; F8 then S saves. Use Tutorial or F1 to reopen this guide. On Mac, Command can replace Ctrl.']
+    ['Save your work','Edits remain drafts until Save changes or Ctrl+S succeeds. Undo covers the last 100 sheet operations and resets when you save, reload, change filters, or change pages. A page refresh or sign-out discards unsaved drafts. Version history permanently records saved changes; undo never removes a saved version.','F8 opens the command menu instead of Excel’s Alt ribbon. For example, F8 then D fills down; F8 then S saves. Use Tutorial or F1 to reopen this guide. On Mac, Command can replace Ctrl.']
   ];
   function tutorial(step){tutorialStep=step;openDialog('tutorial',`Quick start · ${step+1} of ${lessons.length}`);const [heading,body,detail]=lessons[step];const h=document.createElement('h3');h.textContent=heading;content.append(h);for(const text of [body,detail]){const p=document.createElement('p');p.textContent=text;content.append(p);}
-    if(step===4){const list=document.createElement('dl');list.className='sh-shortcut-guide';[['Arrows / Shift+arrows','Move / extend selection'],['Tab / Shift+Tab','Next / previous cell'],['Enter / Shift+Enter','Move down / up'],['Home / End','First / last column'],['Ctrl+Home / Ctrl+End','First / last cell on this page'],['Ctrl+arrows','Jump to page edges; add Shift to extend'],['Shift+Space / Ctrl+Space','Select row / column'],['Page Up / Page Down','Move ten rows'],['Ctrl+A','Select current page'],['Ctrl+G','Go to cell or range'],['Ctrl+F','Search employees and stores'],['F2 / Escape','Edit / cancel'],...commands.slice(0,10).map(x=>[x[2],x[1]])].forEach(([key,description])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=description;list.append(dt,dd);});content.append(list);}
+    if(step===4){const list=document.createElement('dl');list.className='sh-shortcut-guide';[['Arrows / Shift+arrows','Move / extend selection'],['Tab / Shift+Tab','Next / previous cell'],['Enter / Shift+Enter','Move down / up'],['Home / End','First / last column'],['Ctrl+Home / Ctrl+End','First / last cell on this page'],['Ctrl+arrows','Jump to page edges; add Shift to extend'],['Shift+Space / Ctrl+Space','Select entire column(s) on this page'],['Page Up / Page Down','Move ten rows'],['Ctrl+A','Select current page'],['Ctrl+G','Go to cell or range'],['Ctrl+F','Search employees and stores'],['F2 / Escape','Edit / cancel'],...commands.slice(0,10).map(x=>[x[2],x[1]])].forEach(([key,description])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=description;list.append(dt,dd);});content.append(list);}
     const footer=document.createElement('div');footer.className='sh-tutorial-footer';const back=document.createElement('button');back.type='button';back.className='sh-button';back.textContent='Back';back.disabled=!step;back.onclick=()=>tutorial(step-1);const next=document.createElement('button');next.type='button';next.className='sh-button sh-primary';next.id='sh-tutorial-next';next.textContent=step===4?'Start working':'Next';next.onclick=()=>{if(step===4){markSeen();dialog.close();}else tutorial(step+1);};footer.append(back,next);content.append(footer);next.focus();
   }
   root.addEventListener('click',e=>{const button=e.target.closest('[data-grid]');if(button)command(button.dataset.grid);});
-  rangeInput.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();const match=rangeInput.value.trim().toUpperCase().match(/^([A-N])([1-9]\d*)(?::([A-N])([1-9]\d*))?$/);if(!match){notice('Enter a cell or range such as G1 or G1:G10.',true);return;}const a={r:Number(match[2])-1,c:match[1].charCodeAt(0)-65},b={r:Number(match[4]||match[2])-1,c:(match[3]||match[1]).charCodeAt(0)-65};if(Math.max(a.r,b.r)>=api.rows().length){notice('That row is outside this page.',true);return;}anchor=a;active=b;paint(true);});
-  table.addEventListener('pointerdown',e=>{const td=e.target.closest('td[data-grid-row]');if(!td||e.button!==0||e.target===editor)return;if(editor)return;e.preventDefault();if(e.target.closest('.sh-row-number')){anchor={r:Number(td.dataset.gridRow),c:0};active={r:anchor.r,c:width-1};paint(true);return;}select(Number(td.dataset.gridRow),Number(td.dataset.gridCol),e.shiftKey);dragging=e.pointerType!=='touch';});
-  table.tHead.addEventListener('click',e=>{const th=e.target.closest('th');if(!th||th.cellIndex>=width||!api.rows().length)return;anchor={r:0,c:th.cellIndex};active={r:api.rows().length-1,c:th.cellIndex};paint(true);});
+  rangeInput.addEventListener('keydown',e=>{if(e.key!=='Enter')return;e.preventDefault();const parts=rangeInput.value.trim().toUpperCase().split(',');if(parts.length>50){notice('Select up to 50 separate ranges.',true);return;}const parsed=[];
+    for(const part of parts){const match=part.trim().match(/^([A-N])([1-9]\d*)(?::([A-N])([1-9]\d*))?$/);if(!match){notice('Enter ranges such as G1:G10, K1:K10.',true);return;}const a={r:Number(match[2])-1,c:match[1].charCodeAt(0)-65},b={r:Number(match[4]||match[2])-1,c:(match[3]||match[1]).charCodeAt(0)-65};if(Math.max(a.r,b.r)>=api.rows().length){notice('That row is outside this page.',true);return;}parsed.push({a,b});}
+    extraRanges=parsed.slice(0,-1).map(({a,b})=>({top:Math.min(a.r,b.r),bottom:Math.max(a.r,b.r),left:Math.min(a.c,b.c),right:Math.max(a.c,b.c)}));anchor=parsed.at(-1).a;active=parsed.at(-1).b;paint(true);});
+  table.addEventListener('pointerdown',e=>{const td=e.target.closest('td[data-grid-row]');if(!td||e.button!==0||e.target===editor||editor)return;e.preventDefault();const add=(e.ctrlKey||e.metaKey)&&!e.shiftKey;
+    if(e.target.closest('.sh-row-number')){if(add&&extraRanges.length<49)extraRanges.push(bounds());else if(!e.shiftKey)extraRanges=[];anchor={r:e.shiftKey?anchor.r:Number(td.dataset.gridRow),c:0};active={r:Number(td.dataset.gridRow),c:width-1};paint(true);return;}
+    select(Number(td.dataset.gridRow),Number(td.dataset.gridCol),e.shiftKey,add);dragging=e.pointerType!=='touch';});
+  table.tHead.addEventListener('click',e=>{const th=e.target.closest('th');if(!th||th.cellIndex>=width||!api.rows().length)return;if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&extraRanges.length<49)extraRanges.push(bounds());else if(!e.shiftKey)extraRanges=[];anchor={r:0,c:e.shiftKey?anchor.c:th.cellIndex};active={r:api.rows().length-1,c:th.cellIndex};paint(true);});
   table.addEventListener('pointerover',e=>{if(!dragging||!(e.buttons&1))return;const td=e.target.closest('td[data-grid-row]');if(td)select(Number(td.dataset.gridRow),Number(td.dataset.gridCol),true);});
   document.addEventListener('pointerup',()=>{dragging=false;});
   table.addEventListener('dblclick',e=>{if(e.target.closest('td[data-grid-row]'))beginEdit();});
-  table.addEventListener('copy',e=>{if(editor||!api.rows().length)return;e.preventDefault();e.clipboardData.setData('text/plain',copyText());notice('Selected cells copied.');});
-  table.addEventListener('cut',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(selected().some(x=>!writable(x.c))){notice('Cut a range containing only editable time cells.',true);return;}e.clipboardData.setData('text/plain',copyText());clearCells();});
+  table.addEventListener('copy',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;e.clipboardData.setData('text/plain',copyText());notice('Selected cells copied.');});
+  table.addEventListener('cut',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;if(selected().some(x=>!writable(x.c))){notice('Cut a range containing only editable time cells.',true);return;}e.clipboardData.setData('text/plain',copyText());clearCells();});
   table.addEventListener('paste',e=>{if(editor)return;e.preventDefault();paste(e.clipboardData.getData('text/plain'));});
   table.addEventListener('keydown',e=>{
     if(editor||e.target.closest('button')||!api.rows().length)return;const ctrl=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
     if(ctrl&&['c','x','v'].includes(k))return;
     if(e.key==='F8'||e.key==='F1'){e.preventDefault();command(e.key==='F8'?'commands':'tutorial');return;}
     if(ctrl&&['d','r','e','z','y','a','s','f','g'].includes(k)){e.preventDefault();command(({d:'down',r:'right',e:'flash',z:e.shiftKey?'redo':'undo',y:'redo',a:'all',s:'save',f:'find',g:'goto'})[k]);return;}
-    if(e.key===' '&&(ctrl||e.shiftKey)){e.preventDefault();if(ctrl){anchor={r:0,c:active.c};active={r:api.rows().length-1,c:active.c};}else{anchor={r:active.r,c:0};active={r:active.r,c:width-1};}paint(true);return;}
+    if((e.key===' '||e.code==='Space')&&(ctrl||e.shiftKey)){e.preventDefault();const b=bounds();extraRanges=extraRanges.map(x=>({...x,top:0,bottom:api.rows().length-1}));anchor={r:0,c:b.left};active={r:api.rows().length-1,c:b.right};paint(true);return;}
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Enter'].includes(e.key)){e.preventDefault();if(ctrl){select(e.key==='ArrowUp'?0:e.key==='ArrowDown'?api.rows().length-1:active.r,e.key==='ArrowLeft'?0:e.key==='ArrowRight'?width-1:active.c,e.shiftKey);}else move(e.key,e.shiftKey,e.shiftKey&&e.key.startsWith('Arrow'));return;}
     if(['Home','End','PageUp','PageDown'].includes(e.key)){e.preventDefault();select(e.key==='PageUp'?active.r-10:e.key==='PageDown'?active.r+10:ctrl?(e.key==='Home'?0:api.rows().length-1):active.r,e.key==='Home'?0:e.key==='End'?width-1:active.c,e.shiftKey);return;}
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();clearCells();return;}
-    if(e.key==='Escape'){e.preventDefault();anchor={...active};paint(true);return;}
+    if(e.key==='Escape'){e.preventDefault();extraRanges=[];anchor={...active};paint(true);return;}
     if(e.key==='F2'){e.preventDefault();beginEdit();return;}
     if(e.key.length===1&&!ctrl&&!e.altKey){e.preventDefault();beginEdit(e.key);}
   });

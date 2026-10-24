@@ -479,6 +479,7 @@ def save_review(payload, user_id):
             for field in ('opening_time', 'closing_time'):
                 if times[field] == schedule.get(field):
                     times[field] = None
+            conn.execute("select set_config('archet.store_hours_employee',%s,true)", (row.get('employee', ''),))
             result = conn.execute('''insert into public.store_hours_employee_reviews
                 (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,updated_by,revision)
                 values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
@@ -552,6 +553,7 @@ def apply_schedule_upload(payload, user_id):
             remapped = map_schedule_rows(upload['rows'], roster_with_schedules(conn))
             if [(r['dealer'],r['store_id']) for r in remapped] != [(r['dealer'],r['store_id']) for r in upload['rows']]:
                 raise PortalError('The directory changed. Preview this workbook again.', 409)
+            conn.execute("select set_config('archet.store_hours_actor',%s,true)", (str(user_id),))
             with conn.cursor() as cur:
                 cur.executemany('''insert into public.store_hours_directory
                     (dealer,store_id,market,store,company,carrier,source_id,schedules) values(%s,%s,%s,%s,%s,%s,%s,%s)
@@ -562,11 +564,56 @@ def apply_schedule_upload(payload, user_id):
     return len(remapped)
 
 
+def version_history(start, end):
+    """Read-only, keyset-paginated audit history; never expose a mutation endpoint."""
+    before = request.args.get('before', '')
+    if before and (not before.isascii() or not before.isdigit() or len(before) > 19 or not 0 < int(before) < 2**63):
+        raise PortalError('Choose a valid history page.')
+    clauses = ['(report_date between %s and %s or report_date is null)']
+    args = [start, end]
+    for parameter, column in [('dealer', 'dealer'), ('market', 'market')]:
+        value = request.args.get(parameter, '')
+        if value:
+            clauses.append(column + '=%s')
+            args.append(value)
+    store = request.args.get('store', '')
+    if store:
+        parts = store.split(':', 1)
+        if len(parts) != 2 or not all(parts):
+            raise PortalError('Choose a valid store.')
+        clauses.append('dealer=%s and store_id=%s')
+        args.extend(parts)
+    search = request.args.get('search', '').strip()
+    if search:
+        clauses.append("strpos(lower(concat_ws(' ',employee,store,dealer,market,actor_name,"
+                       "before_data->'punches',after_data->'punches')),lower(%s))>0")
+        args.append(search)
+    if before:
+        clauses.append('id<%s')
+        args.append(int(before))
+    with connect() as conn:
+        rows = conn.execute('select * from public.store_hours_versions where ' + ' and '.join(clauses) +
+                            ' order by id desc limit 51', args).fetchall()
+        tracking = conn.execute('select min(recorded_at) as started from public.store_hours_versions').fetchone()['started']
+    result = []
+    for row in rows[:50]:
+        result.append({**row, 'id': str(row['id']), 'transaction_id': str(row['transaction_id']),
+                       'recorded_at': row['recorded_at'].isoformat(),
+                       'report_date': row['report_date'].isoformat() if row['report_date'] else None})
+    return dict(versions=result, next_cursor=str(rows[49]['id']) if len(rows) > 50 else None,
+                tracking_started=tracking.isoformat() if tracking else None)
+
+
 def register_store_hours(app):
     @app.get('/api/internal/store-hours')
     @require_user()
     def get_report():
         return jsonify(report_data(*report_range()))
+
+    @app.get('/api/internal/store-hours/history')
+    @require_user()
+    def get_version_history():
+        return jsonify(version_history(*report_range()))
 
     @app.post('/api/internal/store-hours/refresh')
     @require_user(admin=True)
