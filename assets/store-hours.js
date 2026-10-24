@@ -14,6 +14,7 @@
   $('page-storehours').append(root);
   const el=id=>$('sh-'+id),{columns,text,tone}=window.storeHoursSnapshot;
   const fields=['opening_time','closing_time','camera_in','camera_out'];
+  let sheet;
   let data=null,mode='storehours',sequence=0,syncSequence=0,syncing=false,saving=false,pageIndex=0;
   let currentDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   let start=currentDay,end=currentDay,earliest=currentDay.slice(0,8)+'01',preset='Today';
@@ -50,7 +51,7 @@
         if(editing&&fields.includes(k)){
           const input=document.createElement('input');input.type='time';input.step='1';input.value=row[k]||'';input.setAttribute('aria-label',`${heading} — ${row.store} — ${row.date}`);
           if(k==='opening_time'||k==='closing_time')input.title=row['scheduled_'+k]?`${row.schedule_period} workbook hours: ${text(k,row['scheduled_'+k])}. Clear and save to restore this time.`:'No matching workbook schedule. Enter a time for this date.';
-          input.oninput=()=>{const draft={...(drafts.get(key(saved))||saved),[k]:input.value||null};const preview={...draft};['opening_time','closing_time'].forEach(field=>{if(!preview[field])preview[field]=saved['scheduled_'+field]||null;});Object.assign(draft,evaluate(preview));drafts.set(key(saved),draft);tr.classList.add('sh-dirty');tr.querySelector('button').disabled=saving;['store_status','opening_status','closing_status','chargeback'].forEach(col=>{const cell=tr.querySelector(`[data-column="${col}"]`);cell.textContent=text(col,draft[col]);cell.className='sh-'+tone(col,draft[col]);});updateDirty();};td.append(input);
+          input.oninput=()=>{sheet?.resetHistory();const draft={...(drafts.get(key(saved))||saved),[k]:input.value||null};const preview={...draft};['opening_time','closing_time'].forEach(field=>{if(!preview[field])preview[field]=saved['scheduled_'+field]||null;});Object.assign(draft,evaluate(preview));drafts.set(key(saved),draft);tr.classList.add('sh-dirty');tr.querySelector('button').disabled=saving;['store_status','opening_status','closing_status','chargeback'].forEach(col=>{const cell=tr.querySelector(`[data-column="${col}"]`);cell.textContent=text(col,draft[col]);cell.className='sh-'+tone(col,draft[col]);});updateDirty();};td.append(input);
         }else{td.textContent=text(k,row[k]);const state=tone(k,row[k]);if(state)td.className='sh-'+state;}
         if(['rt_clockin','rt_clockout'].includes(k)&&saved.source_status!=='complete')td.title=saved.source_status==='manual_only'?'This store has no connected RT-POS source. Add employees manually.':'Source not fully synced. This value may be missing or from an earlier sync.';
         if(k==='store'){td.title=row.dealer+' · '+row.store_id;const tag=document.createElement('small');tag.className='sh-dealer-tag';tag.textContent=row.dealer;td.append(tag);}
@@ -64,7 +65,7 @@
     el('page-label').textContent=rows.length?`${pageIndex*100+1}–${Math.min((pageIndex+1)*100,rows.length)} of ${rows.length} records`:'0 records';
     el('prev').disabled=pageIndex===0;el('next').disabled=(pageIndex+1)*100>=rows.length;
     const coverage=data.coverage;el('coverage').textContent=`${coverage.complete}/${coverage.expected} source days synced${data.manual_store_count?' · '+data.manual_store_count+' stores with manual entries':''}${data.updated_at?' · Updated '+new Date(data.updated_at).toLocaleString():''}${coverage.complete<coverage.expected?' · Incomplete source data':''}`;
-    el('copy').disabled=el('excel').disabled=!rows.length;updateDirty();
+    el('copy').disabled=el('excel').disabled=!rows.length;updateDirty();sheet?.refresh();
   }
   function updateMode(){
     const editing=mode==='storehours';$('page-'+mode).append(root);
@@ -79,15 +80,15 @@
   }
   async function load(name){
     if(typeof name==='string')mode=name;
-    updateMode();const id=++sequence;data=null;el('table').querySelector('tbody').replaceChildren();el('copy').disabled=el('excel').disabled=true;el('coverage').textContent='Loading time punches…';
+    updateMode();sheet?.reset();const id=++sequence;data=null;el('table').querySelector('tbody').replaceChildren();el('copy').disabled=el('excel').disabled=true;el('coverage').textContent='Loading time punches…';
     try{const result=await api('store-hours?'+params());if(id!==sequence||!currentUser)return;data=result;currentDay=result.today;earliest=result.earliest;options('dealer',result.dealers,'All dealers');options('market',result.markets,'All markets');options('store',result.stores,'All stores');render();}
     catch(error){if(id===sequence){el('coverage').textContent='Report could not be loaded.';message(error.message,true);}}
   }
   async function save(keys){
-    if(saving)return;saving=true;const userId=currentUser?.id;render();
+    if(saving)return;const refocus=el('table').contains(document.activeElement);sheet?.resetHistory();saving=true;const userId=currentUser?.id;render();if(refocus)sheet?.focus();
     try{for(const k of keys){const draft=drafts.get(k);if(!draft)continue;const sent={...draft};const result=await api('store-hours/review','POST',sent);if(!currentUser||currentUser.id!==userId)return;const row=data?.rows.find(r=>key(r)===k);if(row)Object.assign(row,sent,{revision:result.revision});if(drafts.get(k)===draft)drafts.delete(k);else if(drafts.has(k))drafts.get(k).revision=result.revision;}await load();if(currentUser?.id===userId)message('Camera review saved. The report and exports now include your changes.');}
     catch(error){if(currentUser?.id===userId)message(error.message,true);}
-    finally{saving=false;if(currentUser?.id===userId)render();}
+    finally{saving=false;if(currentUser?.id===userId){const restore=refocus&&(document.activeElement===document.body||el('table').contains(document.activeElement));render();if(restore)sheet?.focus();}}
   }
   el('save-all').onclick=()=>save([...drafts.keys()]);
   el('discard').onclick=()=>{drafts.clear();message('Unsaved changes discarded.');load();};
@@ -185,6 +186,23 @@
   el('date-clear').onclick=()=>{draftStart=draftEnd='';selecting='from';drawCalendar();};
   el('date-apply').onclick=()=>{if(!draftStart||!draftEnd){el('date-error').textContent='Select both From and To dates.';el('date-error').hidden=false;return;}applyRange(draftStart,draftEnd,'Custom');};
   dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeDate();}});
-  function clear(){sequence++;syncSequence++;uploadSequence++;uploadPreview=null;clearTimeout(searchTimer);employeeDialog.close();el('employee-form').reset();el('employee-store').replaceChildren();el('upload').hidden=true;el('upload-preview').hidden=true;el('upload-table').querySelector('tbody').replaceChildren();el('file').value='';el('upload-status').textContent='';el('search').value='';syncing=saving=false;data=null;drafts.clear();dialog.close();el('table').querySelector('tbody').replaceChildren();['dealer','market','store'].forEach(id=>options(id,[],`All ${id==='store'?'stores':id==='market'?'markets':'dealers'}`));el('sync').disabled=false;el('sync').textContent='↻ Sync sources';start=end=currentDay;preset='Today';pageIndex=0;message();['total','late','pending','chargebacks'].forEach(id=>el(id).textContent='—');updateDirty();}
+  function clear(){sheet?.reset();sequence++;syncSequence++;uploadSequence++;uploadPreview=null;clearTimeout(searchTimer);employeeDialog.close();el('employee-form').reset();el('employee-store').replaceChildren();el('upload').hidden=true;el('upload-preview').hidden=true;el('upload-table').querySelector('tbody').replaceChildren();el('file').value='';el('upload-status').textContent='';el('search').value='';syncing=saving=false;data=null;drafts.clear();dialog.close();el('table').querySelector('tbody').replaceChildren();['dealer','market','store'].forEach(id=>options(id,[],`All ${id==='store'?'stores':id==='market'?'markets':'dealers'}`));el('sync').disabled=false;el('sync').textContent='↻ Sync sources';start=end=currentDay;preset='Today';pageIndex=0;message();['total','late','pending','chargebacks'].forEach(id=>el(id).textContent='—');updateDirty();}
+  sheet=window.createStoreHoursGrid({
+    root,table:el('table'),columns,fields,text,key,message,
+    rows:()=>data?data.rows.slice(pageIndex*100,(pageIndex+1)*100).map(r=>mode==='storehours'?(drafts.get(key(r))||r):r):[],
+    editing:()=>mode==='storehours',busy:()=>saving,user:()=>currentUser?.id||'',
+    apply(changes){
+      const visible=data.rows.slice(pageIndex*100,(pageIndex+1)*100);
+      for(const {r,c,value} of changes){const saved=visible[r],id=key(saved),field=columns[c][0];
+        const draft={...(drafts.get(id)||saved),[field]:value},preview={...draft};
+        ['opening_time','closing_time'].forEach(k=>{if(!preview[k])preview[k]=saved['scheduled_'+k]||null;});
+        Object.assign(draft,evaluate(preview));drafts.set(id,draft);
+      }
+      render();
+    },
+    save:()=>save([...drafts.keys()]),find:()=>el('search').focus(),
+    download:()=>{if(data)location.assign('/api/internal/store-hours/export?'+params());},
+    add:()=>el('add').click()
+  });
   window.storeHoursDashboard={load,clear,snapshot,evaluate};
 })();

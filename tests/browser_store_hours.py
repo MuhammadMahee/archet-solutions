@@ -21,7 +21,7 @@ from api.store_hours_directory import parse_schedule_workbook, map_schedule_rows
 from api.portal import PortalError
 
 
-def main():
+def main(grid_check=None):
     fake = FakeStore()
     saved = {}
     manual = []
@@ -83,6 +83,11 @@ def main():
                 page.locator('#login-password').fill('TestPass123')
                 page.locator('#login-form button[type=submit]').click()
                 expect(page.locator('#sh-total')).to_have_text('7')
+                if grid_check:
+                    grid_check(page)
+                    assert not errors, errors
+                    browser.close()
+                    return
                 expect(page.locator('#sh-copy')).to_be_hidden()
                 expect(page.locator('#sh-pending')).to_have_text('6')
                 page.locator('#sh-dealer-trigger').click()
