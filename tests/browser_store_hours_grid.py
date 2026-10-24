@@ -92,15 +92,18 @@ def check(page):
     page.keyboard.press('Control+c')
     assert page.evaluate('navigator.clipboard.readText()') == '10:00:00\t10:07:00\r\n10:00:00\t10:09:00'
 
-    # Invalid or protected cells reject the whole paste, with no partial edits.
+    # Invalid cells reject the whole paste; imported RT cells accept corrections.
     go('F2')
     paste('11:00\t25:00')
     expect(page.locator('#sh-message')).to_contain_text('Nothing pasted')
     time('F2', '10:00:00')
     go('G2')
     paste('11:00\t12:00')
-    expect(page.locator('#sh-message')).to_contain_text('read only')
+    time('G2', '11:00:00')
+    expect(cell('H2')).to_have_text('12:00:00 PM')
+    page.keyboard.press('Control+z')
     time('G2', '10:07:00')
+    go('G2')
     paste('=NOW()')
     expect(page.locator('#sh-message')).to_contain_text('Formulas are not supported')
     time('G2', '10:07:00')
@@ -158,7 +161,7 @@ def check(page):
     page.keyboard.press('Control+y')
     time('G6', '10:15:00')
 
-    # Cut is undoable; copied imported data cannot be edited or cut.
+    # Cut and clear are undoable for both time cells and employee names.
     go('G4:G6')
     page.keyboard.press('Control+x')
     time('G4', '')
@@ -167,9 +170,13 @@ def check(page):
     time('G4', '10:11:00')
     go('D1')
     page.keyboard.press('Delete')
+    expect(cell('D1')).to_be_empty()
+    page.keyboard.press('Control+z')
     expect(cell('D1')).to_have_text('Opening Employee')
     page.keyboard.press('Control+x')
-    expect(page.locator('#sh-message')).to_contain_text('only editable time cells')
+    expect(cell('D1')).to_be_empty()
+    page.keyboard.press('Control+z')
+    expect(cell('D1')).to_have_text('Opening Employee')
 
     # Editing uses a plain time editor; Escape cancels without touching a draft.
     go('G2')

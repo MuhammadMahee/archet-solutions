@@ -4,7 +4,7 @@
   const themes = {'':['#095570','#083c51'],Connect:['#095570','#083c51'],California:['#a92d49','#491c2c'],SRH:['#a06118','#503718'],AMQ:['#365cad','#20335b'],ARM:['#176b56','#104735'],ARBF:['#7646a5','#3d2652']};
   const dateLabel = value => new Date(value+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   function text(key,value) {
-    if(key==='chargeback')return value===null?'Pending':value<0?'-$10':'$0';
+    if(key==='chargeback')return value===null?'Pending':(value<0?'-':'')+'$'+Math.abs(value).toFixed(2).replace(/\.00$/,'');
     if(['opening_time','closing_time','camera_in','camera_out','rt_clockin','rt_clockout'].includes(key)){
       if(!value)return key==='rt_clockin'?'No Clock In':key==='rt_clockout'?'No Clock Out':'—';
       const [h,m,s='00']=(value.includes('T')?value.split('T')[1]:value).split(':');
@@ -13,7 +13,7 @@
     return key==='date'?dateLabel(value):String(value??'');
   }
   function tone(key,value){
-    if(value==='Late'||value==='Early'||(key==='chargeback'&&value===-10))return 'bad';
+    if(value==='Late'||value==='Early'||(key==='chargeback'&&value!==null&&value<0))return 'bad';
     if(value==='Open'||value==='On Time')return 'good';
     if(value==='Pending camera review'||value==='Schedule required'||(key==='chargeback'&&value===null))return 'wait';
     if(['rt_clockin','rt_clockout'].includes(key)&&!value)return 'missing';
@@ -65,7 +65,7 @@
     draw({},-1);data.rows.forEach(draw);ctx.restore();
     label('ARCHET  /  STORE OPENING & CLOSING',pad,top+tableHeight+12,650,28,14,'#61798b','left');
     const amount=data.rows.reduce((sum,r)=>sum+(r.chargeback||0),0);
-    label(`ASSESSED CHARGEBACKS: ${amount<0?'-$'+Math.abs(amount):'$0'}   •   GREEN: ON TIME   /   RED: LATE OR EARLY   /   AMBER: PENDING`,width-1600,top+tableHeight+12,1568,28,14,'#61798b');
+    label(`ASSESSED CHARGEBACKS: ${text('chargeback',amount)}   •   GREEN: ON TIME   /   RED: LATE OR EARLY   /   AMBER: PENDING`,width-1600,top+tableHeight+12,1568,28,14,'#61798b');
     label(`SOURCE COVERAGE: ${data.coverage.complete}/${data.coverage.expected} ACCOUNT-DAYS. Missing camera or scheduled times remain pending.`,pad,top+tableHeight+43,tableWidth,26,14,'#865c20','left');
     return canvas;
   }

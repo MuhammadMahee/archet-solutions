@@ -2,6 +2,7 @@
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 import csv
+from decimal import Decimal, InvalidOperation
 import base64
 import binascii
 from datetime import date, datetime, time as wall_time, timedelta
@@ -41,6 +42,50 @@ COLUMNS = [('date', 'Date'), ('market', 'Market'), ('store', 'Store'),
            ('rt_clockout', 'RT Clockout'), ('closing_status', 'Closing Status'),
            ('chargeback', 'Late Opening Chargeback')]
 TIME_FIELDS = ('opening_time', 'closing_time', 'camera_in', 'camera_out')
+OVERRIDE_FIELDS = {'date', 'market', 'store', 'employee', 'store_status', 'rt_clockin',
+                   'opening_status', 'rt_clockout', 'closing_status', 'chargeback'}
+
+
+def validate_cell_overrides(value):
+    if not isinstance(value, dict) or set(value) - OVERRIDE_FIELDS:
+        raise PortalError('Choose valid report columns to edit.')
+    result = {}
+    for field, raw in value.items():
+        if field == 'date':
+            try:
+                day = date.fromisoformat(raw)
+                if day > today():
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise PortalError('Enter a valid report date ending today or earlier.') from None
+            result[field] = day.isoformat()
+        elif field in ('rt_clockin', 'rt_clockout'):
+            if raw is None or raw == '':
+                result[field] = None
+            else:
+                try:
+                    parsed = wall_time.fromisoformat(raw)
+                    if parsed.tzinfo is not None or parsed.microsecond:
+                        raise ValueError
+                    result[field] = parsed.isoformat()
+                except (TypeError, ValueError):
+                    raise PortalError('Enter a valid RT clock time.') from None
+        elif field == 'chargeback':
+            if raw is None or raw == '':
+                result[field] = None
+                continue
+            try:
+                amount = Decimal(str(raw))
+                if not amount.is_finite() or abs(amount) > 1000000 or amount != amount.quantize(Decimal('0.01')):
+                    raise ValueError
+            except (InvalidOperation, ValueError):
+                raise PortalError('Enter a chargeback amount with up to two decimal places (maximum 1,000,000).') from None
+            result[field] = float(amount)
+        else:
+            if not isinstance(raw, str) or len(raw) > 160 or any(ord(c) < 32 for c in raw):
+                raise PortalError('Use plain text up to 160 characters in name, market, store, and status cells.')
+            result[field] = raw.strip()
+    return result
 
 
 def parse_datetime(value):
@@ -295,6 +340,9 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                 # A legacy store-level review belongs only to the first employee, never all employees.
                 if not review and index == 0:
                     review = saved.get((dealer, sid, day, ''), {})
+                overrides = review.get('cell_overrides') or {}
+                effective_day = date.fromisoformat(overrides.get('date', day.isoformat()))
+                schedule = hours_for_store(store, effective_day)
                 employee = first['employee'] if first else manual_names.get(key, key.removeprefix('person:') or '-')
                 row = dict(date=day.isoformat(), dealer=dealer, market=store['market'], store=store['store'], store_id=sid,
                            employee=employee, employee_key=key, manual=key in manual_names,
@@ -305,7 +353,14 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                            scheduled_opening_time=iso_time(schedule.get('opening_time')),
                            scheduled_closing_time=iso_time(schedule.get('closing_time')),
                            **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
+                row['source_date'] = day.isoformat()
+                row['cell_overrides'] = overrides
+                row['schedule_overrides'] = {f: review.get(f) is not None for f in ('opening_time', 'closing_time')}
+                row['source_values'] = {k: row[k] for k in OVERRIDE_FIELDS if k in row}
+                row.update({k: v for k, v in overrides.items() if k not in ('store_status','opening_status','closing_status','chargeback')})
                 row.update(evaluate(row))
+                row['source_values'].update({k: row[k] for k in ('store_status','opening_status','closing_status','chargeback')})
+                row.update(overrides)
                 rows.append(row)
                 if len(rows) > 20000:
                     raise PortalError('Select a shorter date range or fewer stores (up to 20,000 employee rows).')
@@ -326,26 +381,55 @@ def report_range():
 def report_data(start, end):
     with connect() as conn:
         roster = roster_with_schedules(conn)
-        punches = conn.execute('select * from public.store_time_punches where report_date between %s and %s', (start, end)).fetchall()
         reviews = conn.execute('select * from public.store_hours_reviews where report_date between %s and %s', (start, end)).fetchall()
-        reviews += conn.execute('select * from public.store_hours_employee_reviews where report_date between %s and %s', (start, end)).fetchall()
-        manual = conn.execute('select * from public.store_hours_manual_employees where report_date between %s and %s', (start, end)).fetchall()
-        imports = conn.execute('select * from public.store_hours_imports where report_date between %s and %s', (start, end)).fetchall()
+        employee_reviews = conn.execute("""select * from public.store_hours_employee_reviews where
+            report_date between %s and %s or cell_overrides->>'date' between %s and %s""",
+            (start, end, start.isoformat(), end.isoformat())).fetchall()
+        reviews += employee_reviews
+        extra_days = sorted({r['report_date'] for r in employee_reviews if not start <= r['report_date'] <= end})
+        args = (start, end, extra_days)
+        punches = conn.execute('select * from public.store_time_punches where report_date between %s and %s or report_date=any(%s)', args).fetchall()
+        manual = conn.execute('select * from public.store_hours_manual_employees where report_date between %s and %s or report_date=any(%s)', args).fetchall()
+        imports = conn.execute('select * from public.store_hours_imports where report_date between %s and %s or report_date=any(%s)', args).fetchall()
         earliest = conn.execute('select min(report_date) as day from public.store_hours_imports').fetchone()['day']
     dealer, market, sid = (request.args.get(k, '') for k in ('dealer', 'market', 'store'))
-    selected = [s for s in roster if not dealer or s['dealer'] == dealer]
-    markets = sorted({s['market'] for s in selected})
-    selected = [s for s in selected if not market or s['market'] == market]
-    stores = [{'id': s['dealer'] + ':' + s['store_id'], 'name': s['store']} for s in selected]
-    selected = [s for s in selected if not sid or s['dealer'] + ':' + s['store_id'] == sid]
+    candidates = [s for s in roster if not dealer or s['dealer'] == dealer]
+    identities = {(s['dealer'],s['store_id']) for s in candidates}
+    corrections = [r for r in employee_reviews if (r['dealer'],r['store_id']) in identities and
+                   start.isoformat() <= (r.get('cell_overrides') or {}).get('date',r['report_date'].isoformat()) <= end.isoformat()]
+    markets = sorted({s['market'] for s in candidates} |
+                     {r['cell_overrides']['market'] for r in corrections if 'market' in (r.get('cell_overrides') or {})})
+    corrected_markets = {(r['dealer'],r['store_id']) for r in corrections if (r.get('cell_overrides') or {}).get('market') == market}
+    candidates = [s for s in candidates if not market or s['market']==market or (s['dealer'],s['store_id']) in corrected_markets]
+    store_names = {s['dealer']+':'+s['store_id']:s['store'] for s in candidates}
+    for review in corrections:
+        identity = review['dealer']+':'+review['store_id']
+        if identity in store_names and 'store' in (review.get('cell_overrides') or {}):
+            store_names[identity] = review['cell_overrides']['store']
+    stores = [{'id':key,'name':name} for key,name in sorted(store_names.items(),key=lambda pair:pair[1])]
+    selected = [s for s in candidates if not sid or s['dealer']+':'+s['store_id']==sid]
     if len(selected) * ((end-start).days+1) > 20000:
         raise PortalError('Select a dealer, market, or shorter date range (up to 20,000 rows).')
     rows = build_rows(selected, punches, reviews, imports, start, end, manual)
+    for day in extra_days:
+        identities = {(r['dealer'],r['store_id']) for r in employee_reviews if r['report_date']==day}
+        moved_stores = [s for s in selected if (s['dealer'],s['store_id']) in identities]
+        rows += build_rows(moved_stores, punches, reviews, imports, day, day, manual)
+    rows = [r for r in rows if start.isoformat() <= r['date'] <= end.isoformat()]
+    occupied = {(r['dealer'],r['store_id'],r['date']) for r in rows if r['employee_key']}
+    rows = [r for r in rows if r['employee_key'] or r['revision'] or r['rt_clockin'] or r['rt_clockout'] or
+            (r['dealer'],r['store_id'],r['date']) not in occupied]
+    rows.sort(key=lambda r:(r['date'],r['dealer'],r['market'],r['store'],r['employee'],r['source_date']))
+    if len(rows)>20000:
+        raise PortalError('Select a shorter date range (up to 20,000 rows).')
+    rows = [r for r in rows if not market or r['market']==market]
+    included = {(r['dealer'],r['store_id']) for r in rows}
+    selected = [s for s in selected if (s['dealer'],s['store_id']) in included]
     query = request.args.get('search', '').strip().casefold()
     if query:
         rows = [r for r in rows if query in ' '.join(r[k] for k in ('employee','store','dealer','market')).casefold()]
     relevant_sources = {r.get('source_id') for r in selected if r.get('source_id')}
-    relevant = [i for i in imports if i['source_id'] in relevant_sources]
+    relevant = [i for i in imports if i['source_id'] in relevant_sources and start <= i['report_date'] <= end]
     updated = max((i['loaded_at'] for i in relevant if i['loaded_at']), default=None)
     return dict(rows=rows, start=start.isoformat(), end=end.isoformat(), today=today().isoformat(),
                 earliest=(earliest or today().replace(day=1)).isoformat(),
@@ -361,7 +445,7 @@ def report_data(start, end):
 
 def display_value(key, value):
     if key == 'chargeback':
-        return 'Pending' if value is None else ('-$10' if value == -10 else '$0')
+        return 'Pending' if value is None else ('-' if value < 0 else '') + '$' + format(abs(value), '.2f').removesuffix('.00')
     if key in TIME_FIELDS or key in ('rt_clockin', 'rt_clockout'):
         if not value:
             return {'rt_clockin': 'No Clock In', 'rt_clockout': 'No Clock Out'}.get(key, '-')
@@ -383,9 +467,9 @@ def excel_report(data):
             cell = sheet.cell(sheet.max_row, col)
             if isinstance(cell.value, str):
                 cell.data_type = 's'  # Imported names are never executable Excel formulas.
-            if key == 'chargeback' and isinstance(cell.value, int):
-                cell.number_format = '$0;[Red]-$0'
-            if row[key] in ('Late', 'Early') or (key == 'chargeback' and row[key] == -10):
+            if key == 'chargeback' and isinstance(cell.value, (int, float)):
+                cell.number_format = '$0.00;[Red]-$0.00'
+            if row[key] in ('Late', 'Early') or (key == 'chargeback' and row[key] is not None and row[key] < 0):
                 cell.fill = PatternFill('solid', fgColor='FFC7CE')
             elif row[key] in ('Open', 'On Time'):
                 cell.fill = PatternFill('solid', fgColor='C6EFCE')
@@ -407,7 +491,8 @@ def excel_report(data):
                    ('Source coverage', f"{data['coverage']['complete']}/{data['coverage']['expected']} account-days"),
                    ('Rules', 'Late: 1 minute after opening. Early: 1 minute before closing.'),
                    ('Connect chargebacks', 'Houston/Reno: 5 minutes; Dallas: 10 minutes. Charge: -$10.'),
-                   ('Pending', 'Camera review and scheduled hours are required. RT punches do not determine compliance.'),
+                   ('Manual corrections', 'Every form column supports saved corrections. Manually edited statuses and chargebacks override automatic calculations until reset to source/default.'),
+                   ('Pending', 'Camera review and scheduled hours drive automatic compliance. RT punches do not determine compliance.'),
                    ('RT aggregation', 'One row per unique employee/store/date. Earliest clock-in and latest clock-out for that employee.'),
                    ('Chargeback scope', 'Assessed separately for each late employee, using their camera-in time.'),
                    ('Schedules', 'OPENING TIMING FOR ALL DEALERS.xlsx: Monday-Friday, Saturday, Sunday; date-specific overrides take priority.'),
@@ -448,7 +533,8 @@ def lock_store_day(conn, dealer, sid, day):
 
 
 def save_review(payload, user_id):
-    dealer, sid, day = review_identity(payload)
+    dealer, sid, day = review_identity({**payload, 'date': payload.get('source_date', payload.get('date'))})
+    overrides = validate_cell_overrides(payload['cell_overrides']) if 'cell_overrides' in payload else None
     key, revision = payload.get('employee_key', ''), payload.get('revision', 0)
     if not isinstance(key, str) or len(key) > 500 or type(revision) is not int or revision < 0:
         raise PortalError('Reload this review before editing.')
@@ -475,19 +561,24 @@ def save_review(payload, user_id):
                 raise PortalError('This employee row has changed. Reload before saving.', 409)
             if row['revision'] != revision:
                 raise PortalError('Someone updated this review. Discard changes and reload before saving again.', 409)
-            schedule = hours_for_store(store, day)
+            if overrides is None:
+                overrides = row.get('cell_overrides') or {}
+            effective_day = date.fromisoformat(overrides.get('date', day.isoformat()))
+            schedule = hours_for_store(store, effective_day)
             for field in ('opening_time', 'closing_time'):
-                if times[field] == schedule.get(field):
+                unchanged_default = not row.get('schedule_overrides', {}).get(field) and iso_time(times[field]) == row.get(field)
+                if times[field] == schedule.get(field) or unchanged_default:
                     times[field] = None
             conn.execute("select set_config('archet.store_hours_employee',%s,true)", (row.get('employee', ''),))
             result = conn.execute('''insert into public.store_hours_employee_reviews
-                (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,updated_by,revision)
-                values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,updated_by,revision,cell_overrides)
+                values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 on conflict(dealer,store_id,report_date,employee_key) do update set
                 opening_time=excluded.opening_time,closing_time=excluded.closing_time,
                 camera_in=excluded.camera_in,camera_out=excluded.camera_out,
-                updated_by=excluded.updated_by,updated_at=now(),revision=excluded.revision returning revision''',
-                (dealer, sid, day, key, *(times[k] for k in TIME_FIELDS), user_id, revision + 1)).fetchone()
+                updated_by=excluded.updated_by,updated_at=now(),revision=excluded.revision,
+                cell_overrides=excluded.cell_overrides returning revision''',
+                (dealer, sid, day, key, *(times[k] for k in TIME_FIELDS), user_id, revision + 1, Jsonb(overrides))).fetchone()
     return result['revision']
 
 
@@ -569,13 +660,19 @@ def version_history(start, end):
     before = request.args.get('before', '')
     if before and (not before.isascii() or not before.isdigit() or len(before) > 19 or not 0 < int(before) < 2**63):
         raise PortalError('Choose a valid history page.')
-    clauses = ['(report_date between %s and %s or report_date is null)']
-    args = [start, end]
+    clauses = ["""(report_date between %s and %s or report_date is null or
+        before_data->'cell_overrides'->>'date' between %s and %s or
+        after_data->'cell_overrides'->>'date' between %s and %s)"""]
+    args = [start, end, start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat()]
     for parameter, column in [('dealer', 'dealer'), ('market', 'market')]:
         value = request.args.get(parameter, '')
         if value:
-            clauses.append(column + '=%s')
-            args.append(value)
+            if column == 'market':
+                clauses.append("(market=%s or before_data->'cell_overrides'->>'market'=%s or after_data->'cell_overrides'->>'market'=%s)")
+                args.extend([value] * 3)
+            else:
+                clauses.append(column + '=%s')
+                args.append(value)
     store = request.args.get('store', '')
     if store:
         parts = store.split(':', 1)
@@ -586,7 +683,8 @@ def version_history(start, end):
     search = request.args.get('search', '').strip()
     if search:
         clauses.append("strpos(lower(concat_ws(' ',employee,store,dealer,market,actor_name,"
-                       "before_data->'punches',after_data->'punches')),lower(%s))>0")
+                       "before_data->'punches',after_data->'punches',"
+                       "before_data->'cell_overrides',after_data->'cell_overrides')),lower(%s))>0")
         args.append(search)
     if before:
         clauses.append('id<%s')

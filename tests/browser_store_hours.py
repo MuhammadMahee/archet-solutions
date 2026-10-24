@@ -33,7 +33,7 @@ def main(grid_check=None):
     directory += [dict(dealer='AMQ',store_id='N1329B',market='CHICAGO',store='GLENVIEW'),
                   dict(dealer='The Fix',store_id='WB-PRIME',market='CHICAGO',store='PRIME',source_id=None),
                   dict(dealer='Smoke Magic',store_id='WB-MAGIC',market='DALLAS',store='MAGIC 1',source_id=None)]
-    def row_key(row): return row['dealer'],row['store_id'],row['date'],row.get('employee_key','')
+    def row_key(row): return row['dealer'],row['store_id'],row.get('source_date',row['date']),row.get('employee_key','')
     def fixture(start, end):
         rows = sample_rows()
         rows += sh.build_rows(directory[3:], [], [], [], start, end, manual)
@@ -52,6 +52,7 @@ def main(grid_check=None):
     def save(payload, user_id):
         row = deepcopy(payload)
         row.update(sh.evaluate(row))
+        row.update(row.get('cell_overrides', {}))
         row['revision'] += 1
         versions.append(dict(id=str(len(versions)+1),transaction_id='1',recorded_at='2026-10-23T12:00:00+00:00',kind='review',operation='UPDATE',dealer=row['dealer'],store_id=row['store_id'],store='STORE ONE',market='HOUSTON',report_date=row['date'],employee='Closing Employee',actor_name='Mahee (@Mahee)',before_data=saved.get(row_key(row),dict(camera_in=None,camera_out=None,opening_time=None,closing_time=None,revision=0)),after_data=deepcopy(row)))
         saved[row_key(row)] = row

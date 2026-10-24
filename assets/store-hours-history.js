@@ -12,8 +12,13 @@ window.createStoreHoursHistory=function({root,params,request}){
   const prettyDate=value=>value?new Intl.DateTimeFormat(undefined,{dateStyle:'medium',timeStyle:'short'}).format(new Date(value)):'—';
   function values(kind,data){
     if(!data)return {};
-    if(kind==='review'||kind==='legacy_review')return {'Opening time override':data.opening_time??'Workbook default','Camera in':time(data.camera_in),
-      'Closing time override':data.closing_time??'Workbook default','Camera out':time(data.camera_out),'Review revision':String(data.revision)};
+    if(kind==='review'||kind==='legacy_review'){
+      const out={'Opening time override':data.opening_time??'Workbook default','Camera in':time(data.camera_in),
+        'Closing time override':data.closing_time??'Workbook default','Camera out':time(data.camera_out),'Review revision':String(data.revision)};
+      for(const [key,label] of [['date','Date'],['market','Market'],['store','Store'],['employee','Employee'],['store_status','Store opening status'],['rt_clockin','RT clock-in'],['opening_status','Opening punctuality'],['rt_clockout','RT clock-out'],['closing_status','Closing status'],['chargeback','Chargeback']])
+        out[label+' correction']=Object.hasOwn(data.cell_overrides||{},key)?String(data.cell_overrides[key]??'Blank / pending'):'Source / automatic';
+      return out;
+    }
     if(kind==='employee')return {'Employee':data.employee};
     if(kind==='source')return {'RT-POS punches':data.punches.length?data.punches.map(p=>`${p.employee}: ${p.clock_in??'No Clock In'} → ${p.clock_out??'No Clock Out'}`).join('\n'):'No punches'};
     const out={'Company':data.company,'Store':data.store,'Market':data.market,'Carrier':data.carrier};

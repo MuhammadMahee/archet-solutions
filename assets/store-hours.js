@@ -3,14 +3,14 @@
   const root=document.createElement('div');root.className='sh-root';
   root.innerHTML=`<div class="sh-hero"><div><div class="sh-eyebrow">STORE OPERATIONS</div><h1 id="sh-title">Store Opening / Closing</h1><p id="sh-subtitle"></p></div><button class="sh-link" id="sh-switch" type="button"></button></div>
     <div class="sh-filters"><label>Dealer<select id="sh-dealer"><option value="">All dealers</option></select></label><label>Market<select id="sh-market"><option value="">All markets</option></select></label><label>Store<select id="sh-store"><option value="">All stores</option></select></label><label>Report period<button id="sh-date" class="sh-button sh-date-trigger" type="button" aria-haspopup="dialog">Today <span>▦</span></button></label><div class="sh-actions"><button id="sh-reload" class="sh-button" type="button">Reload</button><button id="sh-copy" class="sh-button" type="button">Copy Snapshot</button><button id="sh-excel" class="sh-button sh-primary" type="button">Download Excel</button></div></div>
-    <div class="sh-summary"><div class="sh-stat"><span>Employee rows</span><b id="sh-total">—</b><small id="sh-store-count">In the selected period</small></div><div class="sh-stat sh-late"><span>Late openings</span><b id="sh-late">—</b><small>1+ minute after opening</small></div><div class="sh-stat sh-pending"><span>Pending reviews</span><b id="sh-pending">—</b><small>Camera or schedule needed</small></div><div class="sh-stat"><span>Employee chargebacks</span><b id="sh-chargebacks">—</b><small>Assessed Connect charges only</small></div></div>
+    <div class="sh-summary"><div class="sh-stat"><span>Employee rows</span><b id="sh-total">—</b><small id="sh-store-count">In the selected period</small></div><div class="sh-stat sh-late"><span>Late openings</span><b id="sh-late">—</b><small>1+ minute after opening</small></div><div class="sh-stat sh-pending"><span>Pending reviews</span><b id="sh-pending">—</b><small>Camera or schedule needed</small></div><div class="sh-stat"><span>Employee chargebacks</span><b id="sh-chargebacks">—</b><small>Automatic and manually entered amounts</small></div></div>
     <div class="sh-note" id="sh-note">Hours follow the workbook’s Monday–Friday, Saturday, or Sunday schedule for each report date. You can override hours for an individual date; clear an override and save to restore workbook hours. Stores without a matching schedule stay unset. Missing camera times stay <strong>Pending camera review</strong>.</div>
     <div class="sh-tools"><label class="sh-search-label"><span>⌕</span><input id="sh-search" type="search" placeholder="Search employees or stores" aria-label="Search employees or stores"></label><div class="sh-actions"><button class="sh-button" id="sh-manage" type="button" hidden>↑ Upload schedules</button><button class="sh-button sh-primary" id="sh-add" type="button">＋ Add employee</button></div></div>
     <section class="sh-upload" id="sh-upload" hidden aria-label="Upload store schedules"><div class="sh-upload-head"><div><div class="sh-eyebrow">STORE DIRECTORY & HOURS</div><h2>Keep every store up to date</h2><p>Upload your MON TO SAT and SUN workbook to add dealers, stores, and weekly hours. Existing stores and camera reviews are kept.</p></div><button class="sh-button" type="button" id="sh-upload-close" aria-label="Close schedule upload">×</button></div><div class="sh-upload-select"><label for="sh-file">Schedule workbook (.xlsx, up to 2 MB)</label><input id="sh-file" type="file" accept=".xlsx"><span id="sh-upload-status" role="status"></span></div><div id="sh-upload-preview" hidden><div class="sh-upload-confirm"><strong id="sh-upload-count"></strong><button id="sh-upload-apply" type="button" class="sh-button sh-primary">Apply workbook</button></div><p id="sh-upload-corrections"></p><div class="sh-upload-scroll"><table class="sh-table" id="sh-upload-table"><thead><tr><th>Change</th><th>Dealer</th><th>Market</th><th>Store</th><th>Monday–Friday</th><th>Saturday</th><th>Sunday</th></tr></thead><tbody></tbody></table></div></div></section>
     <div class="sh-toolbar"><span id="sh-coverage" role="status">Loading time punches…</span><div class="sh-actions"><strong id="sh-unsaved"></strong><button class="sh-button" id="sh-discard" type="button" hidden>Discard changes</button><button class="sh-button" id="sh-save-all" type="button" hidden>Save changes</button><button class="sh-button" id="sh-sync" type="button" hidden>↻ Sync sources</button></div></div>
     <div id="sh-message" class="sh-message" role="status" hidden></div><div class="sh-table-wrap"><table class="sh-table" id="sh-table"><thead></thead><tbody></tbody></table><div class="sh-empty" id="sh-empty" hidden>No stores in this selection. Adjust the filters or upload a schedule workbook to add stores.</div></div>
     <div class="sh-page-controls"><button class="sh-button" id="sh-prev" type="button">← Previous</button><span id="sh-page-label"></span><button class="sh-button" id="sh-next" type="button">Next →</button></div>
-    <p class="sh-footnote">Each employee has a separate daily row. Repeated shifts use that employee’s earliest RT clock-in and latest RT clock-out. Times use the store’s local clock.<br>Camera times determine status: late ≥1 minute after opening; early ≥1 minute before closing. Connect chargebacks apply per employee: Houston / Reno ≥5 minutes late; Dallas ≥10 minutes late → −$10.<br>Snapshots and Excel include every saved employee row matching your filters. Amber cells need review. Stores without an RT-POS source support manual entries.</p>`;
+    <p class="sh-footnote">Each employee has a separate daily row. Repeated shifts use that employee’s earliest RT clock-in and latest RT clock-out. Times use the store’s local clock.<br>Automatic rules (unless manually overridden): late ≥1 minute after opening; early ≥1 minute before closing. Connect chargebacks apply per employee: Houston / Reno ≥5 minutes late; Dallas ≥10 minutes late → −$10.<br>Snapshots and Excel include every saved employee row matching your filters. Amber cells need review. Stores without an RT-POS source support manual entries.</p>`;
   $('page-storehours').append(root);
   const el=id=>$('sh-'+id),{columns,text,tone}=window.storeHoursSnapshot;
   const fields=['opening_time','closing_time','camera_in','camera_out'];
@@ -18,7 +18,7 @@
   let data=null,mode='storehours',sequence=0,syncSequence=0,syncing=false,saving=false,pageIndex=0;
   let currentDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   let start=currentDay,end=currentDay,earliest=currentDay.slice(0,8)+'01',preset='Today';
-  const drafts=new Map(),key=row=>JSON.stringify([row.date,row.dealer,row.store_id,row.employee_key||'']);
+  const drafts=new Map(),key=row=>JSON.stringify([row.source_date||row.date,row.dealer,row.store_id,row.employee_key||'']);
   const dayDate=s=>new Date(s+'T12:00:00'),iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const shift=(s,n)=>{const d=dayDate(s);d.setDate(d.getDate()+n);return iso(d);};
   const dateLabel=s=>dayDate(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -33,6 +33,13 @@
     if(cout!==null){if(closing===null)out.closing_status='Schedule required';else{let close=closing,actual=cout;if(opening!==null&&close<=opening){close+=86400;if(actual<opening)actual+=86400;}out.closing_status=close-actual>=60?'Early':'On Time';}}
     return out;
   }
+  function refreshDraft(draft,saved){
+    const overrides=draft.cell_overrides||{};
+    for(const [field] of columns)if(!fields.includes(field))draft[field]=Object.hasOwn(overrides,field)?overrides[field]:(saved.source_values&&Object.hasOwn(saved.source_values,field)?saved.source_values[field]:saved[field]);
+    draft.source_date=saved.source_date||saved.date;
+    const preview={...draft};['opening_time','closing_time'].forEach(field=>{if(!preview[field])preview[field]=saved['scheduled_'+field]||null;});
+    Object.assign(draft,evaluate(preview));Object.assign(draft,overrides);return draft;
+  }
   function updateDirty(){el('unsaved').textContent=drafts.size?`${drafts.size} unsaved review${drafts.size===1?'':'s'}`:'';el('save-all').hidden=mode!=='storehours'||!drafts.size;el('save-all').disabled=saving;el('discard').hidden=mode!=='storehours'||!drafts.size;el('discard').disabled=saving;}
   function render(){
     if(!data)return;
@@ -40,7 +47,7 @@
     el('store-count').textContent=new Set(rows.map(r=>r.dealer+':'+r.store_id)).size+' stores in this selection';
     el('total').textContent=rows.length;el('late').textContent=rows.filter(r=>r.opening_status==='Late').length;
     el('pending').textContent=rows.filter(r=>['Pending camera review','Schedule required'].includes(r.opening_status)).length;
-    const charge=rows.reduce((s,r)=>s+(r.chargeback||0),0);el('chargebacks').textContent=charge<0?'−$'+Math.abs(charge):'$0';
+    const charge=rows.reduce((s,r)=>s+(r.chargeback||0),0);el('chargebacks').textContent=text('chargeback',charge).replace('-',String.fromCharCode(8722));
     el('table').querySelector('thead').innerHTML='<tr>'+columns.map(([k,h])=>`<th scope="col"${k==='store_status'?' title="Camera evidence that the store opened"':k==='opening_status'?' title="Opening punctuality against the scheduled time"':''}>${escapeHTML(h)}</th>`).join('')+(editing?'<th scope="col">Review</th>':'')+'</tr>';
     const body=el('table').querySelector('tbody');body.replaceChildren();
     pageIndex=Math.min(pageIndex,Math.max(0,Math.ceil(rows.length/100)-1));
@@ -51,10 +58,11 @@
         if(editing&&fields.includes(k)){
           const input=document.createElement('input');input.type='time';input.step='1';input.value=row[k]||'';input.setAttribute('aria-label',`${heading} — ${row.store} — ${row.date}`);
           if(k==='opening_time'||k==='closing_time')input.title=row['scheduled_'+k]?`${row.schedule_period} workbook hours: ${text(k,row['scheduled_'+k])}. Clear and save to restore this time.`:'No matching workbook schedule. Enter a time for this date.';
-          input.oninput=()=>{sheet?.resetHistory();const draft={...(drafts.get(key(saved))||saved),[k]:input.value||null};const preview={...draft};['opening_time','closing_time'].forEach(field=>{if(!preview[field])preview[field]=saved['scheduled_'+field]||null;});Object.assign(draft,evaluate(preview));drafts.set(key(saved),draft);tr.classList.add('sh-dirty');tr.querySelector('button').disabled=saving;['store_status','opening_status','closing_status','chargeback'].forEach(col=>{const cell=tr.querySelector(`[data-column="${col}"]`);cell.textContent=text(col,draft[col]);cell.className='sh-'+tone(col,draft[col]);});updateDirty();};td.append(input);
+          input.oninput=()=>{sheet?.resetHistory();const draft={...(drafts.get(key(saved))||saved),[k]:input.value||null};refreshDraft(draft,saved);drafts.set(key(saved),draft);tr.classList.add('sh-dirty');tr.querySelector('button').disabled=saving;['store_status','opening_status','closing_status','chargeback'].forEach(col=>{const cell=tr.querySelector(`[data-column="${col}"]`);cell.textContent=text(col,draft[col]);cell.className='sh-'+tone(col,draft[col]);});updateDirty();};td.append(input);
         }else{td.textContent=text(k,row[k]);const state=tone(k,row[k]);if(state)td.className='sh-'+state;}
         if(['rt_clockin','rt_clockout'].includes(k)&&saved.source_status!=='complete')td.title=saved.source_status==='manual_only'?'This store has no connected RT-POS source. Add employees manually.':'Source not fully synced. This value may be missing or from an earlier sync.';
         if(k==='store'){td.title=row.dealer+' · '+row.store_id;const tag=document.createElement('small');tag.className='sh-dealer-tag';tag.textContent=row.dealer;td.append(tag);}
+        if(Object.hasOwn(row.cell_overrides||{},k)){td.classList.add('sh-cell-corrected');td.title='Saved correction. F8 then U restores the source/default value. Source date: '+(row.source_date||row.date);}
         if(k==='employee'&&row.manual){const tag=document.createElement('small');tag.className='sh-manual-tag';tag.textContent='Manual';td.append(tag);}
         tr.append(td);
       });
@@ -70,8 +78,8 @@
   function updateMode(){
     const editing=mode==='storehours';$('page-'+mode).append(root);
     el('title').textContent=editing?'Store Opening / Closing Form':'Store Opening / Closing Report';
-    el('subtitle').textContent=editing?'Review camera observations alongside RT-POS time punches.':'Opening punctuality, closing checks, and assessed chargebacks.';
-    el('switch').textContent=editing?'View report →':'← Edit camera reviews';
+    el('subtitle').textContent=editing?'Edit any cell, review camera observations, and save corrections.':'Opening punctuality, closing checks, and assessed chargebacks.';
+    el('switch').textContent=editing?'View report →':'← Edit report cells';
     el('note').hidden=!editing;el('copy').hidden=el('excel').hidden=editing;
     el('sync').hidden=currentUser?.role!=='admin';
     el('manage').hidden=currentUser?.role!=='admin';el('add').hidden=!editing;
@@ -86,7 +94,7 @@
   }
   async function save(keys){
     if(saving)return;const refocus=el('table').contains(document.activeElement);sheet?.resetHistory();saving=true;const userId=currentUser?.id;render();if(refocus)sheet?.focus();
-    try{for(const k of keys){const draft=drafts.get(k);if(!draft)continue;const sent={...draft};const result=await api('store-hours/review','POST',sent);if(!currentUser||currentUser.id!==userId)return;const row=data?.rows.find(r=>key(r)===k);if(row)Object.assign(row,sent,{revision:result.revision});if(drafts.get(k)===draft)drafts.delete(k);else if(drafts.has(k))drafts.get(k).revision=result.revision;}await load();if(currentUser?.id===userId)message('Camera review saved. The report and exports now include your changes.');}
+    try{for(const k of keys){const draft=drafts.get(k);if(!draft)continue;const sent={...draft};const result=await api('store-hours/review','POST',sent);if(!currentUser||currentUser.id!==userId)return;const row=data?.rows.find(r=>key(r)===k);if(row)Object.assign(row,sent,{revision:result.revision});if(drafts.get(k)===draft)drafts.delete(k);else if(drafts.has(k))drafts.get(k).revision=result.revision;}await load();if(currentUser?.id===userId)message('Camera review saved. All cell corrections are included in the report and exports.');}
     catch(error){if(currentUser?.id===userId)message(error.message,true);}
     finally{saving=false;if(currentUser?.id===userId){const restore=refocus&&(document.activeElement===document.body||el('table').contains(document.activeElement));render();if(restore)sheet?.focus();}}
   }
@@ -129,7 +137,7 @@
   el('employee-form').onsubmit=async event=>{
     event.preventDefault();const userId=currentUser?.id,[dealer,store_id]=JSON.parse(el('employee-store').value),day=el('employee-date').value;
     el('employee-submit').disabled=true;el('employee-error').hidden=true;
-    try{await api('store-hours/employees','POST',{dealer,store_id,date:day,employee:el('employee-name').value});if(currentUser?.id!==userId)return;employeeDialog.close();start=end=day;preset=dateLabel(day);el('search').value='';el('dealer').value=dealer;el('market').value='';el('store').replaceChildren(new Option('Selected store',dealer+':'+store_id));el('store').value=dealer+':'+store_id;pageIndex=0;await load();message('Employee added. Enter their camera times and save the review.');}
+    try{await api('store-hours/employees','POST',{dealer,store_id,date:day,employee:el('employee-name').value});if(currentUser?.id!==userId)return;employeeDialog.close();start=end=day;preset=dateLabel(day);el('search').value='';el('dealer').value=dealer;el('market').value='';el('store').replaceChildren(new Option('Selected store',dealer+':'+store_id));el('store').value=dealer+':'+store_id;pageIndex=0;await load();message('Employee added. Edit their report cells and save the review.');}
     catch(error){if(currentUser?.id===userId){el('employee-error').textContent=error.message;el('employee-error').hidden=false;}}
     finally{el('employee-submit').disabled=false;}
   };
@@ -191,13 +199,15 @@
   sheet=window.createStoreHoursGrid({
     root,table:el('table'),columns,fields,text,key,message,
     rows:()=>data?data.rows.slice(pageIndex*100,(pageIndex+1)*100).map(r=>mode==='storehours'?(drafts.get(key(r))||r):r):[],
-    editing:()=>mode==='storehours',busy:()=>saving,user:()=>currentUser?.id||'',
+    editing:()=>mode==='storehours',busy:()=>saving,user:()=>currentUser?.id||'',today:()=>currentDay,
+    manual:(r,c)=>fields.includes(columns[c][0])||Object.hasOwn((drafts.get(key(data.rows[pageIndex*100+r]))||data.rows[pageIndex*100+r]).cell_overrides||{},columns[c][0]),
     apply(changes){
       const visible=data.rows.slice(pageIndex*100,(pageIndex+1)*100);
-      for(const {r,c,value} of changes){const saved=visible[r],id=key(saved),field=columns[c][0];
-        const draft={...(drafts.get(id)||saved),[field]:value},preview={...draft};
-        ['opening_time','closing_time'].forEach(k=>{if(!preview[k])preview[k]=saved['scheduled_'+k]||null;});
-        Object.assign(draft,evaluate(preview));drafts.set(id,draft);
+      for(const {r,c,value,reset} of changes){const saved=visible[r],id=key(saved),field=columns[c][0];
+        const previous=drafts.get(id)||saved,draft={...previous,cell_overrides:{...(previous.cell_overrides||{})}};
+        if(fields.includes(field))draft[field]=reset?null:value;
+        else if(reset)delete draft.cell_overrides[field];else draft.cell_overrides[field]=value;
+        refreshDraft(draft,saved);drafts.set(id,draft);
       }
       render();
     },

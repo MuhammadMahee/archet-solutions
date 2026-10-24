@@ -4,7 +4,8 @@ window.createStoreHoursGrid = function(api) {
   const {root,table,columns,fields}=api, width=columns.length;
   let anchor={r:0,c:0},active={r:0,c:0},signature='',editor=null,dragging=false,undo=[],redo=[],generation=0,extraRanges=[];
   const letter=c=>String.fromCharCode(65+c), address=p=>letter(p.c)+(p.r+1);
-  const writable=c=>api.editing()&&fields.includes(columns[c]?.[0]);
+  const writable=c=>api.editing()&&!!columns[c];
+  const timeColumns=[...fields,'rt_clockin','rt_clockout'];
   const cell=(r,c)=>table.tBodies[0]?.rows[r]?.cells[c];
   const value=(r,c)=>api.rows()[r]?.[columns[c][0]]??null;
   const bounds=()=>({top:Math.min(anchor.r,active.r),bottom:Math.max(anchor.r,active.r),left:Math.min(anchor.c,active.c),right:Math.max(anchor.c,active.c)});
@@ -18,7 +19,7 @@ window.createStoreHoursGrid = function(api) {
   welcome.innerHTML='<span><strong>New to this sheet?</strong> Learn cell navigation, paste, fills, and saving in five quick steps.</span><button type="button" data-grid="tutorial">Start tutorial</button><button type="button" id="sh-grid-dismiss" aria-label="Dismiss tutorial introduction">×</button>';
   toolbar.before(welcome);
   const rangeInput=toolbar.querySelector('input'),status=toolbar.querySelector('[role=status]');
-  const editButton=document.createElement('button');editButton.type='button';editButton.dataset.grid='edit';editButton.textContent='Edit cell';editButton.title='Edit selected time (F2)';toolbar.querySelector('.sh-sheet-buttons').prepend(editButton);
+  const editButton=document.createElement('button');editButton.type='button';editButton.dataset.grid='edit';editButton.textContent='Edit cell';editButton.title='Edit selected cell (F2)';toolbar.querySelector('.sh-sheet-buttons').prepend(editButton);
   const seenKey=()=>`archet.store-hours.sheet-tutorial.v1.${api.user()}`;
   const markSeen=()=>{try{localStorage.setItem(seenKey(),'seen');}catch{}welcome.hidden=true;};
   welcome.querySelector('#sh-grid-dismiss').onclick=markSeen;
@@ -41,7 +42,7 @@ window.createStoreHoursGrid = function(api) {
       td.setAttribute('aria-selected',String(selected));td.tabIndex=r===active.r&&c===active.c?0:-1;
     }
     rangeInput.value=rows.length?boxes.map(rangeLabel).join(', '):'';
-    status.textContent=rows.length?`${selected().length} cell(s) in ${boxes.length} range(s) · ${columns[active.c][1]} · ${writable(active.c)?'Editable time':'Read only'} · Current page`:'No cells in this selection';
+    status.textContent=rows.length?`${selected().length} cell(s) in ${boxes.length} range(s) · ${columns[active.c][1]} · ${writable(active.c)?'Editable':'Read only'} · Current page`:'No cells in this selection';
     toolbar.querySelector('[data-grid=undo]').disabled=!undo.length||api.busy()||!api.editing();
     toolbar.querySelector('[data-grid=redo]').disabled=!redo.length||api.busy()||!api.editing();
     ['down','right','flash'].forEach(id=>toolbar.querySelector(`[data-grid=${id}]`).disabled=!api.editing()||api.busy()||!rows.length);
@@ -77,21 +78,42 @@ window.createStoreHoursGrid = function(api) {
     if(period)h=h%12+(period==='PM'?12:0);
     return [h,m,sec].map(n=>String(n).padStart(2,'0')).join(':');
   }
+  function parseCell(r,c,raw){
+    const field=columns[c][0],s=String(raw??'').trim();
+    if(timeColumns.includes(field)){if(/^No Clock (In|Out)$/i.test(s))return null;return parseTime(s.includes('T')?s.split('T')[1]:s);}
+    if(field==='date'){
+      let match=s.match(/^(\d{4})-(\d{2})-(\d{2})$/),y,m,d;
+      if(match)[,y,m,d]=match;else if((match=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)))[,m,d,y]=match;
+      else if((match=s.match(/^([A-Za-z]{3}) (\d{1,2}), (\d{4})$/))){y=match[3];m=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].findIndex(x=>x.toLowerCase()===match[1].toLowerCase())+1;d=match[2];}
+      const day=new Date(Date.UTC(Number(y),Number(m)-1,Number(d)));
+      if(!y||day.getUTCFullYear()!==Number(y)||day.getUTCMonth()+1!==Number(m)||day.getUTCDate()!==Number(d)||day.toISOString().slice(0,10)>api.today())throw new Error('Use a valid date ending today or earlier: YYYY-MM-DD or MM/DD/YYYY.');
+      return day.toISOString().slice(0,10);
+    }
+    if(field==='chargeback'){
+      if(!s||s.toLowerCase()==='pending')return null;
+      const cleaned=s.replaceAll('$','').replaceAll(',','');
+      if(!/^-?\d+(?:\.\d{1,2})?$/.test(cleaned)||Math.abs(Number(cleaned))>1000000)throw new Error('Use a chargeback amount with up to two decimals (maximum 1,000,000).');
+      return Number(cleaned);
+    }
+    if(s.length>160||/[\x00-\x1f]/.test(s))throw new Error('Use plain text up to 160 characters.');
+    return s;
+  }
   function commit(changes,label){
     if(api.busy()){notice('Wait for the current save to finish.',true);return false;}
-    if(!api.editing()){notice('Open the form to edit camera and schedule times.',true);return false;}
+    if(!api.editing()){notice('Open the form to edit report cells.',true);return false;}
     const rows=api.rows();
-    if(changes.some(x=>x.r<0||x.r>=rows.length||!writable(x.c))){notice('Only Opening Time, Camera In View, Closing Time, and Camera Out View can be edited.',true);return false;}
-    const items=[...new Map(changes.map(x=>[`${x.r}:${x.c}`,x])).values()].map(x=>({...x,before:value(x.r,x.c)})).filter(x=>x.before!==x.value);
+    if(changes.some(x=>x.r<0||x.r>=rows.length||!writable(x.c))){notice('This range is not editable in the report view.',true);return false;}
+    try{changes=changes.map(x=>x.reset?x:{...x,value:parseCell(x.r,x.c,x.value)});}catch(error){notice('Nothing changed. '+error.message,true);return false;}
+    const items=[...new Map(changes.map(x=>[`${x.r}:${x.c}`,x])).values()].map(x=>({...x,before:value(x.r,x.c),beforeManual:api.manual(x.r,x.c)})).filter(x=>x.before!==x.value||(x.reset&&x.beforeManual));
     if(!items.length){notice('No values changed.');return true;}
     undo.push(items);if(undo.length>100)undo.shift();redo=[];api.apply(items);paint(true);notice(`${label}: ${items.length} cell(s) updated. Review the changes, then Save changes.`);return true;
   }
   function history(back){
     if(api.busy()||!api.editing())return;const from=back?undo:redo,to=back?redo:undo,items=from.pop();if(!items)return;
-    to.push(items);api.apply(items.map(x=>({...x,value:back?x.before:x.value})));paint(true);notice(back?'Last sheet edit undone. Save to persist this change.':'Sheet edit restored. Save to persist this change.');
+    to.push(items);api.apply(items.map(x=>({...x,value:back?x.before:x.value,reset:back?!x.beforeManual:x.reset})));paint(true);notice(back?'Last sheet edit undone. Save to persist this change.':'Sheet edit restored. Save to persist this change.');
   }
   function selected(){const out=new Map();for(const b of ranges())for(let r=b.top;r<=b.bottom;r++)for(let c=b.left;c<=b.right;c++)out.set(`${r}:${c}`,{r,c});return [...out.values()];}
-  function clearCells(){commit(selected().filter(x=>writable(x.c)).map(x=>({...x,value:null})),'Clear');}
+  function clearCells(){commit(selected().filter(x=>writable(x.c)).map(x=>({...x,value:columns[x.c][0]==='date'?value(x.r,x.c):null,reset:columns[x.c][0]==='date'})),'Clear');}
   function fill(direction){
     const changes=[];
     for(const b of ranges()){
@@ -100,19 +122,19 @@ window.createStoreHoursGrid = function(api) {
       for(let c=b.left;c<=b.right;c++)if(writable(c))for(let r=b.top+1;r<=b.bottom;r++)changes.push({r,c,value:value(b.top,c)});
     }else{
       if(b.left===b.right){if(!b.left){notice('Select multiple columns, or a cell to the right of the source.',true);return;}b.left--;}
-      if(!writable(b.left)){notice('Fill right must start in an editable time column.',true);return;}
+      if(!writable(b.left)){notice('Open the form to fill cells.',true);return;}
       for(let r=b.top;r<=b.bottom;r++)for(let c=b.left+1;c<=b.right;c++)if(writable(c))changes.push({r,c,value:value(r,b.left)});
     }
     }
-    if(!changes.length){notice('Select editable time cells to fill.',true);return;}commit(changes,direction==='down'?'Fill down':'Fill right');
+    if(!changes.length){notice('Select editable cells to fill.',true);return;}commit(changes,direction==='down'?'Fill down':'Fill right');
   }
   function cancelEdit(){const input=editor;editor=null;input?.remove();}
   function beginEdit(initial){
-    if(!writable(active.c)||api.busy()){notice('This cell is read only. Edit one of the four schedule or camera-time columns.',true);return;}
+    if(!writable(active.c)||api.busy()){notice('This cell is read only in the report view. Open the form to edit it.',true);return;}
     cancelEdit();const pos={...active},td=cell(pos.r,pos.c);if(!td)return;
-    const input=document.createElement('input');input.type='text';input.className='sh-cell-editor';input.setAttribute('aria-label','Edit '+address(pos));input.value=initial??value(pos.r,pos.c)??'';input.placeholder='9:02 AM';input.spellcheck=false;editor=input;td.append(input);input.focus();if(initial===undefined)input.select();
+    const input=document.createElement('input');input.type='text';input.className='sh-cell-editor';input.setAttribute('aria-label','Edit '+address(pos));const field=columns[pos.c][0],original=value(pos.r,pos.c);input.value=initial??(timeColumns.includes(field)&&typeof original==='string'&&original.includes('T')?original.split('T')[1]:original)??'';input.placeholder=timeColumns.includes(field)?'9:02 AM':field==='date'?'YYYY-MM-DD':'Enter value';input.spellcheck=false;editor=input;td.append(input);input.focus();if(initial===undefined)input.select();
     let closing=false;
-    const finish=(all=false)=>{if(closing||editor!==input)return true;let parsed;try{parsed=parseTime(input.value);}catch(e){notice(e.message,true);input.setAttribute('aria-invalid','true');return false;}closing=true;cancelEdit();commit((all?selected().filter(x=>writable(x.c)):[pos]).map(x=>({...x,value:parsed})),'Edit');return true;};
+    const finish=(all=false)=>{if(closing||editor!==input)return true;let changes;try{changes=(all?selected().filter(x=>writable(x.c)):[pos]).map(x=>({...x,value:parseCell(x.r,x.c,input.value)}));}catch(e){notice(e.message,true);input.setAttribute('aria-invalid','true');return false;}closing=true;cancelEdit();commit(changes,'Edit');return true;};
     input.onkeydown=e=>{e.stopPropagation();const ctrl=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();if(e.key==='Escape'){e.preventDefault();closing=true;cancelEdit();paint(true);}else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();if(finish(ctrl&&e.key==='Enter')&&!ctrl)move(e.key,e.shiftKey,false);}else if((ctrl&&['s','d','r','e','g','f'].includes(k))||['F8','F1'].includes(e.key)){e.preventDefault();if(finish())command(e.key==='F8'?'commands':e.key==='F1'?'tutorial':({s:'save',d:'down',r:'right',e:'flash',g:'goto',f:'find'})[k]);}};
     input.onblur=()=>{if(!finish()&&editor===input)input.focus();};
   }
@@ -123,7 +145,7 @@ window.createStoreHoursGrid = function(api) {
     select(r,c,extend);
   }
   const quote=s=>/[\t\n\r"]/.test(s)?'"'+s.replaceAll('"','""')+'"':s;
-  function copyText(){const b=bounds(),lines=[];for(let r=b.top;r<=b.bottom;r++){const cells=[];for(let c=b.left;c<=b.right;c++){const v=value(r,c);cells.push(quote(v===null?'':fields.includes(columns[c][0])?v:api.text(columns[c][0],v)));}lines.push(cells.join('\t'));}return lines.join('\r\n');}
+  function copyText(){const b=bounds(),lines=[];for(let r=b.top;r<=b.bottom;r++){const cells=[];for(let c=b.left;c<=b.right;c++){const v=value(r,c);cells.push(quote(v===null?'':fields.includes(columns[c][0])?String(v):api.text(columns[c][0],v)));}lines.push(cells.join('\t'));}return lines.join('\r\n');}
   function matrix(raw){
     if(raw.length>200000)throw new Error('Paste up to 100 rows on the current page.');
     const rows=[[]];let field='',quoted=false;
@@ -139,19 +161,19 @@ window.createStoreHoursGrid = function(api) {
       const repeat=selectedHeight>=height&&selectedWidth>=w&&selectedHeight%height===0&&selectedWidth%w===0;
       const nr=repeat?selectedHeight:height,nc=repeat?selectedWidth:w,changes=[];
       if(b.top+nr>api.rows().length||b.left+nc>width)throw new Error('The paste would extend past this page. Choose a smaller range or the next page.');
-      for(let r=0;r<nr;r++)for(let c=0;c<nc;c++){if(!writable(b.left+c))throw new Error(`${address({r:b.top+r,c:b.left+c})} is read only. Paste into the four schedule or camera-time columns.`);changes.push({r:b.top+r,c:b.left+c,value:parseTime(grid[r%height][c%w])});}
+      for(let r=0;r<nr;r++)for(let c=0;c<nc;c++){if(!writable(b.left+c))throw new Error(`${address({r:b.top+r,c:b.left+c})} is read only in the report view. Open the form to paste.`);changes.push({r:b.top+r,c:b.left+c,value:parseCell(b.top+r,b.left+c,grid[r%height][c%w])});}
       if(commit(changes,'Paste')){anchor={r:b.top,c:b.left};active={r:b.top+nr-1,c:b.left+nc-1};paint(true);}
     }catch(e){notice('Nothing pasted. '+e.message,true);}
   }
   async function clipboard(cut=false){
-    if(!api.rows().length||!singleRange())return;if(cut&&selected().some(x=>!writable(x.c))){notice('Cut a range containing only editable time cells.',true);return;}
-    const version=generation,items=selected();try{await navigator.clipboard.writeText(copyText());if(version!==generation)return;if(cut)commit(items.map(x=>({...x,value:null})),'Cut');else notice('Selected cells copied. Paste into Excel, Google Sheets, or another time range.');}catch{notice('Clipboard access is unavailable. Focus the selected cells and press Ctrl+C or Ctrl+X.',true);}
+    if(!api.rows().length||!singleRange())return;if(cut&&selected().some(x=>!writable(x.c))){notice('Open the form to cut cells.',true);return;}
+    const version=generation,items=selected();try{await navigator.clipboard.writeText(copyText());if(version!==generation)return;if(cut)commit(items.map(x=>({...x,value:null})),'Cut');else notice('Selected cells copied. Paste into Excel, Google Sheets, or another range.');}catch{notice('Clipboard access is unavailable. Focus the selected cells and press Ctrl+C or Ctrl+X.',true);}
   }
-  async function pasteClipboard(){const version=generation;try{const raw=await navigator.clipboard.readText();if(version===generation)paste(raw);}catch{notice('Focus a time cell and press Ctrl+V to paste.',true);}}
+  async function pasteClipboard(){const version=generation;try{const raw=await navigator.clipboard.readText();if(version===generation)paste(raw);}catch{notice('Focus an editable cell and press Ctrl+V to paste.',true);}}
   function flash(){
     if(!singleRange())return;
-    const b=bounds();if(b.left!==b.right||!writable(b.left)||b.bottom-b.top<2){notice('Flash fill: select at least three cells in one time column. Enter the first two examples, leaving later cells blank.',true);return;}
-    const seconds=v=>v===null?null:v.split(':').map(Number).reduce((sum,n,i)=>sum+n*[3600,60,1][i],0);
+    const b=bounds();if(b.left!==b.right||(!writable(b.left)||!timeColumns.includes(columns[b.left][0]))||b.bottom-b.top<2){notice('Flash fill: select at least three cells in one time column. Enter the first two examples, leaving later cells blank.',true);return;}
+    const seconds=v=>v===null?null:v.split('T').at(-1).split(':').map(Number).reduce((sum,n,i)=>sum+n*[3600,60,1][i],0);
     const first=seconds(value(b.top,b.left)),second=seconds(value(b.top+1,b.left));if(first===null||second===null){notice('Enter two time examples at the top of the selected range first.',true);return;}
     const changes=[];for(let r=b.top+2;r<=b.bottom;r++)if(value(r,b.left)===null){const total=((first+(second-first)*(r-b.top))%86400+86400)%86400;changes.push({r,c:b.left,value:[Math.floor(total/3600),Math.floor(total%3600/60),total%60].map(v=>String(v).padStart(2,'0')).join(':')});}
     if(!changes.length){notice('There are no blank cells after the two examples. Existing values are kept.',true);return;}
@@ -161,14 +183,14 @@ window.createStoreHoursGrid = function(api) {
   }
   const commands=[
     ['D','Fill down','Ctrl+D','down'],['R','Fill right','Ctrl+R','right'],['E','Flash fill preview','Ctrl+E','flash'],
-    ['C','Copy selected cells','Ctrl+C','copy'],['X','Cut selected times','Ctrl+X','cut'],['V','Paste cells','Ctrl+V','paste'],
-    ['Z','Undo sheet edit','Ctrl+Z','undo'],['Y','Redo sheet edit','Ctrl+Y / Ctrl+Shift+Z','redo'],['B','Clear selected times','Delete','clear'],
+    ['C','Copy selected cells','Ctrl+C','copy'],['X','Cut selected cells','Ctrl+X','cut'],['V','Paste cells','Ctrl+V','paste'],
+    ['Z','Undo sheet edit','Ctrl+Z','undo'],['Y','Redo sheet edit','Ctrl+Y / Ctrl+Shift+Z','redo'],['B','Clear selected cells','Delete','clear'],
     ['S','Save changes','Ctrl+S','save'],['F','Find employee or store','Ctrl+F','find'],['G','Go to cell or range','Ctrl+G','goto'],
-    ['A','Select this page','Ctrl+A','all'],['I','Add employee','Form only','add'],['O','Download saved Excel','Filtered saved rows','download'],['T','Tutorial & shortcut guide','F1','tutorial']
+    ['U','Use source/default','Remove selected corrections','reset'],['A','Select this page','Ctrl+A','all'],['I','Add employee','Form only','add'],['O','Download saved Excel','Filtered saved rows','download'],['T','Tutorial & shortcut guide','F1','tutorial']
   ];
   function command(name){
     const actions={down:()=>fill('down'),right:()=>fill('right'),flash,copy:()=>clipboard(),cut:()=>clipboard(true),paste:pasteClipboard,undo:()=>history(true),redo:()=>history(false),clear:clearCells,
-      edit:()=>beginEdit(),save:()=>{if(api.editing())api.save();else notice('Open the form to save edits.');},find:api.find,goto:()=>{rangeInput.focus();rangeInput.select();},all:()=>{extraRanges=[];anchor={r:0,c:0};active={r:api.rows().length-1,c:width-1};paint(true);},add:()=>{if(api.editing())api.add();else notice('Open the form to add an employee.');},download:api.download,commands:showCommands,tutorial:()=>tutorial(0)};
+      reset:()=>commit(selected().filter(x=>writable(x.c)).map(x=>({...x,value:null,reset:true})),'Use source/default'),edit:()=>beginEdit(),save:()=>{if(api.editing())api.save();else notice('Open the form to save edits.');},find:api.find,goto:()=>{rangeInput.focus();rangeInput.select();},all:()=>{extraRanges=[];anchor={r:0,c:0};active={r:api.rows().length-1,c:width-1};paint(true);},add:()=>{if(api.editing())api.add();else notice('Open the form to add an employee.');},download:api.download,commands:showCommands,tutorial:()=>tutorial(0)};
     if(!api.rows().length&&!['commands','tutorial','find','add'].includes(name))return;
     actions[name]?.();
   }
@@ -177,9 +199,9 @@ window.createStoreHoursGrid = function(api) {
   dialog.addEventListener('keydown',e=>{if(dialogMode==='commands'&&!e.ctrlKey&&!e.metaKey&&!e.altKey){const match=commands.find(x=>x[0]===e.key.toUpperCase());if(match){e.preventDefault();dialog.close();command(match[3]);}}});
   const lessons=[
     ['Choose your rows','Filter by dealer, store, and date first. Each employee has an independent row. Selections and bulk edits cover the current page (up to 100 rows). Exports include all filtered saved rows.','Click a cell, then use arrows. Shift+arrows or drag selects a rectangle. Hold Shift while clicking, dragging, or using arrows to extend a range. Ctrl/Command+click or drag adds a separate range. Both Ctrl+Space and Shift+Space select columns on this page. The Range box accepts G1:G10, K1:K10.'],
-    ['Enter camera and schedule times','F / Opening Time, G / Camera In View, J / Closing Time, and K / Camera Out View are editable on the form. Other columns and the report view are read only.','Press F2, double-click, start typing, or use Edit cell (also on phones). Enter 9:02 AM or 14:30:00. Enter commits and moves down; Tab moves right; Escape cancels. Ctrl+Enter applies the typed time to selected editable cells. Clearing a schedule restores workbook hours after saving.'],
-    ['Copy and paste','Use Ctrl+C / Ctrl+V for rectangular cells from Excel, Google Sheets, or this sheet. A single copied time fills the selected range. Paste is validated as a whole: an invalid time, read-only destination, or page overflow rejects the entire paste.','Ctrl+X cuts editable times. Delete clears editable cells. Ctrl+Z undoes an edit; Ctrl+Y or Ctrl+Shift+Z redoes it. Imported employee names and RT punches remain read only.'],
-    ['Fill and preview patterns','Select a range and press Ctrl+D to repeat its top row downward, or Ctrl+R to repeat its leftmost time rightward. On one cell, these copy from directly above or left.','For flash fill, enter two time examples and select them plus blank cells below in the same column. Ctrl+E previews the repeated or evenly spaced time pattern. It fills blanks only after you apply the preview. Verify camera times against your observations.'],
+    ['Edit any report cell','All 14 data columns are editable on the form. Enter dates, names, statuses, times, or chargeback amounts. The report view displays saved values.','Press F2, double-click, start typing, or use Edit cell (also on phones). Enter 9:02 AM or 14:30:00. Enter commits and moves down; Tab moves right; Escape cancels. Ctrl+Enter applies the typed value to selected cells of compatible types. Clearing a schedule restores workbook hours after saving.'],
+    ['Copy and paste','Use Ctrl+C / Ctrl+V for rectangular cells from Excel, Google Sheets, or this sheet. A single copied value fills the selected range. Paste is validated as a whole: an invalid time, incompatible value or page overflow rejects the entire paste.','Ctrl+X cuts selected cells. Delete clears cells; clearing a date restores its source date. Ctrl+Z undoes an edit; Ctrl+Y or Ctrl+Shift+Z redoes it. Corrections to names and RT punches survive syncs. F8 then U restores selected cells to source/default values. Manually entered statuses and chargebacks stay fixed until you reset them.'],
+    ['Fill and preview patterns','Select a range and press Ctrl+D to repeat its top row downward, or Ctrl+R to repeat its leftmost value rightward. On one cell, these copy from directly above or left.','For flash fill, enter two time examples and select them plus blank cells below in the same column. Ctrl+E previews the repeated or evenly spaced time pattern. It fills blanks only after you apply the preview. Verify camera times against your observations.'],
     ['Save your work','Edits remain drafts until Save changes or Ctrl+S succeeds. Undo covers the last 100 sheet operations and resets when you save, reload, change filters, or change pages. A page refresh or sign-out discards unsaved drafts. Version history permanently records saved changes; undo never removes a saved version.','F8 opens the command menu instead of Excel’s Alt ribbon. For example, F8 then D fills down; F8 then S saves. Use Tutorial or F1 to reopen this guide. On Mac, Command can replace Ctrl.']
   ];
   function tutorial(step){tutorialStep=step;openDialog('tutorial',`Quick start · ${step+1} of ${lessons.length}`);const [heading,body,detail]=lessons[step];const h=document.createElement('h3');h.textContent=heading;content.append(h);for(const text of [body,detail]){const p=document.createElement('p');p.textContent=text;content.append(p);}
@@ -198,7 +220,7 @@ window.createStoreHoursGrid = function(api) {
   document.addEventListener('pointerup',()=>{dragging=false;});
   table.addEventListener('dblclick',e=>{if(e.target.closest('td[data-grid-row]'))beginEdit();});
   table.addEventListener('copy',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;e.clipboardData.setData('text/plain',copyText());notice('Selected cells copied.');});
-  table.addEventListener('cut',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;if(selected().some(x=>!writable(x.c))){notice('Cut a range containing only editable time cells.',true);return;}e.clipboardData.setData('text/plain',copyText());clearCells();});
+  table.addEventListener('cut',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;if(selected().some(x=>!writable(x.c))){notice('Open the form to cut cells.',true);return;}e.clipboardData.setData('text/plain',copyText());clearCells();});
   table.addEventListener('paste',e=>{if(editor)return;e.preventDefault();paste(e.clipboardData.getData('text/plain'));});
   table.addEventListener('keydown',e=>{
     if(editor||e.target.closest('button')||!api.rows().length)return;const ctrl=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
