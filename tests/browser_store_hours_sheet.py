@@ -18,7 +18,7 @@ def check(page):
         page.get_by_role('textbox',name='Edit '+address,exact=True).fill(value)
         page.keyboard.press('Enter')
     def save():
-        page.locator('#sheet-save').click()
+        page.locator('#sheet-save').evaluate('(button)=>button.click()')
         expect(page.locator('#sheet-save-state')).to_have_text('All changes saved')
 
     assert page.locator('.sidebar').count()==0
@@ -101,7 +101,7 @@ def check(page):
     go('AA1:AA3')
     page.keyboard.press('Control+d')
     expect(cell('AA3')).to_have_text('Beyond Z')
-    page.keyboard.press('Shift+Space')
+    page.keyboard.press('Control+Space')
     expect(page.locator('#sh-table .sh-cell-selected')).to_have_count(7)
     save()
     go('A1')

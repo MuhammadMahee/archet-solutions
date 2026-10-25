@@ -4,15 +4,18 @@
   const base=window.storeHoursSnapshot,columns=base.columns.map(c=>[...c]),fields=['opening_time','closing_time','camera_in','camera_out'];
   const key=r=>JSON.stringify([r.dealer,r.store_id,r.source_date||r.date,r.employee_key||'']);
   let user=null,data=null,rows=[],grid,historyPanel,saving=false,page=0,loading=false,filterRules={},sort={},popup=null;
-  const drafts=new Map(),today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-  let start=today,end=today;
+  let autosaveTimer=null,saveFlight=null,saveFailed=false;
+  const drafts=new Map();let today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const initialPeriod=new URLSearchParams(location.search);
+  let start=initialPeriod.get('start')||today,end=initialPeriod.get('end')||today;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||start>end||end>today)start=end=today;
   $('sheet-from').value=start;$('sheet-to').value=end;$('sheet-from').max=$('sheet-to').max=today;
   const current=r=>drafts.get(key(r))||r,visible=()=>rows.slice(page*100,(page+1)*100).map(current);
   function message(text='',error=false){$('sheet-message').textContent=text;$('sheet-message').hidden=!text;$('sheet-message').classList.toggle('is-error',error);}
   async function api(path,method='GET',body){
     const response=await fetch('/api/internal/'+path,{method,headers:method==='GET'?{}:{'Content-Type':'application/json','X-Archet-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
     let result;try{result=await response.json();}catch{throw new Error('The service could not respond. Please try again.');}
-    if(!response.ok){if(response.status===401&&user){user=null;root.hidden=true;$('sheet-login').hidden=false;drafts.clear();grid.reset();historyPanel.clear();}throw new Error(result.message||'The request could not be completed.');}return result;
+    if(!response.ok){if(response.status===401&&user){user=null;root.hidden=true;$('sheet-login').hidden=false;drafts.clear();clearTimeout(autosaveTimer);grid.reset();historyPanel.clear();$('sheet-dialog').close();closeMenu();}const error=new Error(result.message||'The request could not be completed.');error.status=response.status;throw error;}return result;
   }
   function params(withFilters=true){const p=new URLSearchParams({start,end,dealer:$('sheet-dealer').value,market:$('sheet-market').value,store:$('sheet-store').value});if(withFilters){p.set('filters',JSON.stringify(filterRules));p.set('sort',JSON.stringify(sort));p.set('search',$('sheet-search').value.trim());}return p;}
   const rawText=value=>value==null?'':String(value);
@@ -44,7 +47,17 @@
   }
   function dirty(){
     $('sheet-save').disabled=saving||loading||!drafts.size;
-    $('sheet-save-state').textContent=saving?'Saving…':loading?'Loading…':drafts.size?`${drafts.size} unsaved row${drafts.size===1?'':'s'}`:'All changes saved';
+    $('sheet-save-state').textContent=loading?'Loading...':saving?'Saving...':saveFailed?'Not saved - retry':drafts.size?'Waiting to autosave...':'All changes saved';
+    $('sheet-save-state').classList.toggle('is-error',saveFailed);
+  }
+  function scheduleAutosave(){
+    clearTimeout(autosaveTimer);saveFailed=false;dirty();
+    autosaveTimer=setTimeout(()=>{if(grid.isEditing()||document.activeElement===$('sheet-value')){scheduleAutosave();return;}save({quiet:true});},1200);
+  }
+  function rememberPeriod(){
+    $('sheet-from').value=start;$('sheet-to').value=end;$('sheet-from').max=$('sheet-to').max=today;
+    $('sheet-period-button').textContent=start===end?start:`${start} to ${end}`;
+    const url=new URL(location.href);url.searchParams.set('start',start);url.searchParams.set('end',end);window.history.replaceState(null,'',url);
   }
   function options(id,values,label){const el=$(id),selected=el.value;el.replaceChildren(new Option(label,''));for(const v of values)el.add(new Option(typeof v==='string'?v:v.name,typeof v==='string'?v:v.id));el.value=selected;}
   function applyFilters(){
@@ -71,13 +84,41 @@
     $('sheet-period').textContent=start===end?start:`${start} – ${end}`;$('sheet-page').textContent=rows.length?`${page*100+1}–${Math.min(rows.length,(page+1)*100)}`:'0';$('sheet-prev').disabled=page===0;$('sheet-next').disabled=(page+1)*100>=rows.length;dirty();grid?.refresh();
   }
   async function load(){
-    if(loading||saving)return;if(drafts.size){message('Save or discard your changes before loading a different period.',true);return;}
+    if(loading)return false;if(!await save({quiet:true}))return false;
     loading=true;dirty();message();grid.reset();
-    try{const result=await api('store-hours/sheet?'+params(false));if(!user)return;data=result;columns.splice(0,columns.length,...data.columns);for(const field of Object.keys(filterRules))if(!columns.some(c=>c[0]===field))delete filterRules[field];if(!columns.some(c=>c[0]===sort.key))sort={};options('sheet-dealer',data.dealers,'All dealers');options('sheet-market',data.markets,'All markets');options('sheet-store',data.stores,'All stores');applyFilters();}catch(error){message(error.message,true);}finally{loading=false;dirty();}
+    try{const result=await api('store-hours/sheet?'+params(false));if(!user)return false;data=result;today=result.today||today;rememberPeriod();columns.splice(0,columns.length,...data.columns);for(const field of Object.keys(filterRules))if(!columns.some(c=>c[0]===field))delete filterRules[field];if(!columns.some(c=>c[0]===sort.key))sort={};options('sheet-dealer',data.dealers,'All dealers');options('sheet-market',data.markets,'All markets');options('sheet-store',data.stores,'All stores');applyFilters();return true;}catch(error){message(error.message,true);return false;}finally{loading=false;dirty();}
   }
-  async function save(){
-    if(saving||loading||!drafts.size)return;saving=true;dirty();grid.resetHistory();
-    try{for(const [id,row] of [...drafts]){const result=await api('store-hours/review','POST',row);const saved=data.rows.find(r=>key(r)===id);Object.assign(saved,row,{revision:result.revision});drafts.delete(id);}saving=false;await load();message('All changes saved, including cell formats. Version history keeps every save.');}catch(error){message(error.message,true);}finally{saving=false;dirty();}
+  function save({quiet=false}={}){
+    if(!quiet&&!grid.finishEditing())return Promise.resolve(false);
+    clearTimeout(autosaveTimer);
+    if(saveFlight)return saveFlight;
+    if(!drafts.size)return Promise.resolve(true);
+    if(loading)return Promise.resolve(false);
+    saving=true;saveFailed=false;dirty();
+    saveFlight=(async()=>{
+      try{
+        while(drafts.size){
+          const [id,sent]=drafts.entries().next().value;
+          const result=await api('store-hours/review','POST',{...sent,include_row:true});
+          if(!user)return false;
+          const saved=data.rows.find(r=>key(r)===id),canonical=result.row||{...sent,revision:result.revision};
+          for(const [field] of columns)if(field.startsWith('custom_'))canonical[field]=canonical.custom_cells?.[field]??null;
+          Object.assign(saved,canonical);
+          const latest=drafts.get(id);
+          if(latest===sent)drafts.delete(id);
+          else if(latest){
+            const merged={...latest,revision:result.revision,source_values:canonical.source_values,scheduled_opening_time:canonical.scheduled_opening_time,scheduled_closing_time:canonical.scheduled_closing_time,schedule_period:canonical.schedule_period};
+            for(const field of fields)if(latest[field]===sent[field])merged[field]=canonical[field];
+            refreshDraft(merged,saved);drafts.set(id,merged);
+          }
+        }
+        if(!grid.isEditing()){const refocus=table.contains(document.activeElement);render();if(refocus)grid.focus();}
+        if(!quiet)message('All changes saved. Version history keeps every autosave.');
+        return true;
+      }catch(error){saveFailed=true;message('Autosave could not finish. Your edits are still here. '+error.message,true);return false;}
+      finally{saving=false;saveFlight=null;dirty();}
+    })();
+    return saveFlight;
   }
   function selectionChanged({active,cells,address}){
     const row=visible()[active.r],field=columns[active.c]?.[0],fmt=row?.cell_formats?.[field]||{};
@@ -86,7 +127,7 @@
     document.querySelectorAll('[data-format]').forEach(button=>button.setAttribute('aria-pressed',String(!!fmt[button.dataset.format])));
     $('sheet-number-format').value=fmt.number_format||data?.column_formats?.[field]||'auto';$('sheet-font-size').value=fmt.font_size||10;$('sheet-align').value=fmt.align||'left';$('sheet-text-color').value=fmt.color||'#202124';$('sheet-fill-color').value=fmt.background||'#ffffff';
   }
-  grid=window.createStoreHoursGrid({root,table,columns,fields,gutter:true,text:(k,v)=>formatted(k,v),key,message,rows:visible,editing:()=>true,busy:()=>saving||loading,user:()=>user?.id||'',today:()=>data?.today||today,
+  grid=window.createStoreHoursGrid({root,table,columns,fields,gutter:true,autosave:true,moveOnPaste:true,text:(k,v)=>formatted(k,v),key,message,rows:visible,editing:()=>true,busy:()=>loading,user:()=>user?.id||'',today:()=>data?.today||today,
     manual:(r,c)=>{const row=visible()[r],field=columns[c][0];return fields.includes(field)||Object.hasOwn(field.startsWith('custom_')?row.custom_cells||{}:row.cell_overrides||{},field);},
     cellFormat:(r,c)=>({...visible()[r]?.cell_formats?.[columns[c][0]]}),onSelection:selectionChanged,
     apply(changes){const shown=rows.slice(page*100,(page+1)*100);for(const change of changes){const {r,c,value,reset,kind}=change,saved=shown[r],previous=current(saved),field=columns[c][0],row={...previous,cell_overrides:{...previous.cell_overrides},custom_cells:{...previous.custom_cells},cell_formats:{...previous.cell_formats}};
@@ -94,7 +135,7 @@
       else if(field.startsWith('custom_')){if(reset)delete row.custom_cells[field];else row.custom_cells[field]=value;}
       else if(fields.includes(field))row[field]=reset?null:value;
       else if(reset)delete row.cell_overrides[field];else row.cell_overrides[field]=value;
-      refreshDraft(row,saved);drafts.set(key(saved),row);}render();},save,find:()=>{setFiltersVisible(true);$('sheet-search').focus();},download:download,add:addRow});
+      refreshDraft(row,saved);drafts.set(key(saved),row);}render();scheduleAutosave();},save,find:()=>{setFiltersVisible(true);$('sheet-search').focus();},download:download,add:addRow});
   $('sheet-address-slot').append(root.querySelector('.sh-address-label'));
   historyPanel=window.createStoreHoursHistory({root,params:()=>params(false),request:api,columnLabels:()=>Object.fromEntries([...base.columns,...(data?.sheet?.columns||[]).map(c=>[c.id,c.name])])});
   function setFiltersVisible(visible){$('sheet-filters').hidden=!visible;$('sheet-filter-toggle').setAttribute('aria-pressed',String(visible));}
@@ -102,9 +143,41 @@
   $('sheet-dialog-close').onclick=()=>$('sheet-dialog').close();
   function button(label,action,parent,cls=''){const b=document.createElement('button');b.type='button';b.textContent=label;b.className=cls;b.onclick=action;parent.append(b);return b;}
   function inputLabel(text,parent,type='text',value=''){const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.type=type;input.value=value;label.append(input);parent.append(label);return input;}
-  function selectLabel(text,parent,options,value){const label=document.createElement('label');label.textContent=text;const select=document.createElement('select');for(const [v,t] of options)select.add(new Option(t,v));select.value=value||options[0][0];label.append(select);parent.append(label);return select;}
+  function selectLabel(text,parent,options,value){const label=document.createElement('label');label.textContent=text;const select=document.createElement('select');select.setAttribute('aria-label',text);for(const [v,t] of options)select.add(new Option(t,v));select.value=value||options[0][0];label.append(select);parent.append(label);return select;}
   function paragraph(text,parent){const p=document.createElement('p');p.textContent=text;parent.append(p);return p;}
-  async function mutateColumn(payload){if(drafts.size){throw new Error('Save or discard cell edits before changing columns.');}const config=await api('store-hours/sheet/columns','POST',{...payload,revision:data.sheet.revision});data.sheet=config;await load();}
+  function chooseDates(){
+    const content=openDialog('Choose report dates'),limit=data?.today||today;
+    const mode=selectLabel('Selection',content,[['day','Single day'],['range','Date range']],start===end?'day':'range');
+    const dates=document.createElement('div');dates.className='sheet-date-inputs';content.append(dates);
+    const from=inputLabel('From date',dates,'date',start),to=inputLabel('To date',dates,'date',end);from.max=to.max=limit;
+    let month=new Date(start.slice(0,7)+'-01T12:00:00'),pickingEnd=false;
+    const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const header=document.createElement('div');header.className='sheet-calendar-heading';content.append(header);
+    const prev=button('‹',()=>{month.setMonth(month.getMonth()-1);draw();},header);prev.setAttribute('aria-label','Previous calendar month');
+    const title=document.createElement('strong');header.append(title);
+    const next=button('›',()=>{month.setMonth(month.getMonth()+1);draw();},header);next.setAttribute('aria-label','Next calendar month');
+    const calendar=document.createElement('div');calendar.className='sheet-calendar';content.append(calendar);
+    function draw(){
+      title.textContent=month.toLocaleDateString('en-US',{month:'long',year:'numeric'});next.disabled=iso(month).slice(0,7)>=limit.slice(0,7);to.disabled=mode.value==='day';calendar.replaceChildren();
+      for(const day of ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']){const label=document.createElement('span');label.textContent=day;calendar.append(label);}
+      for(let i=0;i<month.getDay();i++)calendar.append(document.createElement('span'));
+      const count=new Date(month.getFullYear(),month.getMonth()+1,0).getDate();
+      for(let n=1;n<=count;n++){
+        const date=new Date(month.getFullYear(),month.getMonth(),n,12),value=iso(date);
+        const day=button(String(n),()=>{if(mode.value==='day'){from.value=to.value=value;}else if(!pickingEnd){from.value=to.value=value;pickingEnd=true;}else{const first=from.value;from.value=value<first?value:first;to.value=value>first?value:first;pickingEnd=false;}draw();},calendar);
+        day.disabled=value>limit;day.setAttribute('aria-label',date.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}));day.setAttribute('aria-pressed',String(value===from.value||value===to.value));day.classList.toggle('in-range',value>=from.value&&value<=to.value);
+      }
+    }
+    mode.onchange=()=>{pickingEnd=false;if(mode.value==='day')to.value=from.value;draw();};
+    from.onchange=()=>{if(mode.value==='day')to.value=from.value;if(from.value)month=new Date(from.value.slice(0,7)+'-01T12:00:00');draw();};to.onchange=draw;
+    const presets=document.createElement('div');presets.className='sheet-inline-actions';content.append(presets);
+    const yesterday=new Date(limit+'T12:00:00');yesterday.setDate(yesterday.getDate()-1);
+    for(const [label,a,b] of [['Today',limit,limit],['Yesterday',iso(yesterday),iso(yesterday)],['This month',limit.slice(0,8)+'01',limit]])button(label,()=>{from.value=a;to.value=b;mode.value=a===b?'day':'range';month=new Date(a.slice(0,7)+'-01T12:00:00');pickingEnd=false;draw();},presets);
+    paragraph('Choose an earlier day, or select a date range. Pending edits autosave before the period changes.',content);
+    const actions=document.createElement('div');actions.className='sheet-dialog-actions';content.append(actions);button('Cancel',()=>$('sheet-dialog').close(),actions);
+    const apply=button('Apply dates',async()=>{apply.disabled=true;try{if(await changePeriod(from.value,mode.value==='day'?from.value:to.value))$('sheet-dialog').close();}finally{apply.disabled=false;}},actions,'sheet-primary');apply.id='sheet-date-apply';draw();
+  }
+  async function mutateColumn(payload){if(!await save())throw new Error('Resolve the unsaved edits before changing columns.');const config=await api('store-hours/sheet/columns','POST',{...payload,revision:data.sheet.revision});data.sheet=config;await load();}
   function columnDialog(action,id){
     if(!data)return;const column=data.sheet.columns.find(c=>c.id===id),content=openDialog(action==='add'?'Add a custom column':action==='rename'?'Rename column':'Remove custom column');
     let name,format;if(action!=='delete'){name=inputLabel('Column name',content,'text',column?.name||'');name.maxLength=60;format=selectLabel('Default cell format',content,[['text','Plain text'],['auto','Automatic'],['number','Number'],['currency','Currency'],['percent','Percent'],['date','Date'],['time','Time']],column?.format||'text');}
@@ -128,20 +201,20 @@
   }
   function addRow(){
     if(!data)return;const content=openDialog('Add employee row'),stores=data.directory.map(s=>[JSON.stringify([s.dealer,s.store_id]),`${s.dealer} · ${s.market} · ${s.store}`]),store=selectLabel('Store',content,stores),date=inputLabel('Date',content,'date',end),name=inputLabel('Employee name',content);date.max=data.today;name.maxLength=160;
-    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);const submit=button('Add row',async()=>{if(drafts.size){error.textContent='Save or discard your cell edits first.';return;}submit.disabled=true;try{const [dealer,store_id]=JSON.parse(store.value);await api('store-hours/employees','POST',{dealer,store_id,date:date.value,employee:name.value});start=end=date.value;$('sheet-from').value=start;$('sheet-to').value=end;$('sheet-dealer').value='';$('sheet-market').value='';$('sheet-store').value='';$('sheet-search').value='';filterRules={};sort={};$('sheet-dialog').close();await load();message('Employee added. Enter their times and save.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');name.focus();
+    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);const submit=button('Add row',async()=>{submit.disabled=true;try{if(!await save())throw new Error('Resolve the unsaved edits before adding a row.');const [dealer,store_id]=JSON.parse(store.value);await api('store-hours/employees','POST',{dealer,store_id,date:date.value,employee:name.value});start=end=date.value;$('sheet-from').value=start;$('sheet-to').value=end;$('sheet-dealer').value='';$('sheet-market').value='';$('sheet-store').value='';$('sheet-search').value='';filterRules={};sort={};$('sheet-dialog').close();await load();message('Employee added. Enter their times and save.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');name.focus();
   }
-  function download(){if(drafts.size){message('Save changes before downloading the sheet.',true);return;}if(data)location.assign('/api/internal/store-hours/sheet/export?'+params());}
-  async function copySnapshot(){if(!data)return;if(drafts.size){message('Save changes before copying a snapshot.',true);return;}try{const canvas=base.render({...data,rows:rows.map(current)},{dealer:$('sheet-dealer').value,market:$('sheet-market').value}),blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);message('Snapshot copied.');}catch(e){message(e.message||'Could not copy the snapshot.',true);}}
-  async function sync(){if(drafts.size){message('Save your edits before syncing sources.',true);return;}if(user?.role!=='admin')return;loading=true;dirty();try{let result,continuation=false;do{message('Syncing source time punches…');result=await api('store-hours/refresh','POST',continuation?{continue:true}:{});continuation=true;}while(result.status!=='busy'&&result.pending&&result.workers?.some(w=>w.completed));loading=false;await load();message(result.remaining?'Some source days could not be fetched. Saved data was kept.':'Source sync completed. Your saved corrections and formats are preserved.',!!result.remaining);}catch(e){message(e.message,true);}finally{loading=false;dirty();}}
+  async function download(){if(!await save())return;if(data)location.assign('/api/internal/store-hours/sheet/export?'+params());}
+  async function copySnapshot(){if(!data)return;if(!await save())return;try{const canvas=base.render({...data,rows:rows.map(current)},{dealer:$('sheet-dealer').value,market:$('sheet-market').value}),blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);message('Snapshot copied.');}catch(e){message(e.message||'Could not copy the snapshot.',true);}}
+  async function sync(){if(!await save())return;if(user?.role!=='admin')return;loading=true;dirty();try{let result,continuation=false;do{message('Syncing source time punches…');result=await api('store-hours/refresh','POST',continuation?{continue:true}:{});continuation=true;}while(result.status!=='busy'&&result.pending&&result.workers?.some(w=>w.completed));loading=false;await load();message(result.remaining?'Some source days could not be fetched. Saved data was kept.':'Source sync completed. Your saved corrections and formats are preserved.',!!result.remaining);}catch(e){message(e.message,true);}finally{loading=false;dirty();}}
   function closeMenu(){popup?.remove();popup=null;document.querySelectorAll('#sheet-menu button').forEach(b=>b.setAttribute('aria-expanded','false'));}
   const menus={
     File:[['Save changes',save,'Ctrl+S'],['Download Excel',download],['Copy snapshot',copySnapshot],['Reload saved sheet',load],['Back to portal',()=>location.assign('/internal#storehours')]],
-    Edit:[['Undo',()=>grid.command('undo'),'Ctrl+Z'],['Redo',()=>grid.command('redo'),'Ctrl+Y'],['Copy',()=>grid.command('copy'),'Ctrl+C'],['Paste',()=>grid.command('paste'),'Ctrl+V'],['Fill down',()=>grid.command('down'),'Ctrl+D'],['Fill right',()=>grid.command('right'),'Ctrl+R'],['Use source/default',()=>grid.command('reset'),'F8 → U'],['Discard unsaved edits',()=>{drafts.clear();load();}]],
+    Edit:[['Undo',()=>grid.command('undo'),'Ctrl+Z'],['Redo',()=>grid.command('redo'),'Ctrl+Y'],['Copy',()=>grid.command('copy'),'Ctrl+C'],['Paste',()=>grid.command('paste'),'Ctrl+V'],['Fill down',()=>grid.command('down'),'Ctrl+D'],['Fill right',()=>grid.command('right'),'Ctrl+R'],['Use source/default',()=>grid.command('reset'),'F8 → U'],['Discard unsaved edits',()=>{if(saving){message('Wait for the current save to finish.',true);return;}clearTimeout(autosaveTimer);drafts.clear();saveFailed=false;load();}]],
     View:[['Report filters',()=>setFiltersVisible($('sheet-filters').hidden)],['Version history',()=>historyPanel.open()],['Go to cell / range',()=>grid.command('goto'),'Ctrl+G']],
     Insert:[['Custom column',()=>columnDialog('add')],['Employee row',addRow]],
     Format:[['Bold',()=>toggleFormat('bold')],['Italic',()=>toggleFormat('italic')],['Underline',()=>toggleFormat('underline')],['Wrap text',()=>toggleFormat('wrap')],['Clear formatting',()=>grid.format(null)]],
     Data:[['Filter selected column',()=>columnMenu(columns[grid.selection().active.c][0])],['Clear all column filters',()=>{filterRules={};sort={};applyFilters();}],['Sync RT-POS sources',sync,'Admin'],['Upload store schedules',()=>location.assign('/internal#storehours')]],
-    Help:[['Spreadsheet tutorial',()=>grid.command('tutorial'),'F1'],['Keyboard commands',()=>grid.command('commands'),'F8'],['Custom columns & formatting',()=>{const content=openDialog('Working with your spreadsheet');paragraph('Use + Column to add a shared custom column. Each column heading opens filters, sorting, rename, and delete. Default report columns cannot be deleted. Removed custom columns and their saved values remain in version history.',content);paragraph('Select cells or a range, then choose bold, colors, alignment, wrapping, font size, or number formats. Formatting changes display only; the cell-value bar always shows the underlying value. Custom cell values are plain data; formulas are not evaluated.',content);paragraph('Filters apply to all loaded rows in your selected period. Editing and formatting apply to the current page of up to 100 rows. Save changes before exporting, syncing, or changing the period. Column changes save immediately for everyone. Excel includes all filtered rows and active custom columns with their saved formats.',content);}]]
+    Help:[['Spreadsheet tutorial',()=>grid.command('tutorial'),'F1'],['Keyboard commands',()=>grid.command('commands'),'F8'],['Custom columns & formatting',()=>{const content=openDialog('Working with your spreadsheet');paragraph('Use + Column to add a shared custom column. Each column heading opens filters, sorting, rename, and delete. Default report columns cannot be deleted. Removed custom columns and their saved values remain in version history.',content);paragraph('Select cells or a range, then choose bold, colors, alignment, wrapping, font size, or number formats. Formatting changes display only; the cell-value bar always shows the underlying value. Custom cell values are plain data; formulas are not evaluated.',content);paragraph('Filters apply to all loaded rows in your selected period. Editing and formatting apply to the current page of up to 100 rows. Edits autosave after you finish typing. Exports, syncs, and date changes wait for saving to finish. Column changes save immediately for everyone. Excel includes all filtered rows and active custom columns with their saved formats.',content);}]]
   };
   for(const [name,items] of Object.entries(menus)){const trigger=button(name,e=>{const was=trigger.getAttribute('aria-expanded')==='true';closeMenu();if(was)return;trigger.setAttribute('aria-expanded','true');popup=document.createElement('div');popup.className='sheet-menu-popup';popup.setAttribute('role','menu');for(const [label,action,shortcut] of items){const b=button(label,()=>{closeMenu();action();},popup);b.setAttribute('role','menuitem');if(shortcut){const small=document.createElement('small');small.textContent=shortcut;b.append(small);}if(label==='Sync RT-POS sources')b.disabled=user?.role!=='admin';}document.body.append(popup);const box=trigger.getBoundingClientRect();popup.style.left=Math.min(box.left,innerWidth-popup.offsetWidth-8)+'px';popup.style.top=box.bottom+3+'px';popup.querySelector('button')?.focus();},$('sheet-menu'));trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');}
   document.addEventListener('pointerdown',e=>{if(popup&&!popup.contains(e.target)&&!$('sheet-menu').contains(e.target))closeMenu();});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();if(popup&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const buttons=[...popup.querySelectorAll('button:not(:disabled)')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}});
@@ -150,15 +223,27 @@
   document.querySelectorAll('[data-format]').forEach(b=>b.onclick=()=>toggleFormat(b.dataset.format));document.querySelectorAll('[data-command]').forEach(b=>b.onclick=()=>grid.command(b.dataset.command));
   $('sheet-number-format').onchange=e=>grid.format({number_format:e.target.value});$('sheet-font-size').onchange=e=>grid.format({font_size:Number(e.target.value)});$('sheet-align').onchange=e=>grid.format({align:e.target.value});$('sheet-text-color').onchange=e=>grid.format({color:e.target.value});$('sheet-fill-color').onchange=e=>grid.format({background:e.target.value});$('sheet-clear-format').onclick=()=>grid.format(null);
   $('sheet-zoom').onchange=e=>table.style.zoom=Number(e.target.value.replace('%',''))/100;$('sheet-add-column').onclick=()=>columnDialog('add');$('sheet-add-row').onclick=addRow;$('sheet-save').onclick=save;$('sheet-filter-toggle').onclick=()=>setFiltersVisible($('sheet-filters').hidden);
-  $('sheet-value').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();grid.setValue(e.target.value);grid.focus();}if(e.key==='Escape'){e.preventDefault();grid.focus();}};
+  let formulaTarget=null;
+  $('sheet-value').onfocus=()=>{const position=grid.selection().active,row=visible()[position.r];formulaTarget=row?{position,key:key(row)}:null;};
+  function commitFormula(){const target=formulaTarget;formulaTarget=null;if(target&&visible()[target.position.r]&&key(visible()[target.position.r])===target.key)grid.setValue($('sheet-value').value,target.position);}
+  $('sheet-value').onchange=commitFormula;
+  $('sheet-value').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commitFormula();grid.focus();}if(e.key==='Escape'){e.preventDefault();formulaTarget=null;grid.focus();}};
   $('sheet-clear-filters').onclick=()=>{filterRules={};sort={};$('sheet-search').value='';applyFilters();};$('sheet-search').oninput=applyFilters;
   $('sheet-dealer').onchange=()=>{$('sheet-market').value='';$('sheet-store').value='';load();};$('sheet-market').onchange=()=>{$('sheet-store').value='';load();};$('sheet-store').onchange=load;
-  $('sheet-apply-period').onclick=()=>{if(drafts.size){message('Save or discard your edits before changing the period.',true);return;}const from=$('sheet-from').value,to=$('sheet-to').value;if(!from||!to||from>to||to>today){message('Choose a valid period ending today or earlier.',true);return;}start=from;end=to;load();};
-  $('sheet-today').onclick=()=>{$('sheet-from').value=today;$('sheet-to').value=today;$('sheet-apply-period').click();};$('sheet-month').onclick=()=>{$('sheet-from').value=today.slice(0,8)+'01';$('sheet-to').value=today;$('sheet-apply-period').click();};
+  async function changePeriod(from,to){
+    const limit=data?.today||today;
+    if(!from||!to||!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to||to>limit||(new Date(to)-new Date(from))/86400000>366){message('Choose a valid period of up to 367 days ending today or earlier.',true);return false;}
+    if(!await save())return false;
+    const previous=[start,end];start=from;end=to;rememberPeriod();const loaded=await load();if(!loaded){[start,end]=previous;rememberPeriod();grid.refresh();}return loaded;
+  }
+  $('sheet-apply-period').onclick=()=>changePeriod($('sheet-from').value,$('sheet-to').value);
+  $('sheet-today').onclick=()=>changePeriod(today,today);
+  $('sheet-month').onclick=()=>changePeriod(today.slice(0,8)+'01',today);
+  $('sheet-period-button').onclick=chooseDates;
   $('sheet-prev').onclick=()=>{page--;render();};$('sheet-next').onclick=()=>{page++;render();};
   async function enter(person){user=person;if(user.rest_mode){location.assign('/internal');return;}$('sheet-login').hidden=true;root.hidden=false;$('sheet-account').textContent=(person.display_name||person.username||'U').slice(0,1).toUpperCase();await load();}
-  $('sheet-account').onclick=async()=>{if(drafts.size){message('Save or discard your edits before signing out.',true);return;}await api('logout','POST',{});location.reload();};
+  $('sheet-account').onclick=async()=>{if(!await save())return;await api('logout','POST',{});location.reload();};
   $('sheet-login-form').onsubmit=async e=>{e.preventDefault();const submit=e.target.querySelector('button[type=submit]');submit.disabled=true;try{const result=await api('login','POST',{username:$('sheet-username').value.trim(),password:$('sheet-password').value});$('sheet-password').value='';await enter(result.user);}catch(error){$('sheet-login-error').textContent=error.message;}finally{submit.disabled=false;}};
-  window.addEventListener('beforeunload',e=>{if(drafts.size){e.preventDefault();e.returnValue='';}});
+  window.addEventListener('beforeunload',e=>{if(drafts.size||grid.isEditing()){e.preventDefault();e.returnValue='';}});
   api('me').then(result=>enter(result.user)).catch(()=>{$('sheet-login').hidden=false;});
 })();

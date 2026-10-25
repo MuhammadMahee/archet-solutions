@@ -162,6 +162,45 @@ def test_endpoints_auth_and_sync_admin_only(client, monkeypatch):
     assert write(client, 'store-hours/review', {}).json['revision'] == 2
 
 
+def test_autosave_response_is_authenticated_and_returns_canonical_row(client, monkeypatch):
+    assert write(client, 'store-hours/review', {'include_row': True}).status_code == 401
+    login(client, 'Member')
+    def save(payload, user_id, include_row=False):
+        assert include_row is True
+        return {'revision': 3, 'row': {'revision': 3, 'opening_time': '10:00:00'}}
+    monkeypatch.setattr(sh, 'save_review', save)
+    result = write(client, 'store-hours/review', {'include_row': True})
+    assert result.json == {'status':'saved', 'revision':3, 'row':{'revision':3, 'opening_time':'10:00:00'}}
+
+
+def test_autosave_canonical_row_restores_schedule_and_rejects_stale_revision(monkeypatch):
+    from api.portal import PortalError
+    roster = dict(dealer='Connect', store_id='1', store='Test store', market='HOUSTON',
+                  schedules={'weekday': {'opening_time':'10:00:00', 'closing_time':'20:00:00'}})
+    reviews = []
+    class DB:
+        def transaction(self): return nullcontext()
+        def execute(self, sql, args):
+            if 'insert into public.store_hours_employee_reviews' in sql:
+                dealer, sid, day, key, opening, closing, cin, cout, user, revision, overrides, custom, formats = args
+                reviews[:] = [dict(dealer=dealer, store_id=sid, report_date=day, employee_key=key,
+                                  opening_time=opening, closing_time=closing, camera_in=cin, camera_out=cout,
+                                  revision=revision, cell_overrides=overrides.obj)]
+                return SimpleNamespace(fetchone=lambda: {'revision': revision})
+    monkeypatch.setattr(sh, 'connect', lambda: nullcontext(DB()))
+    monkeypatch.setattr(sh, 'roster_with_schedules', lambda conn: [roster])
+    monkeypatch.setattr(sh, 'store_day_rows', lambda conn, store, day: sh.build_rows([store], [], reviews, [], day, day))
+    payload = dict(dealer='Connect', store_id='1', date=DAY.isoformat(), revision=0, camera_in='10:06')
+    result = sh.save_review(payload, 'test-user', include_row=True)
+    assert result['revision'] == result['row']['revision'] == 1
+    assert result['row']['opening_time'] == '10:00:00'
+    assert result['row']['source_values']['opening_status'] == 'Late'
+    assert result['row']['chargeback'] == -10
+    assert not result['row']['schedule_overrides']['opening_time']
+    with pytest.raises(PortalError, match='Someone updated'):
+        sh.save_review(payload, 'test-user', include_row=True)
+
+
 @pytest.mark.parametrize('changes', [dict(date='bad'), dict(date='2999-01-01'), dict(camera_in='25:00'), dict(revision=-1), dict(camera_in='10:00+03:00')])
 def test_invalid_review_input_rejected_before_database(changes):
     from api.portal import PortalError

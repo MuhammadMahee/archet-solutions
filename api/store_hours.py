@@ -540,7 +540,7 @@ def lock_store_day(conn, dealer, sid, day):
                  (json.dumps([dealer, sid, day.isoformat()]),))
 
 
-def save_review(payload, user_id):
+def save_review(payload, user_id, include_row=False):
     if any(field in payload and not isinstance(payload[field], dict) for field in ('custom_cells','cell_formats')):
         raise PortalError('Choose valid spreadsheet cells and formats.')
     dealer, sid, day = review_identity({**payload, 'date': payload.get('source_date', payload.get('date'))})
@@ -594,7 +594,9 @@ def save_review(payload, user_id):
                 updated_by=excluded.updated_by,updated_at=now(),revision=excluded.revision,
                 cell_overrides=excluded.cell_overrides,custom_cells=excluded.custom_cells,cell_formats=excluded.cell_formats returning revision''',
                 (dealer, sid, day, key, *(times[k] for k in TIME_FIELDS), user_id, revision + 1, Jsonb(overrides),Jsonb(custom_cells),Jsonb(cell_formats))).fetchone()
-    return result['revision']
+            if include_row:
+                result['row'] = next(r for r in store_day_rows(conn, store, day) if r['employee_key'] == key)
+    return result if include_row else result['revision']
 
 
 def add_manual_employee(payload, user_id):
@@ -738,7 +740,10 @@ def register_store_hours(app):
     @app.post('/api/internal/store-hours/review')
     @require_user()
     def review_report():
-        return jsonify(status='saved', revision=save_review(body(), g.portal_user['id']))
+        payload = body()
+        if payload.get('include_row') is True:
+            return jsonify(status='saved', **save_review(payload, g.portal_user['id'], include_row=True))
+        return jsonify(status='saved', revision=save_review(payload, g.portal_user['id']))
 
     @app.post('/api/internal/store-hours/employees')
     @require_user()

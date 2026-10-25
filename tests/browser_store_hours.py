@@ -61,14 +61,14 @@ def main(grid_check=None, spreadsheet=False):
         if request.args.get('store'): rows = [r for r in rows if r['dealer']+':'+r['store_id'] == request.args['store']]
         return dict(rows=rows, start=start.isoformat(), end=end.isoformat(), today='2026-10-20', earliest='2026-10-01',
                     dealers=sorted({s['dealer'] for s in directory}), directory=directory, manual_store_count=2, markets=markets, stores=stores, updated_at=None, coverage={'complete': 2, 'expected': 2, 'errors': []})
-    def save(payload, user_id):
+    def save(payload, user_id, include_row=False):
         row = deepcopy(payload)
         row.update(sh.evaluate(row))
         row.update(row.get('cell_overrides', {}))
         row['revision'] += 1
         versions.append(dict(id=str(len(versions)+1),transaction_id='1',recorded_at='2026-10-23T12:00:00+00:00',kind='review',operation='UPDATE',dealer=row['dealer'],store_id=row['store_id'],store='STORE ONE',market='HOUSTON',report_date=row['date'],employee='Closing Employee',actor_name='Mahee (@Mahee)',before_data=saved.get(row_key(row),dict(camera_in=None,camera_out=None,opening_time=None,closing_time=None,revision=0)),after_data=deepcopy(row)))
         saved[row_key(row)] = row
-        return row['revision']
+        return {'revision':row['revision'],'row':deepcopy(row)} if include_row else row['revision']
     def add_employee(payload,user_id):
         key=sh.employee_key(payload['employee'])
         if any(m['dealer']==payload['dealer'] and m['store_id']==payload['store_id'] and m['report_date'].isoformat()==payload['date'] and m['employee_key']==key for m in manual):
