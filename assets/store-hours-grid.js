@@ -10,6 +10,18 @@ window.createStoreHoursGrid = function(api) {
   const timeColumns=[...fields,'rt_clockin','rt_clockout'];
   const cell=(r,c)=>table.tBodies[0]?.rows[r]?.cells[c+offset];
   const value=(r,c)=>api.rows()[r]?.[columns[c][0]]??null;
+  const selectionOutline=document.createElement('div');selectionOutline.className='sh-selection-outline';selectionOutline.hidden=true;selectionOutline.setAttribute('aria-hidden','true');
+  if(api.animateSelection){table.classList.add('sh-animated-selection');table.parentElement.append(selectionOutline);}
+  function drawSelection(){
+    if(!api.animateSelection)return;
+    const target=cell(active.r,active.c);
+    if(!target||editor||!signature){selectionOutline.hidden=true;return;}
+    const wrap=table.parentElement,rect=target.getBoundingClientRect(),viewport=wrap.getBoundingClientRect(),initial=selectionOutline.hidden;
+    if(initial)selectionOutline.style.transition='none';
+    Object.assign(selectionOutline.style,{transform:`translate3d(${rect.left-viewport.left+wrap.scrollLeft-wrap.clientLeft}px,${rect.top-viewport.top+wrap.scrollTop-wrap.clientTop}px,0)`,width:rect.width+'px',height:rect.height+'px'});
+    selectionOutline.hidden=false;
+    if(initial){selectionOutline.getBoundingClientRect();selectionOutline.style.transition='';}
+  }
   const clipOutline=document.createElement('div');clipOutline.className='sh-clipboard-outline';clipOutline.hidden=true;clipOutline.setAttribute('aria-hidden','true');table.parentElement.append(clipOutline);
   function clearClipboard(){clipboardRange=null;clipOutline.hidden=true;}
   function drawClipboard(){
@@ -54,6 +66,7 @@ window.createStoreHoursGrid = function(api) {
     const target=rows.length?cell(active.r,active.c):null;
     if(paintedActive!==target){if(paintedActive?.isConnected){paintedActive.classList.remove('sh-cell-active');paintedActive.tabIndex=-1;}if(target){target.classList.add('sh-cell-active');target.tabIndex=0;}}
     painted=next;paintedActive=target;
+    if(api.animateSelection)table.dataset.singleSelection=String(points.length===1);
     if(offset){[...table.tHead.rows[0].cells].forEach((th,c)=>th.classList.toggle('sh-heading-selected',boxes.some(b=>c-offset>=b.left&&c-offset<=b.right)));[...table.tBodies[0].rows].forEach((tr,r)=>tr.cells[0].classList.toggle('sh-heading-selected',boxes.some(b=>r>=b.top&&r<=b.bottom)));}
     rangeInput.value=rows.length?boxes.map(rangeLabel).join(', '):'';
     status.textContent=rows.length?`${points.length} cell(s) in ${boxes.length} range(s) / ${columns[active.c][1]} / ${writable(active.c)?'Editable':'Read only'} / Current page`:'No cells in this selection';
@@ -68,14 +81,14 @@ window.createStoreHoursGrid = function(api) {
       if(rect.left<viewport.left+gutter)wrap.scrollLeft-=viewport.left+gutter-rect.left;
       else if(rect.right>viewport.left+wrap.clientWidth)wrap.scrollLeft+=rect.right-viewport.left-wrap.clientWidth;
     }
-    drawClipboard();
+    drawClipboard();drawSelection();
   }
   function select(r,c,extend=false,add=false){if(!api.rows().length)return;if(add&&extraRanges.length<49)extraRanges.push(bounds());else if(!extend)extraRanges=[];active=clamp({r,c});if(!extend||add)anchor={...active};paint(true);}
   function resetHistory(){undo=[];redo=[];toolbar.querySelector('[data-grid=undo]').disabled=true;toolbar.querySelector('[data-grid=redo]').disabled=true;}
-  function reset(){clearClipboard();rangeInput.disabled=true;generation++;cancelEdit();if(dialog.open)dialog.close();content.replaceChildren();title.textContent='';resetHistory();signature='';extraRanges=[];anchor=active={r:0,c:0};welcome.hidden=true;}
+  function reset(){clearClipboard();selectionOutline.hidden=true;rangeInput.disabled=true;generation++;cancelEdit();if(dialog.open)dialog.close();content.replaceChildren();title.textContent='';resetHistory();signature='';extraRanges=[];anchor=active={r:0,c:0};welcome.hidden=true;}
   function refresh(){
     width=columns.length;const rows=api.rows();rangeInput.disabled=!rows.length;const next=JSON.stringify([api.editing(),columns.map(c=>c[0]),rows.map(api.key)]);
-    if(next!==signature){clearClipboard();generation++;cancelEdit();resetHistory();extraRanges=[];anchor={r:0,c:0};active={...anchor};signature=next;}
+    if(next!==signature){clearClipboard();selectionOutline.hidden=true;generation++;cancelEdit();resetHistory();extraRanges=[];anchor={r:0,c:0};active={...anchor};signature=next;}
     table.setAttribute('role','grid');table.setAttribute('aria-label','Opening and closing spreadsheet');table.setAttribute('aria-multiselectable','true');
     table.setAttribute('aria-rowcount',String(rows.length+1));table.setAttribute('aria-colcount',String(width));
     [...table.tHead.rows[0].cells].forEach((th,index)=>{const c=index-offset;if(c<0||c>=width)return;th.setAttribute('role','columnheader');const tag=document.createElement('span');tag.className='sh-column-letter';tag.textContent=letter(c);th.querySelector('.sh-column-letter')?.remove();th.prepend(tag);});
@@ -155,10 +168,11 @@ window.createStoreHoursGrid = function(api) {
     cancelEdit();const pos={...active},td=cell(pos.r,pos.c);if(!td)return;
     const input=document.createElement('input');input.type='text';input.className='sh-cell-editor';input.setAttribute('aria-label','Edit '+address(pos));const field=columns[pos.c][0],original=value(pos.r,pos.c);input.value=initial??(timeColumns.includes(field)&&typeof original==='string'&&original.includes('T')?original.split('T')[1]:original)??'';input.placeholder=timeColumns.includes(field)?'9:02 AM':field==='date'?'YYYY-MM-DD':'Enter value';input.spellcheck=false;editor=input;td.append(input);input.focus();if(initial===undefined)input.select();
     let closing=false;
-    const finish=(all=false)=>{if(closing||editor!==input)return true;let changes;try{changes=(all?selected().filter(x=>writable(x.c)):[pos]).map(x=>({...x,value:parseCell(x.r,x.c,input.value)}));}catch(e){notice(e.message,true);input.setAttribute('aria-invalid','true');return false;}closing=true;cancelEdit();commit(changes,'Edit');return true;};
+    const finish=(all=false)=>{if(closing||editor!==input)return true;let changes;try{changes=(all?selected().filter(x=>writable(x.c)):[pos]).map(x=>({...x,value:parseCell(x.r,x.c,input.value)}));}catch(e){notice(e.message,true);input.setAttribute('aria-invalid','true');return false;}closing=true;cancelEdit();commit(changes,'Edit');drawSelection();return true;};
     finishEditor=finish;
     input.onkeydown=e=>{e.stopPropagation();const ctrl=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();if(e.key==='Escape'){e.preventDefault();closing=true;cancelEdit();paint(true);}else if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();if(finish(ctrl&&e.key==='Enter')&&!ctrl)move(e.key,e.shiftKey,false);}else if((ctrl&&['s','d','r','e','g','f'].includes(k))||['F8','F1'].includes(e.key)){e.preventDefault();if(finish())command(e.key==='F8'?'commands':e.key==='F1'?'tutorial':({s:'save',d:'down',r:'right',e:'flash',g:'goto',f:'find'})[k]);}};
     input.onblur=()=>{if(!finish()&&editor===input)input.focus();};
+    drawSelection();
   }
   function move(key,shift,extend){
     let {r,c}=active;if(key==='ArrowLeft')c--;if(key==='ArrowRight')c++;if(key==='ArrowUp')r--;if(key==='ArrowDown')r++;
@@ -234,7 +248,7 @@ window.createStoreHoursGrid = function(api) {
     ['Save your work','The dedicated spreadsheet autosaves after you finish an edit; check the AutoSave status before closing. Ctrl+S saves immediately. The portal form still uses Save changes. Undo covers the last 100 operations; reload, filter, and page changes reset it. A page refresh or sign-out discards unsaved drafts. Version history permanently records saved changes; undo never removes a saved version.','F8 opens the command menu instead of Excel’s Alt ribbon. For example, F8 then D fills down; F8 then S saves. Use Tutorial or F1 to reopen this guide. On Mac, Command can replace Ctrl.']
   ];
   function tutorial(step){tutorialStep=step;openDialog('tutorial',`Quick start · ${step+1} of ${lessons.length}`);const [heading,body,detail]=lessons[step];const h=document.createElement('h3');h.textContent=heading;content.append(h);for(const text of [body,detail]){const p=document.createElement('p');p.textContent=text;content.append(p);}
-    if(step===4){const list=document.createElement('dl');list.className='sh-shortcut-guide';[['Arrows / Shift+arrows','Move / extend selection'],['Tab / Shift+Tab','Next / previous cell'],['Enter / Shift+Enter','Move down / up'],['Home / End','First / last column'],['Ctrl+Home / Ctrl+End','First / last cell on this page'],['Ctrl+arrows','Jump to page edges; add Shift to extend'],['Shift+Space','Select entire row(s)'],['Ctrl+Space','Select entire column(s) on this page'],['Page Up / Page Down','Move ten rows'],['Ctrl+A','Select current page'],['Ctrl+G','Go to cell or range'],['Ctrl+F','Search employees and stores'],['F2 / Escape','Edit / cancel'],...commands.slice(0,10).map(x=>[x[2],x[1]])].forEach(([key,description])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=description;list.append(dt,dd);});content.append(list);}
+    if(step===4){const list=document.createElement('dl');list.className='sh-shortcut-guide';[['Arrows / Shift+arrows','Move / extend selection'],['Tab / Shift+Tab','Next / previous cell'],['Enter / Shift+Enter','Move down / up'],['Home / End','First / last column'],['Ctrl+Home / Ctrl+End','First / last cell on this page'],['Ctrl+arrows','Jump to page edges; add Shift to extend'],['Shift+Space','Select entire row(s)'],['Ctrl+Space','Select entire column(s) on this page'],['Page Up / Page Down','Move ten rows'],['Ctrl+A','Select current page'],['Ctrl+G','Go to cell or range'],['Ctrl+F','Search employees and stores'],['F2 / Escape','Edit / cancel'],...(api.animateSelection?[['Ctrl++ / Ctrl+=','Add a custom column'],['Ctrl+-','Delete the active custom column; default columns are protected']]:[]),...commands.slice(0,10).map(x=>[x[2],x[1]])].forEach(([key,description])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=description;list.append(dt,dd);});content.append(list);}
     const footer=document.createElement('div');footer.className='sh-tutorial-footer';const back=document.createElement('button');back.type='button';back.className='sh-button';back.textContent='Back';back.disabled=!step;back.onclick=()=>tutorial(step-1);const next=document.createElement('button');next.type='button';next.className='sh-button sh-primary';next.id='sh-tutorial-next';next.textContent=step===4?'Start working':'Next';next.onclick=()=>{if(step===4){markSeen();dialog.close();}else tutorial(step+1);};footer.append(back,next);content.append(footer);next.focus();
   }
   root.addEventListener('click',e=>{const button=e.target.closest('[data-grid]');if(button)command(button.dataset.grid);});
@@ -264,6 +278,8 @@ window.createStoreHoursGrid = function(api) {
     if(e.key==='F2'){e.preventDefault();beginEdit();return;}
     if(e.key.length===1&&!ctrl&&!e.altKey){e.preventDefault();beginEdit(e.key);}
   });
-  window.addEventListener('resize',drawClipboard);
-  return {refresh,reset,resetHistory,isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
+  const layoutChanged=()=>{drawClipboard();drawSelection();};
+  window.addEventListener('resize',layoutChanged);
+  if(api.animateSelection){const observer=new ResizeObserver(layoutChanged);observer.observe(table);observer.observe(table.parentElement);}
+  return {refresh,reset,resetHistory,layout:layoutChanged,selectCell:(r,c)=>select(r,c),isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
 };
