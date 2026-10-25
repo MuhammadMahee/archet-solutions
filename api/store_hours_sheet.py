@@ -11,7 +11,9 @@ from psycopg.types.json import Jsonb
 from api.portal import PortalError, body, require_user
 
 NUMBER_FORMATS = {'auto','text','number','currency','percent','date','time'}
-FORMAT_KEYS = {'bold','italic','underline','color','background','align','wrap','font_size','number_format'}
+FONT_FAMILIES = {'Arial','Calibri','Aptos','Cambria','Times New Roman','Georgia','Verdana','Tahoma','Trebuchet MS','Segoe UI','Courier New','Consolas'}
+BORDER_STYLES = {'none','thin','medium','thick','dashed','dotted','double'}
+FORMAT_KEYS = {'bold','italic','underline','color','background','align','wrap','font_size','font_family','borders','number_format'}
 
 
 def settings(conn, lock=False):
@@ -32,6 +34,15 @@ def validate_format(value):
             valid = item in ('left','center','right')
         elif key=='font_size':
             valid = type(item) is int and 8 <= item <= 28
+        elif key=='font_family':
+            valid = isinstance(item,str) and item in FONT_FAMILIES
+        elif key=='borders':
+            valid = isinstance(item,dict) and not set(item)-{'top','bottom','left','right'}
+            if valid:
+                valid = all(isinstance(side,dict) and set(side)=={'style','color'}
+                            and isinstance(side['style'],str) and side['style'] in BORDER_STYLES
+                            and isinstance(side['color'],str) and re.fullmatch(r'#[0-9a-fA-F]{6}',side['color'])
+                            for side in item.values())
         elif key=='number_format':
             valid = isinstance(item,str) and item in NUMBER_FORMATS
         if not valid:
@@ -168,9 +179,9 @@ def report():
 
 def format_excel_cell(cell, value, fmt):
     from copy import copy
-    from openpyxl.styles import PatternFill, Alignment
+    from openpyxl.styles import PatternFill, Alignment, Side
     font=copy(cell.font)
-    for key,attr in [('bold','bold'),('italic','italic'),('font_size','size')]:
+    for key,attr in [('bold','bold'),('italic','italic'),('font_size','size'),('font_family','name')]:
         if key in fmt:
             setattr(font,attr,fmt[key])
     if 'underline' in fmt:
@@ -178,6 +189,11 @@ def format_excel_cell(cell, value, fmt):
     if 'color' in fmt:
         font.color=fmt['color'][1:]
     cell.font=font
+    if 'borders' in fmt:
+        border=copy(cell.border)
+        for side,value_style in fmt['borders'].items():
+            setattr(border,side,Side(style=None if value_style['style']=='none' else value_style['style'],color=value_style['color'][1:]))
+        cell.border=border
     if 'background' in fmt:
         cell.fill=PatternFill('solid',fgColor=fmt['background'][1:])
     cell.alignment=Alignment(horizontal=fmt.get('align'),wrap_text=fmt.get('wrap',False))

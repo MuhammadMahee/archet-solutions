@@ -59,7 +59,7 @@
         const state=isHead?'':tone(key,row[key]);
         const fill=isHead?theme[0]:({good:'#c6efce',bad:'#ffc7ce',wait:'#fff2d5'}[state]||(n%2?'#f7fafc':'#fff'));
         raised(x+4,y+5,widths[i]-8,h-10,fill,isHead);
-        label(isHead?heading.toUpperCase():text(key,row[key]),x,y,widths[i],h,isHead?17:19,isHead?'#fff':state==='missing'||state==='bad'?'#ad1d32':'#16354a',i===2&&!isHead?'left':'center');
+        label(isHead?heading.toUpperCase():text(key,key==='employee'?String(row[key]??'').toUpperCase():row[key]),x,y,widths[i],h,isHead?17:19,isHead?'#fff':state==='missing'||state==='bad'?'#ad1d32':'#16354a',i===2&&!isHead?'left':'center');
         x+=widths[i];
       });
     }

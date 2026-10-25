@@ -20,6 +20,7 @@
   function params(withFilters=true){const p=new URLSearchParams({start,end,dealer:$('sheet-dealer').value,market:$('sheet-market').value,store:$('sheet-store').value});if(withFilters){p.set('filters',JSON.stringify(filterRules));p.set('sort',JSON.stringify(sort));p.set('search',$('sheet-search').value.trim());}return p;}
   const rawText=value=>value==null?'':String(value);
   function formatted(field,value,format={}){
+    if(field==='employee')return rawText(value).toUpperCase();
     const type=format.number_format||data?.column_formats?.[field]||'auto',s=rawText(value);
     if(!s)return field.startsWith('custom_')?'':base.text(field,value);
     if(type==='text')return s;
@@ -68,6 +69,8 @@
     page=0;render();
   }
   function cellStyle(td,fmt){
+    if(fmt.font_family)td.style.fontFamily=`"${fmt.font_family}", Arial, sans-serif`;
+    for(const [side,border] of Object.entries(fmt.borders||{})){const style=border.style;td.style['border'+side[0].toUpperCase()+side.slice(1)]=style==='none'?'none':`${{thin:1,medium:2,thick:3,double:3,dashed:1,dotted:1}[style]}px ${['dashed','dotted','double'].includes(style)?style:'solid'} ${border.color}`;}
     if('bold' in fmt)td.style.fontWeight=fmt.bold?'700':'400';if('italic' in fmt)td.style.fontStyle=fmt.italic?'italic':'normal';if('underline' in fmt)td.style.textDecoration=fmt.underline?'underline':'none';
     if(fmt.color)td.style.color=fmt.color;if(fmt.background)td.style.backgroundColor=fmt.background;if(fmt.align)td.style.textAlign=fmt.align;
     if(fmt.font_size)td.style.fontSize=fmt.font_size+'pt';if(fmt.wrap){td.style.whiteSpace='pre-wrap';td.style.overflowWrap='anywhere';}
@@ -125,6 +128,7 @@
     if(document.activeElement!==$('sheet-value'))$('sheet-value').value=rawText(row?.[field]);$('sheet-value-label').textContent=columns[active.c]?.[1]||'';
     $('sheet-selection-status').textContent=cells.length>1?`${cells.length} cells selected`:address;
     document.querySelectorAll('[data-format]').forEach(button=>button.setAttribute('aria-pressed',String(!!fmt[button.dataset.format])));
+    $('sheet-font-family').value=fmt.font_family||'Arial';
     $('sheet-number-format').value=fmt.number_format||data?.column_formats?.[field]||'auto';$('sheet-font-size').value=fmt.font_size||10;$('sheet-align').value=fmt.align||'left';$('sheet-text-color').value=fmt.color||'#202124';$('sheet-fill-color').value=fmt.background||'#ffffff';
   }
   grid=window.createStoreHoursGrid({root,table,columns,fields,gutter:true,autosave:true,moveOnPaste:true,animateSelection:true,text:(k,v)=>formatted(k,v),key,message,rows:visible,editing:()=>true,busy:()=>loading,user:()=>user?.id||'',today:()=>data?.today||today,
@@ -145,6 +149,15 @@
   function inputLabel(text,parent,type='text',value=''){const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.type=type;input.value=value;label.append(input);parent.append(label);return input;}
   function selectLabel(text,parent,options,value){const label=document.createElement('label');label.textContent=text;const select=document.createElement('select');select.setAttribute('aria-label',text);for(const [v,t] of options)select.add(new Option(t,v));select.value=value||options[0][0];label.append(select);parent.append(label);return select;}
   function paragraph(text,parent){const p=document.createElement('p');p.textContent=text;parent.append(p);return p;}
+  function borderDialog(){
+    if(!rows.length||loading)return;
+    const content=openDialog('Cell borders');
+    const style=selectLabel('Line style',content,[['thin','Thin'],['medium','Medium'],['thick','Thick'],['dashed','Dashed'],['dotted','Dotted'],['double','Double']],'thin');
+    const color=inputLabel('Border color',content,'color','#202124');
+    paragraph('Apply borders to the selected cells. Outer and inner borders follow each selected range.',content);
+    const choices=document.createElement('div');choices.className='sheet-border-choices';content.append(choices);
+    for(const [mode,label] of [['all','All borders'],['outer','Outer borders'],['inner','Inner borders'],['horizontal','Horizontal borders'],['vertical','Vertical borders'],['top','Top border'],['bottom','Bottom border'],['left','Left border'],['right','Right border'],['none','No borders']])button(label,()=>{grid.borders(mode,{style:style.value,color:color.value});$('sheet-dialog').close();grid.focus();},choices);
+  }
   function chooseDates(){
     const content=openDialog('Choose report dates'),limit=data?.today||today;
     const mode=selectLabel('Selection',content,[['day','Single day'],['range','Date range']],start===end?'day':'range');
@@ -212,9 +225,9 @@
     Edit:[['Undo',()=>grid.command('undo'),'Ctrl+Z'],['Redo',()=>grid.command('redo'),'Ctrl+Y'],['Delete selected column',()=>columnDialog('delete',columns[grid.selection().active.c]?.[0]),'Ctrl+-'],['Copy',()=>grid.command('copy'),'Ctrl+C'],['Paste',()=>grid.command('paste'),'Ctrl+V'],['Fill down',()=>grid.command('down'),'Ctrl+D'],['Fill right',()=>grid.command('right'),'Ctrl+R'],['Use source/default',()=>grid.command('reset'),'F8 → U'],['Discard unsaved edits',()=>{if(saving){message('Wait for the current save to finish.',true);return;}clearTimeout(autosaveTimer);drafts.clear();saveFailed=false;load();}]],
     View:[['Report filters',()=>setFiltersVisible($('sheet-filters').hidden)],['Version history',()=>historyPanel.open()],['Go to cell / range',()=>grid.command('goto'),'Ctrl+G']],
     Insert:[['Custom column',()=>columnDialog('add'),'Ctrl++'],['Employee row',addRow]],
-    Format:[['Bold',()=>toggleFormat('bold')],['Italic',()=>toggleFormat('italic')],['Underline',()=>toggleFormat('underline')],['Wrap text',()=>toggleFormat('wrap')],['Clear formatting',()=>grid.format(null)]],
+    Format:[['Bold',()=>toggleFormat('bold')],['Italic',()=>toggleFormat('italic')],['Underline',()=>toggleFormat('underline')],['Wrap text',()=>toggleFormat('wrap')],['Borders',borderDialog],['Clear formatting',()=>grid.format(null)]],
     Data:[['Filter selected column',()=>columnMenu(columns[grid.selection().active.c][0])],['Clear all column filters',()=>{filterRules={};sort={};applyFilters();}],['Sync RT-POS sources',sync,'Admin'],['Upload store schedules',()=>location.assign('/internal#storehours')]],
-    Help:[['Spreadsheet tutorial',()=>grid.command('tutorial'),'F1'],['Keyboard commands',()=>grid.command('commands'),'F8'],['Custom columns & formatting',()=>{const content=openDialog('Working with your spreadsheet');paragraph('Use + Column to add a shared custom column. Each column heading opens filters, sorting, rename, and delete. Default report columns cannot be deleted. Removed custom columns and their saved values remain in version history.',content);paragraph('Select cells or a range, then choose bold, colors, alignment, wrapping, font size, or number formats. Formatting changes display only; the cell-value bar always shows the underlying value. Custom cell values are plain data; formulas are not evaluated.',content);paragraph('Filters apply to all loaded rows in your selected period. Editing and formatting apply to the current page of up to 100 rows. Edits autosave after you finish typing. Exports, syncs, and date changes wait for saving to finish. Column changes save immediately for everyone. Excel includes all filtered rows and active custom columns with their saved formats.',content);}]]
+    Help:[['Spreadsheet tutorial',()=>grid.command('tutorial'),'F1'],['Keyboard commands',()=>grid.command('commands'),'F8'],['Custom columns & formatting',()=>{const content=openDialog('Working with your spreadsheet');paragraph('Use + Column to add a shared custom column. Each column heading opens filters, sorting, rename, and delete. Default report columns cannot be deleted. Removed custom columns and their saved values remain in version history.',content);paragraph('Select cells or a range, then choose a font family, bold, colors, alignment, wrapping, font size, borders, or number formats. Employee names display in uppercase, including clipboard copies and exports. Formatting changes display only; the cell-value bar always shows the underlying value. Custom cell values are plain data; formulas are not evaluated.',content);paragraph('Filters apply to all loaded rows in your selected period. Editing and formatting apply to the current page of up to 100 rows. Edits autosave after you finish typing. Exports, syncs, and date changes wait for saving to finish. Column changes save immediately for everyone. Excel includes all filtered rows and active custom columns with their saved formats.',content);}]]
   };
   for(const [name,items] of Object.entries(menus)){const trigger=button(name,e=>{const was=trigger.getAttribute('aria-expanded')==='true';closeMenu();if(was)return;trigger.setAttribute('aria-expanded','true');popup=document.createElement('div');popup.className='sheet-menu-popup';popup.setAttribute('role','menu');for(const [label,action,shortcut] of items){const b=button(label,()=>{closeMenu();action();},popup);b.setAttribute('role','menuitem');if(shortcut){const small=document.createElement('small');small.textContent=shortcut;b.append(small);}if(label==='Sync RT-POS sources')b.disabled=user?.role!=='admin';}document.body.append(popup);const box=trigger.getBoundingClientRect();popup.style.left=Math.min(box.left,innerWidth-popup.offsetWidth-8)+'px';popup.style.top=box.bottom+3+'px';popup.querySelector('button')?.focus();},$('sheet-menu'));trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');}
   document.addEventListener('pointerdown',e=>{if(popup&&!popup.contains(e.target)&&!$('sheet-menu').contains(e.target))closeMenu();});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();if(popup&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const buttons=[...popup.querySelectorAll('button:not(:disabled)')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}});
@@ -227,6 +240,7 @@
   },true);
   root.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&e.target.closest('td[data-grid-row]')&&!e.target.closest('input')){const format={b:'bold',i:'italic',u:'underline'}[e.key.toLowerCase()];if(format){e.preventDefault();e.stopPropagation();toggleFormat(format);}}},true);
   document.querySelectorAll('[data-format]').forEach(b=>b.onclick=()=>toggleFormat(b.dataset.format));document.querySelectorAll('[data-command]').forEach(b=>b.onclick=()=>grid.command(b.dataset.command));
+  $('sheet-font-family').onchange=e=>grid.format({font_family:e.target.value});$('sheet-borders').onclick=borderDialog;
   $('sheet-number-format').onchange=e=>grid.format({number_format:e.target.value});$('sheet-font-size').onchange=e=>grid.format({font_size:Number(e.target.value)});$('sheet-align').onchange=e=>grid.format({align:e.target.value});$('sheet-text-color').onchange=e=>grid.format({color:e.target.value});$('sheet-fill-color').onchange=e=>grid.format({background:e.target.value});$('sheet-clear-format').onclick=()=>grid.format(null);
   $('sheet-zoom').onchange=e=>{table.style.zoom=Number(e.target.value.replace('%',''))/100;grid.layout();};$('sheet-add-column').onclick=()=>columnDialog('add');$('sheet-add-row').onclick=addRow;$('sheet-save').onclick=save;$('sheet-filter-toggle').onclick=()=>setFiltersVisible($('sheet-filters').hidden);
   let formulaTarget=null;

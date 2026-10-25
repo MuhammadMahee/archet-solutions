@@ -98,3 +98,34 @@ def test_custom_cells_excel_values_and_formats_are_safe():
     assert text.fill.fgColor.rgb=='00ffeeaa'
     assert amount.value==12.5 and amount.number_format=='$#,##0.00;[Red]-$#,##0.00'
     assert book.active.auto_filter.ref=='A2:P6'
+
+
+@pytest.mark.parametrize('fmt',[
+    {'font_family':'Unknown font'}, {'font_family':[]}, {'borders':[]},
+    {'borders':{'diagonal':{'style':'thin','color':'#123456'}}},
+    {'borders':{'left':{'style':'solid','color':'#123456'}}},
+    {'borders':{'left':{'style':'thin','color':'red'}}},
+    {'borders':{'left':{'style':'thin'}}},
+    {'borders':{'left':{'style':[],'color':'#123456'}}},
+])
+def test_font_and_border_validation(fmt):
+    with pytest.raises(PortalError):
+        sheet.validate_format(fmt)
+
+
+def test_fonts_borders_uppercase_export_and_original_names():
+    for font in sheet.FONT_FAMILIES:
+        assert sheet.validate_format({'font_family':font})['font_family']==font
+    fmt=sheet.validate_format({'font_family':'Calibri','font_size':14,'borders':{
+        'top':{'style':'double','color':'#123456'},'left':{'style':'medium','color':'#654321'},
+        'bottom':{'style':'dashed','color':'#001122'},'right':{'style':'none','color':'#000000'}}})
+    rows=sample_rows();original=rows[0]['employee']
+    rows[0]['cell_formats']={'employee':{**fmt,'number_format':'text'}}
+    book=load_workbook(sh.excel_report(dict(rows=rows,columns=sh.COLUMNS,column_formats={},
+        start='2026-10-20',end='2026-10-20',updated_at=None,coverage={'complete':0,'expected':1})))
+    cell=book.active['D3']
+    assert cell.value==original.upper() and rows[0]['employee']==original
+    assert cell.font.name=='Calibri' and cell.font.sz==14
+    assert cell.border.top.style=='double' and cell.border.top.color.rgb=='00123456'
+    assert cell.border.left.style=='medium' and cell.border.bottom.style=='dashed'
+    assert cell.border.right.style is None

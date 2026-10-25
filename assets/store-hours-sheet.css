@@ -10,3 +10,5 @@
 #sh-table[role=grid].sh-animated-selection td[data-grid-row].sh-cell-active{outline-width:0}
 #sh-table.sh-animated-selection[data-single-selection=true] td.sh-cell-selected::before{border-width:0}
 @media(prefers-reduced-motion:reduce){.sh-selection-outline{transition:none!important}}
+
+.sheet-border-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}.sheet-border-choices button{border:1px solid #c7d9ca;text-align:left;padding:12px}#sheet-font-family{min-width:110px}#sheet-dialog-content input[type=color]{height:38px;padding:3px}

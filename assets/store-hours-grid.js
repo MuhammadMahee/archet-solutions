@@ -147,6 +147,16 @@ window.createStoreHoursGrid = function(api) {
     to.push(items);api.apply(items.map(x=>({...x,value:back?x.before:x.value,reset:back?!x.beforeManual:x.reset})));paint(true);notice((back?'Last sheet edit undone. ':'Sheet edit restored. ')+(api.autosave?'Autosave will save this change.':'Save to persist this change.'));
   }
   function selected(){const out=new Map();for(const b of ranges())for(let r=b.top;r<=b.bottom;r++)for(let c=b.left;c<=b.right;c++)out.set(`${r}:${c}`,{r,c});return [...out.values()];}
+  function borders(mode,line){
+    const points=selected(),included=new Set(points.map(p=>`${p.r}:${p.c}`));
+    const changes=points.map(p=>{const format=api.cellFormat(p.r,p.c),borders={...format.borders};
+      for(const [side,dr,dc] of [['top',-1,0],['bottom',1,0],['left',0,-1],['right',0,1]]){
+        const inside=included.has(`${p.r+dr}:${p.c+dc}`);
+        if(mode==='all'||mode==='none'||(mode==='outer'&&!inside)||(mode==='inner'&&inside)||(mode==='horizontal'&&!dc)||(mode==='vertical'&&!dr)||(mode===side&&!inside))borders[side]={...line,style:mode==='none'?'none':line.style};
+      }
+      return {...p,kind:'format',value:{...format,borders}};
+    });commit(changes,'Borders');
+  }
   function clearCells(){commit(selected().filter(x=>writable(x.c)).map(x=>({...x,value:columns[x.c][0]==='date'?value(x.r,x.c):null,reset:columns[x.c][0]==='date'})),'Clear');}
   function fill(direction){
     const changes=[];
@@ -281,5 +291,5 @@ window.createStoreHoursGrid = function(api) {
   const layoutChanged=()=>{drawClipboard();drawSelection();};
   window.addEventListener('resize',layoutChanged);
   if(api.animateSelection){const observer=new ResizeObserver(layoutChanged);observer.observe(table);observer.observe(table.parentElement);}
-  return {refresh,reset,resetHistory,layout:layoutChanged,selectCell:(r,c)=>select(r,c),isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
+  return {refresh,reset,resetHistory,borders,layout:layoutChanged,selectCell:(r,c)=>select(r,c),isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
 };

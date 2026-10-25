@@ -448,6 +448,8 @@ def report_data(start, end):
 
 
 def display_value(key, value):
+    if key == 'employee' and isinstance(value, str):
+        return value.upper()
     if key == 'chargeback':
         return 'Pending' if value is None else ('-' if value < 0 else '') + '$' + format(abs(value), '.2f').removesuffix('.00')
     if key in TIME_FIELDS or key in ('rt_clockin', 'rt_clockout'):
@@ -482,7 +484,7 @@ def excel_report(data):
                 cell.font = Font(color='C00000')
             if 'columns' in data:
                 from api.store_hours_sheet import format_excel_cell
-                format_excel_cell(cell, row.get(key), {**({'number_format':data['column_formats'][key]} if key in data.get('column_formats',{}) else {}), **(row.get('cell_formats') or {}).get(key,{})})
+                format_excel_cell(cell, display_value(key, row.get(key)) if key == 'employee' else row.get(key), {**({'number_format':data['column_formats'][key]} if key in data.get('column_formats',{}) else {}), **(row.get('cell_formats') or {}).get(key,{})})
     for row in sheet.iter_rows(min_row=1, max_row=2):
         for cell in row:
             cell.fill = PatternFill('solid', fgColor='203C66')

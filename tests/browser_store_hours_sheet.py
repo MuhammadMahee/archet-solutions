@@ -65,7 +65,7 @@ def check(page):
     page.get_by_label('Text contains',exact=True).fill('Closing')
     page.get_by_role('button',name='Apply filter',exact=True).click()
     expect(page.locator('#sheet-row-count')).to_contain_text('1 row')
-    expect(cell('D1')).to_have_text('Closing Employee')
+    expect(cell('D1')).to_have_text('CLOSING EMPLOYEE')
     expect(cell('O1')).to_have_text('Checked')
     page.get_by_role('button',name='File',exact=True).click()
     with page.expect_download() as download:
