@@ -10,6 +10,35 @@ window.createStoreHoursGrid = function(api) {
   const timeColumns=[...fields,'rt_clockin','rt_clockout'];
   const cell=(r,c)=>table.tBodies[0]?.rows[r]?.cells[c+offset];
   const value=(r,c)=>api.rows()[r]?.[columns[c][0]]??null;
+  const scrollWrap=table.parentElement,reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
+  let horizontalScroll=null,scrollFrame=0;
+  function stopScroll(){cancelAnimationFrame(scrollFrame);scrollFrame=0;horizontalScroll=null;}
+  function scrollHorizontally(left){
+    left=Math.max(0,Math.min(left,scrollWrap.scrollWidth-scrollWrap.clientWidth));
+    if(!api.animateSelection||reducedMotion.matches){stopScroll();scrollWrap.scrollLeft=left;return;}
+    if(horizontalScroll&&Math.abs(horizontalScroll.left-left)<1)return;
+    stopScroll();const from=scrollWrap.scrollLeft;if(Math.abs(from-left)<1)return;
+    const motion={from,left,started:performance.now()};horizontalScroll=motion;
+    function tick(now){
+      if(horizontalScroll!==motion)return;
+      const progress=Math.min(1,(now-motion.started)/180),eased=1-Math.pow(1-progress,3);
+      scrollWrap.scrollLeft=motion.from+(motion.left-motion.from)*eased;
+      if(progress<1)scrollFrame=requestAnimationFrame(tick);else stopScroll();
+    }
+    scrollFrame=requestAnimationFrame(tick);
+  }
+  function revealColumn(target){
+    const viewport=scrollWrap.getBoundingClientRect(),rect=target.getBoundingClientRect(),gutter=offset?table.tHead.rows[0].cells[0].getBoundingClientRect().width:0;
+    let left=scrollWrap.scrollLeft;
+    if(rect.left<viewport.left+gutter||rect.width>scrollWrap.clientWidth-gutter)left+=rect.left-viewport.left-gutter;
+    else if(rect.right>viewport.left+scrollWrap.clientWidth)left+=rect.right-viewport.left-scrollWrap.clientWidth;
+    scrollHorizontally(left);
+  }
+  // A manual scroll or click takes control immediately; keyboard moves retarget one animation.
+  scrollWrap.addEventListener('wheel',stopScroll,{passive:true});
+  scrollWrap.addEventListener('touchstart',stopScroll,{passive:true});
+  scrollWrap.addEventListener('pointerdown',stopScroll,true);
+  reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches&&horizontalScroll){const left=horizontalScroll.left;stopScroll();scrollWrap.scrollLeft=left;}});
   const selectionOutline=document.createElement('div');selectionOutline.className='sh-selection-outline';selectionOutline.hidden=true;selectionOutline.setAttribute('aria-hidden','true');
   if(api.animateSelection){table.classList.add('sh-animated-selection');table.parentElement.append(selectionOutline);}
   function drawSelection(){
@@ -75,20 +104,19 @@ window.createStoreHoursGrid = function(api) {
     ['down','right','flash'].forEach(id=>toolbar.querySelector(`[data-grid=${id}]`).disabled=!api.editing()||api.busy()||!rows.length);
     editButton.disabled=!rows.length||!writable(active.c)||api.busy();
     api.onSelection?.({active:{...active},cells:points,address:rangeInput.value});
-    if(focus&&target){target.focus({preventScroll:true});const wrap=table.parentElement,viewport=wrap.getBoundingClientRect(),rect=target.getBoundingClientRect(),header=table.tHead.getBoundingClientRect().height,gutter=offset?table.tHead.rows[0].cells[0].getBoundingClientRect().width:0;
+    if(focus&&target){target.focus({preventScroll:true});const wrap=table.parentElement,viewport=wrap.getBoundingClientRect(),rect=target.getBoundingClientRect(),header=table.tHead.getBoundingClientRect().height;
       if(rect.top<viewport.top+header)wrap.scrollTop-=viewport.top+header-rect.top;
       else if(rect.bottom>viewport.top+wrap.clientHeight)wrap.scrollTop+=rect.bottom-viewport.top-wrap.clientHeight;
-      if(rect.left<viewport.left+gutter)wrap.scrollLeft-=viewport.left+gutter-rect.left;
-      else if(rect.right>viewport.left+wrap.clientWidth)wrap.scrollLeft+=rect.right-viewport.left-wrap.clientWidth;
+      revealColumn(target);
     }
     drawClipboard();drawSelection();
   }
   function select(r,c,extend=false,add=false){if(!api.rows().length)return;if(add&&extraRanges.length<49)extraRanges.push(bounds());else if(!extend)extraRanges=[];active=clamp({r,c});if(!extend||add)anchor={...active};paint(true);}
   function resetHistory(){undo=[];redo=[];toolbar.querySelector('[data-grid=undo]').disabled=true;toolbar.querySelector('[data-grid=redo]').disabled=true;}
-  function reset(){clearClipboard();selectionOutline.hidden=true;rangeInput.disabled=true;generation++;cancelEdit();if(dialog.open)dialog.close();content.replaceChildren();title.textContent='';resetHistory();signature='';extraRanges=[];anchor=active={r:0,c:0};welcome.hidden=true;}
+  function reset(){stopScroll();clearClipboard();selectionOutline.hidden=true;rangeInput.disabled=true;generation++;cancelEdit();if(dialog.open)dialog.close();content.replaceChildren();title.textContent='';resetHistory();signature='';extraRanges=[];anchor=active={r:0,c:0};welcome.hidden=true;}
   function refresh(){
     width=columns.length;const rows=api.rows();rangeInput.disabled=!rows.length;const next=JSON.stringify([api.editing(),columns.map(c=>c[0]),rows.map(api.key)]);
-    if(next!==signature){clearClipboard();selectionOutline.hidden=true;generation++;cancelEdit();resetHistory();extraRanges=[];anchor={r:0,c:0};active={...anchor};signature=next;}
+    if(next!==signature){stopScroll();clearClipboard();selectionOutline.hidden=true;generation++;cancelEdit();resetHistory();extraRanges=[];anchor={r:0,c:0};active={...anchor};signature=next;}
     table.setAttribute('role','grid');table.setAttribute('aria-label','Opening and closing spreadsheet');table.setAttribute('aria-multiselectable','true');
     table.setAttribute('aria-rowcount',String(rows.length+1));table.setAttribute('aria-colcount',String(width));
     [...table.tHead.rows[0].cells].forEach((th,index)=>{const c=index-offset;if(c<0||c>=width)return;th.setAttribute('role','columnheader');const tag=document.createElement('span');tag.className='sh-column-letter';tag.textContent=letter(c);th.querySelector('.sh-column-letter')?.remove();th.prepend(tag);});
@@ -176,7 +204,7 @@ window.createStoreHoursGrid = function(api) {
   function beginEdit(initial){
     if(!writable(active.c)||api.busy()){notice('This cell is read only in the report view. Open the form to edit it.',true);return;}
     cancelEdit();const pos={...active},td=cell(pos.r,pos.c);if(!td)return;
-    const input=document.createElement('input');input.type='text';input.className='sh-cell-editor';input.setAttribute('aria-label','Edit '+address(pos));const field=columns[pos.c][0],original=value(pos.r,pos.c);input.value=initial??(timeColumns.includes(field)&&typeof original==='string'&&original.includes('T')?original.split('T')[1]:original)??'';input.placeholder=timeColumns.includes(field)?'9:02 AM':field==='date'?'YYYY-MM-DD':'Enter value';input.spellcheck=false;editor=input;td.append(input);input.focus();if(initial===undefined)input.select();
+    const input=document.createElement('input');input.type='text';input.className='sh-cell-editor';input.setAttribute('aria-label','Edit '+address(pos));const field=columns[pos.c][0],original=value(pos.r,pos.c);input.value=initial??(timeColumns.includes(field)&&typeof original==='string'&&original.includes('T')?original.split('T')[1]:original)??'';input.placeholder=timeColumns.includes(field)?'9:02 AM':field==='date'?'YYYY-MM-DD':'Enter value';input.spellcheck=false;editor=input;td.append(input);input.focus({preventScroll:true});if(initial===undefined)input.select();
     let closing=false;
     const finish=(all=false)=>{if(closing||editor!==input)return true;let changes;try{changes=(all?selected().filter(x=>writable(x.c)):[pos]).map(x=>({...x,value:parseCell(x.r,x.c,input.value)}));}catch(e){notice(e.message,true);input.setAttribute('aria-invalid','true');return false;}closing=true;cancelEdit();commit(changes,'Edit');drawSelection();return true;};
     finishEditor=finish;
@@ -288,7 +316,7 @@ window.createStoreHoursGrid = function(api) {
     if(e.key==='F2'){e.preventDefault();beginEdit();return;}
     if(e.key.length===1&&!ctrl&&!e.altKey){e.preventDefault();beginEdit(e.key);}
   });
-  const layoutChanged=()=>{drawClipboard();drawSelection();};
+  const layoutChanged=()=>{if(horizontalScroll){const target=cell(active.r,active.c);if(target)revealColumn(target);else stopScroll();}drawClipboard();drawSelection();};
   window.addEventListener('resize',layoutChanged);
   if(api.animateSelection){const observer=new ResizeObserver(layoutChanged);observer.observe(table);observer.observe(table.parentElement);}
   return {refresh,reset,resetHistory,borders,layout:layoutChanged,selectCell:(r,c)=>select(r,c),isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
