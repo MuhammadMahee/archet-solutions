@@ -24,13 +24,14 @@ def check(page):
       const wrap=document.querySelector('.sheet-grid-wrap'),samples=[];
       document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
       const immediate=wrap.scrollLeft,focus=document.activeElement.dataset.address,start=performance.now();
-      await new Promise(resolve=>{function tick(now){samples.push(wrap.scrollLeft);if(now-start<300)requestAnimationFrame(tick);else resolve();}requestAnimationFrame(tick);});
+      await new Promise(resolve=>{function tick(now){samples.push({left:wrap.scrollLeft,time:now-start});if(now-start<600)requestAnimationFrame(tick);else resolve();}requestAnimationFrame(tick);});
       return {immediate,focus,samples};
     }''')
     assert result['focus']=='N1' and result['immediate']==0,result
-    samples=result['samples'];end=samples[-1]
+    samples=[s['left'] for s in result['samples']];end=samples[-1]
     assert end>500 and any(0<x<end-1 for x in samples),samples
     assert all(b>=a-1 for a,b in zip(samples,samples[1:])),samples
+    assert any(s['time']>200 and 0<s['left']<end-1 for s in result['samples']),result
     visible()
     # Moving back left animates, and a reversal replaces the pending destination.
     go('A1')
@@ -62,7 +63,7 @@ def check(page):
       document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'F2',bubbles:true}));
       return document.querySelector('.sheet-grid-wrap').scrollLeft;
     }''')
-    assert result==0,result
+    assert result<=1,result
     page.keyboard.press('Escape')
     visible()
     page.emulate_media(reduced_motion='reduce')

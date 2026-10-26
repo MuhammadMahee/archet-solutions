@@ -19,10 +19,11 @@ window.createStoreHoursGrid = function(api) {
     if(!api.animateSelection||reducedMotion.matches){stopScroll();scrollWrap.scrollLeft=left;return;}
     if(horizontalScroll&&Math.abs(horizontalScroll.left-left)<1)return;
     stopScroll();const from=scrollWrap.scrollLeft;if(Math.abs(from-left)<1)return;
-    const motion={from,left,started:performance.now()};horizontalScroll=motion;
+    // Give newly revealed columns a visible glide; longer jumps get a little more time.
+    const motion={from,left,started:performance.now(),duration:320+Math.min(120,Math.abs(left-from)*.08)};horizontalScroll=motion;
     function tick(now){
       if(horizontalScroll!==motion)return;
-      const progress=Math.min(1,(now-motion.started)/180),eased=1-Math.pow(1-progress,3);
+      const progress=Math.min(1,(now-motion.started)/motion.duration),eased=Math.sin(progress*Math.PI/2);
       scrollWrap.scrollLeft=motion.from+(motion.left-motion.from)*eased;
       if(progress<1)scrollFrame=requestAnimationFrame(tick);else stopScroll();
     }
@@ -30,9 +31,11 @@ window.createStoreHoursGrid = function(api) {
   }
   function revealColumn(target){
     const viewport=scrollWrap.getBoundingClientRect(),rect=target.getBoundingClientRect(),gutter=offset?table.tHead.rows[0].cells[0].getBoundingClientRect().width:0;
+    const space=scrollWrap.clientWidth-gutter,padding=api.animateSelection?Math.max(0,Math.min(32,(space-rect.width)/2)):0;
     let left=scrollWrap.scrollLeft;
     if(rect.left<viewport.left+gutter||rect.width>scrollWrap.clientWidth-gutter)left+=rect.left-viewport.left-gutter;
-    else if(rect.right>viewport.left+scrollWrap.clientWidth)left+=rect.right-viewport.left-scrollWrap.clientWidth;
+    else if(rect.right>viewport.left+scrollWrap.clientWidth)left+=rect.right-viewport.left-scrollWrap.clientWidth+padding;
+    if(rect.left<viewport.left+gutter&&rect.width<=space)left-=padding;
     scrollHorizontally(left);
   }
   // A manual scroll or click takes control immediately; keyboard moves retarget one animation.
