@@ -49,8 +49,9 @@ def check(page):
     expect(cell('O1')).to_have_css('background-color','rgb(255, 240, 170)')
     # Saved presentation and all custom columns are exported.
     page.get_by_role('button',name='File',exact=True).click()
+    page.get_by_role('menuitem',name='Download Excel',exact=True).click()
     with page.expect_download() as download:
-        page.get_by_role('menuitem',name='Download Excel',exact=True).click()
+        page.get_by_role('button',name='Download Excel',exact=True).click()
     path=ROOT/'test-results/standalone-sheet.xlsx'
     download.value.save_as(str(path))
     book=load_workbook(path)
@@ -68,8 +69,9 @@ def check(page):
     expect(cell('D1')).to_have_text('CLOSING EMPLOYEE')
     expect(cell('O1')).to_have_text('Checked')
     page.get_by_role('button',name='File',exact=True).click()
+    page.get_by_role('menuitem',name='Download Excel',exact=True).click()
     with page.expect_download() as download:
-        page.get_by_role('menuitem',name='Download Excel',exact=True).click()
+        page.get_by_role('button',name='Download Excel',exact=True).click()
     path=ROOT/'test-results/standalone-filtered.xlsx'
     download.value.save_as(str(path))
     assert load_workbook(path).active.max_row==3

@@ -69,8 +69,9 @@ def check(page):
     }''')
     assert 'JANE DOE' in captured
     page.get_by_role('button',name='File',exact=True).click()
+    page.get_by_role('menuitem',name='Download Excel',exact=True).click()
     with page.expect_download() as download:
-        page.get_by_role('menuitem',name='Download Excel',exact=True).click()
+        page.get_by_role('button',name='Download Excel',exact=True).click()
     path=ROOT/'test-results/spreadsheet-fonts-borders.xlsx'
     download.value.save_as(str(path))
     book=load_workbook(path)

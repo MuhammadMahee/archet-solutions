@@ -158,9 +158,9 @@
     const choices=document.createElement('div');choices.className='sheet-border-choices';content.append(choices);
     for(const [mode,label] of [['all','All borders'],['outer','Outer borders'],['inner','Inner borders'],['horizontal','Horizontal borders'],['vertical','Vertical borders'],['top','Top border'],['bottom','Bottom border'],['left','Left border'],['right','Right border'],['none','No borders']])button(label,()=>{grid.borders(mode,{style:style.value,color:color.value});$('sheet-dialog').close();grid.focus();},choices);
   }
-  function chooseDates(){
-    const content=openDialog('Choose report dates'),limit=data?.today||today;
-    const mode=selectLabel('Selection',content,[['day','Single day'],['range','Date range']],start===end?'day':'range');
+  function chooseDates({exporting=false}={}){
+    const content=openDialog(exporting?'Download Excel':'Choose report dates'),limit=data?.today||today;
+    const mode=selectLabel('Selection',content,[['day','Single day'],['range','Date range']],exporting?'range':start===end?'day':'range');
     const dates=document.createElement('div');dates.className='sheet-date-inputs';content.append(dates);
     const from=inputLabel('From date',dates,'date',start),to=inputLabel('To date',dates,'date',end);from.max=to.max=limit;
     let month=new Date(start.slice(0,7)+'-01T12:00:00'),pickingEnd=false;
@@ -186,9 +186,10 @@
     const presets=document.createElement('div');presets.className='sheet-inline-actions';content.append(presets);
     const yesterday=new Date(limit+'T12:00:00');yesterday.setDate(yesterday.getDate()-1);
     for(const [label,a,b] of [['Today',limit,limit],['Yesterday',iso(yesterday),iso(yesterday)],['This month',limit.slice(0,8)+'01',limit]])button(label,()=>{from.value=a;to.value=b;mode.value=a===b?'day':'range';month=new Date(a.slice(0,7)+'-01T12:00:00');pickingEnd=false;draw();},presets);
-    paragraph('Choose an earlier day, or select a date range. Pending edits autosave before the period changes.',content);
+    paragraph(exporting?'Choose the dates to include in Excel. Current dealer, market, store, and column filters apply. Your sheet dates stay unchanged; pending edits save before downloading.':'Choose an earlier day, or select a date range. Pending edits autosave before the period changes.',content);
+    const error=paragraph('',content);error.className='sheet-dialog-error';error.setAttribute('role','alert');
     const actions=document.createElement('div');actions.className='sheet-dialog-actions';content.append(actions);button('Cancel',()=>$('sheet-dialog').close(),actions);
-    const apply=button('Apply dates',async()=>{apply.disabled=true;try{if(await changePeriod(from.value,mode.value==='day'?from.value:to.value))$('sheet-dialog').close();}finally{apply.disabled=false;}},actions,'sheet-primary');apply.id='sheet-date-apply';draw();
+    const apply=button(exporting?'Download Excel':'Apply dates',async()=>{apply.disabled=true;error.textContent='';try{const a=from.value,b=mode.value==='day'?a:to.value;if(!validPeriod(a,b))throw new Error('Choose a valid period of up to 367 days ending today or earlier.');if(await (exporting?exportExcel(a,b):changePeriod(a,b)))$('sheet-dialog').close();else error.textContent='Resolve the unsaved changes or loading error before continuing.';}catch(e){error.textContent=e.message;}finally{apply.disabled=false;}},actions,'sheet-primary');apply.id='sheet-date-apply';draw();
   }
   async function mutateColumn(payload){if(!await save())throw new Error('Resolve the unsaved edits before changing columns.');const config=await api('store-hours/sheet/columns','POST',{...payload,revision:data.sheet.revision});data.sheet=config;await load();}
   function columnDialog(action,id){
@@ -281,7 +282,14 @@
       }catch(error){if(active()&&requestId===sequence){status.textContent=error.message;status.className='sheet-dialog-error';}}
     };
   }
-  async function download(){if(!await save())return;if(data)location.assign('/api/internal/store-hours/sheet/export?'+params());}
+  function download(){if(data&&!loading)chooseDates({exporting:true});}
+  async function exportExcel(from,to){
+    if(!await save())return false;
+    const query=params();query.set('start',from);query.set('end',to);
+    const response=await fetch('/api/internal/store-hours/sheet/export?'+query);
+    if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.message||'Could not download Excel. Please try again.');}
+    const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=`opening-closing-sheet-${from}-${to}.xlsx`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
+  }
   async function copySnapshot(){if(!data)return;if(!await save())return;try{const canvas=base.render({...data,rows:rows.map(current)},{dealer:$('sheet-dealer').value,market:$('sheet-market').value}),blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);message('Snapshot copied.');}catch(e){message(e.message||'Could not copy the snapshot.',true);}}
   async function sync(){if(!await save())return;if(user?.role!=='admin')return;loading=true;dirty();try{let result,continuation=false;do{message('Syncing source time punches…');result=await api('store-hours/refresh','POST',continuation?{continue:true}:{});continuation=true;}while(result.status!=='busy'&&result.pending&&result.workers?.some(w=>w.completed));loading=false;await load();message(result.remaining?'Some source days could not be fetched. Saved data was kept.':'Source sync completed. Your saved corrections and formats are preserved.',!!result.remaining);}catch(e){message(e.message,true);}finally{loading=false;dirty();}}
   function closeMenu(){popup?.remove();popup=null;document.querySelectorAll('#sheet-menu button').forEach(b=>b.setAttribute('aria-expanded','false'));}
@@ -317,9 +325,12 @@
   $('sheet-value').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commitFormula();grid.focus();}if(e.key==='Escape'){e.preventDefault();formulaTarget=null;grid.focus();}};
   $('sheet-clear-filters').onclick=()=>{filterRules={};sort={};$('sheet-search').value='';applyFilters();};$('sheet-search').oninput=applyFilters;
   $('sheet-dealer').onchange=()=>{$('sheet-market').value='';$('sheet-store').value='';load();};$('sheet-market').onchange=()=>{$('sheet-store').value='';load();};$('sheet-store').onchange=load;
-  async function changePeriod(from,to){
+  function validPeriod(from,to){
     const limit=data?.today||today;
-    if(!from||!to||!/^\d{4}-\d{2}-\d{2}$/.test(from)||!/^\d{4}-\d{2}-\d{2}$/.test(to)||from>to||to>limit||(new Date(to)-new Date(from))/86400000>366){message('Choose a valid period of up to 367 days ending today or earlier.',true);return false;}
+    return !!from&&!!to&&/^\d{4}-\d{2}-\d{2}$/.test(from)&&/^\d{4}-\d{2}-\d{2}$/.test(to)&&from<=to&&to<=limit&&Number.isFinite(Date.parse(from))&&Number.isFinite(Date.parse(to))&&(new Date(to)-new Date(from))/86400000<=366;
+  }
+  async function changePeriod(from,to){
+    if(!validPeriod(from,to)){message('Choose a valid period of up to 367 days ending today or earlier.',true);return false;}
     if(!await save())return false;
     const previous=[start,end];start=from;end=to;rememberPeriod();const loaded=await load();if(!loaded){[start,end]=previous;rememberPeriod();grid.refresh();}return loaded;
   }
