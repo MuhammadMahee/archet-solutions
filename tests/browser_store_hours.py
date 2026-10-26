@@ -85,7 +85,7 @@ def main(grid_check=None, spreadsheet=False):
         return len(payload['rows'])
     def preview(payload,user_id):
         preview_rows[:] = map_schedule_rows(parse_schedule_workbook(base64.b64decode(payload['content'])),directory)
-        return dict(preview_id='test-preview',rows=preview_rows,added=1,updated=0,corrected=0)
+        return dict(preview_id='test-preview',rows=preview_rows,added=1,updated=0,corrected=sum(bool(r.get('corrected_connect_opening')) for r in preview_rows))
     def apply_upload(payload,user_id):
         directory.extend(preview_rows)
         return len(preview_rows)

@@ -143,7 +143,7 @@
   $('sheet-address-slot').append(root.querySelector('.sh-address-label'));
   historyPanel=window.createStoreHoursHistory({root,params:()=>params(false),request:api,columnLabels:()=>Object.fromEntries([...base.columns,...(data?.sheet?.columns||[]).map(c=>[c.id,c.name])])});
   function setFiltersVisible(visible){$('sheet-filters').hidden=!visible;$('sheet-filter-toggle').setAttribute('aria-pressed',String(visible));}
-  function openDialog(title){closeMenu();$('sheet-dialog-title').textContent=title;$('sheet-dialog-content').replaceChildren();if(!$('sheet-dialog').open)$('sheet-dialog').showModal();return $('sheet-dialog-content');}
+  function openDialog(title){closeMenu();$('sheet-dialog').classList.remove('sheet-wide');$('sheet-dialog-title').textContent=title;$('sheet-dialog-content').replaceChildren();if(!$('sheet-dialog').open)$('sheet-dialog').showModal();return $('sheet-dialog-content');}
   $('sheet-dialog-close').onclick=()=>$('sheet-dialog').close();
   function button(label,action,parent,cls=''){const b=document.createElement('button');b.type='button';b.textContent=label;b.className=cls;b.onclick=action;parent.append(b);return b;}
   function inputLabel(text,parent,type='text',value=''){const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.type=type;input.value=value;label.append(input);parent.append(label);return input;}
@@ -242,20 +242,59 @@
     if(!data)return;const content=openDialog('Add employee row'),stores=data.directory.map(s=>[JSON.stringify([s.dealer,s.store_id]),`${s.dealer} · ${s.market} · ${s.store}`]),store=selectLabel('Store',content,stores),date=inputLabel('Date',content,'date',context?.dealer?context.date:end),name=inputLabel('Employee name',content);date.max=data.today;name.maxLength=160;if(context?.dealer)store.value=JSON.stringify([context.dealer,context.store_id]);
     const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);button('Cancel',()=>$('sheet-dialog').close(),footer);const submit=button('Add row',async()=>{submit.disabled=true;try{if(!await save())throw new Error('Resolve the unsaved edits before adding a row.');const [dealer,store_id]=JSON.parse(store.value);await api('store-hours/employees','POST',{dealer,store_id,date:date.value,employee:name.value});start=end=date.value;$('sheet-from').value=start;$('sheet-to').value=end;$('sheet-dealer').value='';$('sheet-market').value='';$('sheet-store').value='';$('sheet-search').value='';filterRules={};sort={};$('sheet-dialog').close();await load();message('Employee added. Enter their times and save.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');name.focus();
   }
+  async function uploadSchedules(){
+    if(user?.role!=='admin'||loading||!await save())return;
+    const userId=user.id,content=openDialog('Upload store schedules');$('sheet-dialog').classList.add('sheet-wide');
+    paragraph('Upload the Opening Timing workbook (.xlsx, up to 2 MB), including weekday/Saturday and Sunday sheets. Preview the stores and hours before applying.',content);
+    const file=inputLabel('Schedule workbook',content,'file');file.accept='.xlsx';
+    const status=paragraph('',content);status.setAttribute('role','status');
+    const preview=document.createElement('div');preview.className='sheet-schedule-preview';content.append(preview);
+    const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);
+    const cancel=button('Cancel',()=>$('sheet-dialog').close(),footer);
+    let previewId=null,sequence=0;
+    const active=()=>user?.id===userId&&$('sheet-dialog').open&&file.isConnected;
+    const apply=button('Apply schedules',async()=>{
+      if(!previewId)return;apply.disabled=true;file.disabled=true;cancel.disabled=true;
+      try{
+        const result=await api('store-hours/schedules/apply','POST',{preview_id:previewId});previewId=null;
+        if(user?.id!==userId)return;
+        if(active())$('sheet-dialog').close();await load();message(`Schedules saved for ${result.count} ${result.count===1?'store':'stores'}.`);
+      }catch(error){if(active()){status.textContent=error.message;status.className='sheet-dialog-error';}}
+      finally{file.disabled=false;cancel.disabled=false;apply.disabled=!previewId;}
+    },footer,'sheet-primary');apply.disabled=true;
+    file.onchange=async()=>{
+      const selected=file.files[0],requestId=++sequence;previewId=null;apply.disabled=true;preview.replaceChildren();status.className='';status.textContent='';
+      if(!selected)return;
+      if(selected.size>2*1024*1024||!selected.name.toLowerCase().endsWith('.xlsx')){status.textContent='Choose an .xlsx workbook no larger than 2 MB.';return;}
+      status.textContent='Reading workbook and matching stores...';
+      try{
+        const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(new Error('Could not read the file.'));reader.readAsDataURL(selected);});
+        if(!active()||requestId!==sequence)return;
+        const result=await api('store-hours/schedules/preview','POST',{filename:selected.name,content:encoded});
+        if(!active()||requestId!==sequence)return;
+        previewId=result.preview_id;status.textContent=`${result.added} new ${result.added===1?'store':'stores'}, ${result.updated} existing ${result.updated===1?'store':'stores'} updated.`;
+        paragraph(result.corrected?`${result.corrected} Connect opening times corrected from 10:00 PM to 10:00 AM. Omitted stores and saved reviews are retained.`:'Omitted stores and saved reviews are retained.',preview);
+        const table=document.createElement('table'),head=table.createTHead().insertRow();table.setAttribute('aria-label','Schedule preview');
+        for(const label of ['Action','Dealer','Market','Store','Monday-Friday','Saturday','Sunday']){const th=document.createElement('th');th.scope='col';th.textContent=label;head.append(th);}
+        const body=table.createTBody();for(const row of result.rows){const tr=body.insertRow();for(const value of [row.action,row.dealer,row.market,row.store,...['weekday','saturday','sunday'].map(day=>`${base.text('opening_time',row.schedules[day].opening_time)} - ${base.text('closing_time',row.schedules[day].closing_time)}`)])tr.insertCell().textContent=value;}
+        preview.append(table);apply.disabled=false;
+      }catch(error){if(active()&&requestId===sequence){status.textContent=error.message;status.className='sheet-dialog-error';}}
+    };
+  }
   async function download(){if(!await save())return;if(data)location.assign('/api/internal/store-hours/sheet/export?'+params());}
   async function copySnapshot(){if(!data)return;if(!await save())return;try{const canvas=base.render({...data,rows:rows.map(current)},{dealer:$('sheet-dealer').value,market:$('sheet-market').value}),blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);message('Snapshot copied.');}catch(e){message(e.message||'Could not copy the snapshot.',true);}}
   async function sync(){if(!await save())return;if(user?.role!=='admin')return;loading=true;dirty();try{let result,continuation=false;do{message('Syncing source time punches…');result=await api('store-hours/refresh','POST',continuation?{continue:true}:{});continuation=true;}while(result.status!=='busy'&&result.pending&&result.workers?.some(w=>w.completed));loading=false;await load();message(result.remaining?'Some source days could not be fetched. Saved data was kept.':'Source sync completed. Your saved corrections and formats are preserved.',!!result.remaining);}catch(e){message(e.message,true);}finally{loading=false;dirty();}}
   function closeMenu(){popup?.remove();popup=null;document.querySelectorAll('#sheet-menu button').forEach(b=>b.setAttribute('aria-expanded','false'));}
   const menus={
-    File:[['Save changes',save,'Ctrl+S'],['Download Excel',download],['Copy snapshot',copySnapshot],['Reload saved sheet',load],['Back to portal',()=>location.assign('/internal#storehours')]],
+    File:[['Save changes',save,'Ctrl+S'],['Download Excel',download],['Copy snapshot',copySnapshot],['Reload saved sheet',load],['Back to portal',()=>location.assign('/internal')]],
     Edit:[['Undo',()=>grid.command('undo'),'Ctrl+Z'],['Redo',()=>grid.command('redo'),'Ctrl+Y'],['Remove selected rows',removeRowsDialog],['Restore removed rows',restoreRowsDialog],['Delete selected column',()=>columnDialog('delete',columns[grid.selection().active.c]?.[0]),'Ctrl+-'],['Copy',()=>grid.command('copy'),'Ctrl+C'],['Paste',()=>grid.command('paste'),'Ctrl+V'],['Fill down',()=>grid.command('down'),'Ctrl+D'],['Fill right',()=>grid.command('right'),'Ctrl+R'],['Use source/default',()=>grid.command('reset'),'F8 → U'],['Discard unsaved edits',()=>{if(saving){message('Wait for the current save to finish.',true);return;}clearTimeout(autosaveTimer);drafts.clear();saveFailed=false;load();}]],
     View:[['Report filters',()=>setFiltersVisible($('sheet-filters').hidden)],['Version history',()=>historyPanel.open()],['Go to cell / range',()=>grid.command('goto'),'Ctrl+G']],
     Insert:[['Custom column',()=>columnDialog('add'),'Ctrl++'],['Employee row',addRow]],
     Format:[['Bold',()=>toggleFormat('bold')],['Italic',()=>toggleFormat('italic')],['Underline',()=>toggleFormat('underline')],['Wrap text',()=>toggleFormat('wrap')],['Borders',borderDialog],['Clear formatting',()=>grid.format(null)]],
-    Data:[['Filter selected column',()=>columnMenu(columns[grid.selection().active.c][0])],['Clear all column filters',()=>{filterRules={};sort={};applyFilters();}],['Sync RT-POS sources',sync,'Admin'],['Upload store schedules',()=>location.assign('/internal#storehours')]],
+    Data:[['Filter selected column',()=>columnMenu(columns[grid.selection().active.c][0])],['Clear all column filters',()=>{filterRules={};sort={};applyFilters();}],['Sync RT-POS sources',sync,'Admin'],['Upload store schedules',uploadSchedules,'Admin']],
     Help:[['Spreadsheet tutorial',()=>grid.command('tutorial'),'F1'],['Keyboard commands',()=>grid.command('commands'),'F8'],['Custom columns & formatting',()=>{const content=openDialog('Working with your spreadsheet');paragraph('Use + Column to add a shared custom column. Each column heading opens filters, sorting, rename, and delete. Default report columns cannot be deleted. Removed custom columns and their saved values remain in version history.',content);paragraph('Select cells or a range, then choose a font family, bold, colors, alignment, wrapping, font size, borders, or number formats. Employee names display in uppercase, including clipboard copies and exports. Formatting changes display only; the cell-value bar always shows the underlying value. Custom cell values are plain data; formulas are not evaluated.',content);paragraph('Filters apply to all loaded rows in your selected period. Editing and formatting apply to the current page of up to 100 rows. Edits autosave after you finish typing. Exports, syncs, and date changes wait for saving to finish. Column changes save immediately for everyone. Excel includes all filtered rows and active custom columns with their saved formats.',content);}]]
   };
-  for(const [name,items] of Object.entries(menus)){const trigger=button(name,e=>{const was=trigger.getAttribute('aria-expanded')==='true';closeMenu();if(was)return;trigger.setAttribute('aria-expanded','true');popup=document.createElement('div');popup.className='sheet-menu-popup';popup.setAttribute('role','menu');for(const [label,action,shortcut] of items){const b=button(label,()=>{closeMenu();action();},popup);b.setAttribute('role','menuitem');if(shortcut){const small=document.createElement('small');small.textContent=shortcut;b.append(small);}if(label==='Sync RT-POS sources')b.disabled=user?.role!=='admin';}document.body.append(popup);const box=trigger.getBoundingClientRect();popup.style.left=Math.min(box.left,innerWidth-popup.offsetWidth-8)+'px';popup.style.top=box.bottom+3+'px';popup.querySelector('button')?.focus();},$('sheet-menu'));trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');}
+  for(const [name,items] of Object.entries(menus)){const trigger=button(name,e=>{const was=trigger.getAttribute('aria-expanded')==='true';closeMenu();if(was)return;trigger.setAttribute('aria-expanded','true');popup=document.createElement('div');popup.className='sheet-menu-popup';popup.setAttribute('role','menu');for(const [label,action,shortcut] of items){const b=button(label,()=>{closeMenu();action();},popup);b.setAttribute('role','menuitem');if(shortcut){const small=document.createElement('small');small.textContent=shortcut;b.append(small);}if(shortcut==='Admin')b.disabled=user?.role!=='admin';}document.body.append(popup);const box=trigger.getBoundingClientRect();popup.style.left=Math.min(box.left,innerWidth-popup.offsetWidth-8)+'px';popup.style.top=box.bottom+3+'px';popup.querySelector('button')?.focus();},$('sheet-menu'));trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');}
   document.addEventListener('pointerdown',e=>{if(popup&&!popup.contains(e.target)&&!$('sheet-menu').contains(e.target))closeMenu();});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();if(popup&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const buttons=[...popup.querySelectorAll('button:not(:disabled)')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}});
   function toggleFormat(field){const {active}=grid.selection(),fmt=visible()[active.r]?.cell_formats?.[columns[active.c][0]]||{};grid.format({[field]:!fmt[field]});}
   root.addEventListener('keydown',e=>{

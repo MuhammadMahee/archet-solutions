@@ -14,3 +14,5 @@
 .sheet-border-choices{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}.sheet-border-choices button{border:1px solid #c7d9ca;text-align:left;padding:12px}#sheet-font-family{min-width:110px}#sheet-dialog-content input[type=color]{height:38px;padding:3px}
 
 .sheet-row-choices{max-height:220px;overflow:auto;padding-left:20px;font-size:12px;line-height:1.8}
+
+#sheet-dialog.sheet-wide{width:900px}.sheet-schedule-preview{max-height:45vh;overflow:auto}.sheet-schedule-preview table{border-collapse:collapse;width:100%;font-size:12px}.sheet-schedule-preview th,.sheet-schedule-preview td{padding:8px;border:1px solid #dadce0;text-align:left;white-space:nowrap}.sheet-schedule-preview th{background:#f3faf3}

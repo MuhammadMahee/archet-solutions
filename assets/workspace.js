@@ -62,7 +62,7 @@
     opened.menu.style.top = upwards ? 'auto' : rect.bottom + 6 + 'px';
     opened.menu.style.bottom = upwards ? innerHeight - rect.top + 6 + 'px' : 'auto';
   }
-  for (const id of ['sales-dealer','sales-market','sales-store','sales-period','tree-dealer','quota-month','quota-dealer','quota-market','quota-store','sh-dealer','sh-market','sh-store','sh-employee-store']) {
+  for (const id of ['sales-dealer','sales-market','sales-store','sales-period','tree-dealer','quota-month','quota-dealer','quota-market','quota-store']) {
     const select = document.getElementById(id);
     const label = select.parentElement.firstChild.textContent.trim();
     const trigger = document.createElement('button');
