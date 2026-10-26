@@ -292,7 +292,7 @@ def employee_key(name):
     return 'person:' + ' '.join(name.split()).casefold() if name and name != '-' else ''
 
 
-def build_rows(roster, punches, reviews, imports, start, end, manual_employees=()):
+def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(), include_removed=False):
     by_id = defaultdict(list)
     by_name = defaultdict(list)
     name_counts = Counter((s['dealer'], s['store'].strip().upper()) for s in roster)
@@ -339,13 +339,17 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                 review = saved.get((dealer, sid, day, key), {})
                 # A legacy store-level review belongs only to the first employee, never all employees.
                 if not review and index == 0:
-                    review = saved.get((dealer, sid, day, ''), {})
+                    legacy = saved.get((dealer, sid, day, ''), {})
+                    if not legacy.get('removed'):
+                        review = legacy
+                if review.get('removed') and not include_removed:
+                    continue
                 overrides = review.get('cell_overrides') or {}
                 effective_day = date.fromisoformat(overrides.get('date', day.isoformat()))
                 schedule = hours_for_store(store, effective_day)
                 employee = first['employee'] if first else manual_names.get(key, key.removeprefix('person:') or '-')
                 row = dict(date=day.isoformat(), dealer=dealer, market=store['market'], store=store['store'], store_id=sid,
-                           employee=employee, employee_key=key, manual=key in manual_names,
+                           employee=employee, employee_key=key, manual=key in manual_names, removed=bool(review.get('removed')),
                            rt_clockin=first['clock_in'].isoformat() if first else None,
                            rt_clockout=max(outs).isoformat() if outs else None,
                            revision=review.get('revision', 0), source_status=imported.get('status', 'not_synced') if source else 'manual_only',
@@ -412,11 +416,11 @@ def report_data(start, end):
     selected = [s for s in candidates if not sid or s['dealer']+':'+s['store_id']==sid]
     if len(selected) * ((end-start).days+1) > 20000:
         raise PortalError('Select a dealer, market, or shorter date range (up to 20,000 rows).')
-    rows = build_rows(selected, punches, reviews, imports, start, end, manual)
+    rows = build_rows(selected, punches, reviews, imports, start, end, manual, include_removed=True)
     for day in extra_days:
         identities = {(r['dealer'],r['store_id']) for r in employee_reviews if r['report_date']==day}
         moved_stores = [s for s in selected if (s['dealer'],s['store_id']) in identities]
-        rows += build_rows(moved_stores, punches, reviews, imports, day, day, manual)
+        rows += build_rows(moved_stores, punches, reviews, imports, day, day, manual, include_removed=True)
     rows = [r for r in rows if start.isoformat() <= r['date'] <= end.isoformat()]
     occupied = {(r['dealer'],r['store_id'],r['date']) for r in rows if r['employee_key']}
     rows = [r for r in rows if r['employee_key'] or r['revision'] or r['rt_clockin'] or r['rt_clockout'] or
@@ -425,6 +429,8 @@ def report_data(start, end):
     if len(rows)>20000:
         raise PortalError('Select a shorter date range (up to 20,000 rows).')
     rows = [r for r in rows if not market or r['market']==market]
+    removed_rows = [r for r in rows if r.get('removed')]
+    rows = [r for r in rows if not r.get('removed')]
     included = {(r['dealer'],r['store_id']) for r in rows}
     selected = [s for s in selected if (s['dealer'],s['store_id']) in included]
     query = request.args.get('search', '').strip().casefold()
@@ -435,7 +441,7 @@ def report_data(start, end):
     relevant_sources = {r.get('source_id') for r in selected if r.get('source_id')}
     relevant = [i for i in imports if i['source_id'] in relevant_sources and start <= i['report_date'] <= end]
     updated = max((i['loaded_at'] for i in relevant if i['loaded_at']), default=None)
-    return dict(rows=rows, start=start.isoformat(), end=end.isoformat(), today=today().isoformat(),
+    return dict(rows=rows, removed_rows=removed_rows, start=start.isoformat(), end=end.isoformat(), today=today().isoformat(),
                 earliest=(earliest or today().replace(day=1)).isoformat(),
                 dealers=[{'id': d, 'name': DEALER_LABELS.get(d, d)} for d in sorted({s['dealer'] for s in roster})],
                 markets=markets, stores=stores,
@@ -517,13 +523,13 @@ def excel_report(data):
     return output
 
 
-def store_day_rows(conn, store, day):
+def store_day_rows(conn, store, day, include_removed=False):
     punches = conn.execute('select * from public.store_time_punches where report_date=%s', (day,)).fetchall()
     args = (store['dealer'], store['store_id'], day)
     reviews = conn.execute('select * from public.store_hours_reviews where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
     reviews += conn.execute('select * from public.store_hours_employee_reviews where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
     manual = conn.execute('select * from public.store_hours_manual_employees where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
-    return build_rows([store], punches, reviews, [], day, day, manual)
+    return build_rows([store], punches, reviews, [], day, day, manual, include_removed=include_removed)
 
 
 def review_identity(payload):
@@ -601,6 +607,54 @@ def save_review(payload, user_id, include_row=False):
     return result if include_row else result['revision']
 
 
+def set_rows_removed(payload, user_id):
+    action, entries = payload.get('action'), payload.get('rows')
+    if action not in ('remove', 'restore') or not isinstance(entries, list) or not 1 <= len(entries) <= 100:
+        raise PortalError('Select up to 100 rows to remove or restore.')
+    identities = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise PortalError('Choose valid employee rows.')
+        dealer, sid, day = review_identity({**entry, 'date': entry.get('source_date', entry.get('date'))})
+        key, revision = entry.get('employee_key'), entry.get('revision')
+        if not isinstance(key, str) or len(key) > 500 or type(revision) is not int or revision < 0:
+            raise PortalError('Reload these rows before changing them.')
+        identity = (dealer, sid, day, key)
+        if identity in identities:
+            raise PortalError('Select each employee row only once.')
+        identities[identity] = revision
+    with connect() as conn:
+        with conn.transaction():
+            roster = {(s['dealer'], s['store_id']): s for s in roster_with_schedules(conn)}
+            loaded, changes = {}, []
+            for (dealer, sid, day, key), revision in sorted(identities.items()):
+                store = roster.get((dealer, sid))
+                if not store:
+                    raise PortalError('This store is no longer in the directory.', 409)
+                group = (dealer, sid, day)
+                if group not in loaded:
+                    lock_store_day(conn, dealer, sid, day)
+                    loaded[group] = store_day_rows(conn, store, day, include_removed=True)
+                row = next((r for r in loaded[group] if r['employee_key'] == key), None)
+                if row is None or row['revision'] != revision or bool(row.get('removed')) != (action == 'restore'):
+                    raise PortalError('An employee row changed. Reload before removing or restoring rows.', 409)
+                changes.append((dealer, sid, day, key, row))
+            # Validate the complete selection before writing any row.
+            for dealer, sid, day, key, row in changes:
+                times = [wall_time.fromisoformat(row[k]) if row.get(k) and
+                         (k not in ('opening_time', 'closing_time') or row['schedule_overrides'].get(k)) else None for k in TIME_FIELDS]
+                conn.execute("select set_config('archet.store_hours_employee',%s,true)", (row['employee'],))
+                conn.execute('''insert into public.store_hours_employee_reviews
+                    (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,
+                     updated_by,revision,cell_overrides,custom_cells,cell_formats,removed)
+                    values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    on conflict(dealer,store_id,report_date,employee_key) do update set
+                    removed=excluded.removed,updated_by=excluded.updated_by,updated_at=now(),revision=excluded.revision''',
+                    (dealer,sid,day,key,*times,user_id,row['revision']+1,Jsonb(row['cell_overrides']),
+                     Jsonb(row['custom_cells']),Jsonb(row['cell_formats']),action=='remove'))
+    return len(changes)
+
+
 def add_manual_employee(payload, user_id):
     dealer, sid, day = review_identity(payload)
     name = payload.get('employee')
@@ -614,9 +668,9 @@ def add_manual_employee(payload, user_id):
             store = next((s for s in roster_with_schedules(conn) if s['dealer'] == dealer and s['store_id'] == sid), None)
             if not store:
                 raise PortalError('Choose a store from the directory.')
-            rows = store_day_rows(conn, store, day)
+            rows = store_day_rows(conn, store, day, include_removed=True)
             if any(r['employee_key'] == key for r in rows):
-                raise PortalError('This employee already has a row for this store and date.', 409)
+                raise PortalError('This employee already has a row for this store and date. Check Removed rows to restore it if needed.', 409)
             if len(rows) >= 100:
                 raise PortalError('A store can have up to 100 employee rows per date.')
             conn.execute('''insert into public.store_hours_manual_employees
@@ -751,6 +805,11 @@ def register_store_hours(app):
     @require_user()
     def create_employee():
         return jsonify(status='saved', employee_key=add_manual_employee(body(), g.portal_user['id']))
+
+    @app.post('/api/internal/store-hours/rows')
+    @require_user()
+    def change_report_rows():
+        return jsonify(status='saved', count=set_rows_removed(body(), g.portal_user['id']))
 
     @app.post('/api/internal/store-hours/schedules/preview')
     @require_user(admin=True)

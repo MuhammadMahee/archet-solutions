@@ -59,7 +59,7 @@ def main(grid_check=None, spreadsheet=False):
         if market: rows = [r for r in rows if r['market'] == market]
         stores = list({r['dealer']+':'+r['store_id']:dict(id=r['dealer']+':'+r['store_id'],name=r['store']) for r in rows}.values())
         if request.args.get('store'): rows = [r for r in rows if r['dealer']+':'+r['store_id'] == request.args['store']]
-        return dict(rows=rows, start=start.isoformat(), end=end.isoformat(), today='2026-10-20', earliest='2026-10-01',
+        return dict(rows=[r for r in rows if not r.get('removed')], removed_rows=[r for r in rows if r.get('removed')], start=start.isoformat(), end=end.isoformat(), today='2026-10-20', earliest='2026-10-01',
                     dealers=sorted({s['dealer'] for s in directory}), directory=directory, manual_store_count=2, markets=markets, stores=stores, updated_at=None, coverage={'complete': 2, 'expected': 2, 'errors': []})
     def save(payload, user_id, include_row=False):
         row = deepcopy(payload)
@@ -75,6 +75,14 @@ def main(grid_check=None, spreadsheet=False):
             raise PortalError('This employee already has a row for this store and date.',409)
         manual.append(dict(dealer=payload['dealer'],store_id=payload['store_id'],report_date=date.fromisoformat(payload['date']),employee_key=key,employee=payload['employee']))
         return key
+    def change_rows(payload,user_id):
+        available=fixture(date(2026,10,20),date(2026,10,20))
+        for entry in payload['rows']:
+            row=next(r for r in available['rows']+available['removed_rows'] if row_key(r)==row_key(entry))
+            if row['revision']!=entry['revision']:raise PortalError('Row changed',409)
+            row={**row,'removed':payload['action']=='remove'}
+            save(row,user_id)
+        return len(payload['rows'])
     def preview(payload,user_id):
         preview_rows[:] = map_schedule_rows(parse_schedule_workbook(base64.b64decode(payload['content'])),directory)
         return dict(preview_id='test-preview',rows=preview_rows,added=1,updated=0,corrected=0)
@@ -88,7 +96,7 @@ def main(grid_check=None, spreadsheet=False):
     server = make_server('127.0.0.1', 0, index.app, threaded=True)
     origin = f'http://127.0.0.1:{server.server_port}'
     from contextlib import nullcontext
-    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history), patch.object(sheet,'settings',lambda *args:deepcopy(sheet_config)), patch.object(sheet,'change_column',column_change), patch.object(sh,'connect',lambda:nullcontext(None)):
+    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'set_rows_removed',change_rows), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history), patch.object(sheet,'settings',lambda *args:deepcopy(sheet_config)), patch.object(sheet,'change_column',column_change), patch.object(sh,'connect',lambda:nullcontext(None)):
         Thread(target=server.serve_forever, daemon=True).start()
         try:
             with sync_playwright() as p:

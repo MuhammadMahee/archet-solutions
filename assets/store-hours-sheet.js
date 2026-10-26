@@ -212,9 +212,35 @@
     const custom=field.startsWith('custom_');paragraph(custom?'Custom column · shared with everyone using this report.':'Default column · protected from deletion.',content);
     const manage=document.createElement('div');manage.className='sheet-inline-actions';content.append(manage);button('Rename column',()=>columnDialog('rename',field),manage).disabled=!custom;button('Delete column',()=>columnDialog('delete',field),manage).disabled=!custom;
   }
-  function addRow(){
-    if(!data)return;const content=openDialog('Add employee row'),stores=data.directory.map(s=>[JSON.stringify([s.dealer,s.store_id]),`${s.dealer} · ${s.market} · ${s.store}`]),store=selectLabel('Store',content,stores),date=inputLabel('Date',content,'date',end),name=inputLabel('Employee name',content);date.max=data.today;name.maxLength=160;
-    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);const submit=button('Add row',async()=>{submit.disabled=true;try{if(!await save())throw new Error('Resolve the unsaved edits before adding a row.');const [dealer,store_id]=JSON.parse(store.value);await api('store-hours/employees','POST',{dealer,store_id,date:date.value,employee:name.value});start=end=date.value;$('sheet-from').value=start;$('sheet-to').value=end;$('sheet-dealer').value='';$('sheet-market').value='';$('sheet-store').value='';$('sheet-search').value='';filterRules={};sort={};$('sheet-dialog').close();await load();message('Employee added. Enter their times and save.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');name.focus();
+  const rowIdentity=row=>({dealer:row.dealer,store_id:row.store_id,date:row.date,source_date:row.source_date||row.date,employee_key:row.employee_key,revision:row.revision});
+  async function changeRows(action,chosen){
+    if(!await save())throw new Error('Resolve unsaved changes before changing rows.');
+    const entries=chosen.map(row=>rowIdentity(data.rows.find(r=>key(r)===key(row))||row));
+    await api('store-hours/rows','POST',{action,rows:entries});await load();
+  }
+  function removeRowsDialog(){
+    if(!data||loading)return;const selection=grid.selection();
+    if(selection.kind!=='rows'){message('Select entire rows using their row numbers or Shift+Space first.',true);return;}
+    const shown=visible(),chosen=[...new Set(selection.cells.map(p=>p.r))].map(r=>shown[r]);
+    const content=openDialog(`Remove ${chosen.length} row${chosen.length===1?'':'s'}`);
+    paragraph('These rows will be removed from the sheet and reports. Their values and version history are retained. Use Edit > Restore removed rows to bring them back.',content);
+    const list=document.createElement('ul');list.className='sheet-row-choices';for(const row of chosen){const item=document.createElement('li');item.textContent=`${row.date} | ${row.store} | ${formatted('employee',row.employee)}`;list.append(item);}content.append(list);
+    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);button('Cancel',()=>$('sheet-dialog').close(),footer);
+    const submit=button('Remove rows',async()=>{submit.disabled=true;try{await changeRows('remove',chosen);$('sheet-dialog').close();message('Rows removed. Restore them through Edit > Restore removed rows.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');
+  }
+  async function restoreRowsDialog(){
+    if(loading||!await save())return;await load();if(!user)return;
+    const content=openDialog('Restore removed rows'),removed=data?.removed_rows||[],chosen=new Set();
+    paragraph('Removed rows in the current date, dealer, market, and store filters. Restore up to 100 at a time.',content);
+    const list=document.createElement('div');list.className='sheet-filter-values';content.append(list);
+    if(!removed.length)paragraph('No removed rows in this period.',content);
+    for(const row of removed){const label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.onchange=()=>check.checked?chosen.add(row):chosen.delete(row);label.append(check,document.createTextNode(`${row.date} | ${row.store} | ${formatted('employee',row.employee)}`));list.append(label);}
+    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);button('Cancel',()=>$('sheet-dialog').close(),footer);
+    const submit=button('Restore rows',async()=>{if(!chosen.size||chosen.size>100){error.textContent='Select between 1 and 100 rows.';return;}submit.disabled=true;try{await changeRows('restore',[...chosen]);$('sheet-dialog').close();message('Rows restored with their saved values and formatting.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');submit.disabled=!removed.length;
+  }
+  function addRow(context){
+    if(!data)return;const content=openDialog('Add employee row'),stores=data.directory.map(s=>[JSON.stringify([s.dealer,s.store_id]),`${s.dealer} · ${s.market} · ${s.store}`]),store=selectLabel('Store',content,stores),date=inputLabel('Date',content,'date',context?.dealer?context.date:end),name=inputLabel('Employee name',content);date.max=data.today;name.maxLength=160;if(context?.dealer)store.value=JSON.stringify([context.dealer,context.store_id]);
+    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);button('Cancel',()=>$('sheet-dialog').close(),footer);const submit=button('Add row',async()=>{submit.disabled=true;try{if(!await save())throw new Error('Resolve the unsaved edits before adding a row.');const [dealer,store_id]=JSON.parse(store.value);await api('store-hours/employees','POST',{dealer,store_id,date:date.value,employee:name.value});start=end=date.value;$('sheet-from').value=start;$('sheet-to').value=end;$('sheet-dealer').value='';$('sheet-market').value='';$('sheet-store').value='';$('sheet-search').value='';filterRules={};sort={};$('sheet-dialog').close();await load();message('Employee added. Enter their times and save.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');name.focus();
   }
   async function download(){if(!await save())return;if(data)location.assign('/api/internal/store-hours/sheet/export?'+params());}
   async function copySnapshot(){if(!data)return;if(!await save())return;try{const canvas=base.render({...data,rows:rows.map(current)},{dealer:$('sheet-dealer').value,market:$('sheet-market').value}),blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);message('Snapshot copied.');}catch(e){message(e.message||'Could not copy the snapshot.',true);}}
@@ -222,7 +248,7 @@
   function closeMenu(){popup?.remove();popup=null;document.querySelectorAll('#sheet-menu button').forEach(b=>b.setAttribute('aria-expanded','false'));}
   const menus={
     File:[['Save changes',save,'Ctrl+S'],['Download Excel',download],['Copy snapshot',copySnapshot],['Reload saved sheet',load],['Back to portal',()=>location.assign('/internal#storehours')]],
-    Edit:[['Undo',()=>grid.command('undo'),'Ctrl+Z'],['Redo',()=>grid.command('redo'),'Ctrl+Y'],['Delete selected column',()=>columnDialog('delete',columns[grid.selection().active.c]?.[0]),'Ctrl+-'],['Copy',()=>grid.command('copy'),'Ctrl+C'],['Paste',()=>grid.command('paste'),'Ctrl+V'],['Fill down',()=>grid.command('down'),'Ctrl+D'],['Fill right',()=>grid.command('right'),'Ctrl+R'],['Use source/default',()=>grid.command('reset'),'F8 → U'],['Discard unsaved edits',()=>{if(saving){message('Wait for the current save to finish.',true);return;}clearTimeout(autosaveTimer);drafts.clear();saveFailed=false;load();}]],
+    Edit:[['Undo',()=>grid.command('undo'),'Ctrl+Z'],['Redo',()=>grid.command('redo'),'Ctrl+Y'],['Remove selected rows',removeRowsDialog],['Restore removed rows',restoreRowsDialog],['Delete selected column',()=>columnDialog('delete',columns[grid.selection().active.c]?.[0]),'Ctrl+-'],['Copy',()=>grid.command('copy'),'Ctrl+C'],['Paste',()=>grid.command('paste'),'Ctrl+V'],['Fill down',()=>grid.command('down'),'Ctrl+D'],['Fill right',()=>grid.command('right'),'Ctrl+R'],['Use source/default',()=>grid.command('reset'),'F8 → U'],['Discard unsaved edits',()=>{if(saving){message('Wait for the current save to finish.',true);return;}clearTimeout(autosaveTimer);drafts.clear();saveFailed=false;load();}]],
     View:[['Report filters',()=>setFiltersVisible($('sheet-filters').hidden)],['Version history',()=>historyPanel.open()],['Go to cell / range',()=>grid.command('goto'),'Ctrl+G']],
     Insert:[['Custom column',()=>columnDialog('add'),'Ctrl++'],['Employee row',addRow]],
     Format:[['Bold',()=>toggleFormat('bold')],['Italic',()=>toggleFormat('italic')],['Underline',()=>toggleFormat('underline')],['Wrap text',()=>toggleFormat('wrap')],['Borders',borderDialog],['Clear formatting',()=>grid.format(null)]],
@@ -236,7 +262,9 @@
     if(!(e.ctrlKey||e.metaKey)||e.altKey||!e.target.closest('td[data-grid-row]')||e.target.closest('input,textarea,[contenteditable=true]'))return;
     const add=e.key==='+'||e.key==='='||e.code==='NumpadAdd',remove=e.key==='-'||e.code==='NumpadSubtract';
     if(!add&&!remove)return;e.preventDefault();e.stopPropagation();if(e.repeat||loading)return;
-    columnDialog(add?'add':'delete',add?undefined:columns[grid.selection().active.c]?.[0]);
+    const selection=grid.selection();if(selection.kind==='rows'){if(add)addRow(visible()[selection.active.r]);else removeRowsDialog();}
+    else if(selection.kind==='all')message('Select row numbers or column headings to choose what to add or remove.',true);
+    else columnDialog(add?'add':'delete',add?undefined:columns[selection.active.c]?.[0]);
   },true);
   root.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&e.target.closest('td[data-grid-row]')&&!e.target.closest('input')){const format={b:'bold',i:'italic',u:'underline'}[e.key.toLowerCase()];if(format){e.preventDefault();e.stopPropagation();toggleFormat(format);}}},true);
   document.querySelectorAll('[data-format]').forEach(b=>b.onclick=()=>toggleFormat(b.dataset.format));document.querySelectorAll('[data-command]').forEach(b=>b.onclick=()=>grid.command(b.dataset.command));

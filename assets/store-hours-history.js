@@ -13,7 +13,7 @@ window.createStoreHoursHistory=function({root,params,request,columnLabels=()=>({
   function values(kind,data){
     if(!data)return {};
     if(kind==='review'||kind==='legacy_review'){
-      const out={'Opening time override':data.opening_time??'Workbook default','Camera in':time(data.camera_in),
+      const out={'Row status':data.removed?'Removed (restorable)':'Active','Opening time override':data.opening_time??'Workbook default','Camera in':time(data.camera_in),
         'Closing time override':data.closing_time??'Workbook default','Camera out':time(data.camera_out),'Review revision':String(data.revision)};
       for(const [key,label] of [['date','Date'],['market','Market'],['store','Store'],['employee','Employee'],['store_status','Store opening status'],['rt_clockin','RT clock-in'],['opening_status','Opening punctuality'],['rt_clockout','RT clock-out'],['closing_status','Closing status'],['chargeback','Chargeback']])
         out[label+' correction']=Object.hasOwn(data.cell_overrides||{},key)?String(data.cell_overrides[key]??'Blank / pending'):'Source / automatic';

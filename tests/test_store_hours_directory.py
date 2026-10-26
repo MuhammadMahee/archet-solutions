@@ -112,7 +112,7 @@ def test_reappearing_manual_duplicate_rejected(monkeypatch):
         def execute(self,*args): pass
     monkeypatch.setattr(sh,'connect',lambda:nullcontext(DB()))
     monkeypatch.setattr(sh,'roster_with_schedules',lambda conn:[dict(dealer='The Fix',store_id='WB-1')])
-    monkeypatch.setattr(sh,'store_day_rows',lambda *args:[{'employee_key':sh.employee_key('Jane Doe')}])
+    monkeypatch.setattr(sh,'store_day_rows',lambda *args,**kwargs:[{'employee_key':sh.employee_key('Jane Doe')}])
     with pytest.raises(PortalError,match='already has a row'):
         sh.add_manual_employee(dict(dealer='The Fix',store_id='WB-1',date=DAY.isoformat(),employee=' JANE   DOE '),'user')
 
