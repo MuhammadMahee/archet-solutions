@@ -1,4 +1,4 @@
-import { telecomServices, retailServices } from './public-data.js';
+import { telecomServices, retailServices, serviceIcons } from './public-data.js';
 
 const $ = (selector) => document.querySelector(selector);
 const intro = $('#intro');
@@ -97,11 +97,21 @@ function setIndustry(next) {
   const services = industry === 'telecom' ? telecomServices : retailServices;
   $('#servicesGrid').replaceChildren(...services.map((service, i) => {
     const article = document.createElement('article'); article.className = 'service-card';
+    const topline = document.createElement('div'); topline.className = 'service-topline';
+    const icon = document.createElement('span'); icon.className = 'service-icon'; icon.setAttribute('aria-hidden', 'true');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    Object.entries({ viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }).forEach(([key, value]) => svg.setAttribute(key, value));
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', serviceIcons[service.icon]);
+    svg.append(path); icon.append(svg);
+    const category = document.createElement('span'); category.className = 'service-category'; category.textContent = service.category;
     const number = document.createElement('span'); number.className = 'service-no'; number.textContent = String(i + 1).padStart(2, '0');
     const title = document.createElement('h3'); title.textContent = service.name;
     const description = document.createElement('p'); description.textContent = service.desc;
-    const link = document.createElement('a'); link.href = '#contact'; link.dataset.service = service.name; link.textContent = 'Discuss this service ↗';
-    article.append(number, title, description, link); return article;
+    const link = document.createElement('a'); link.href = '#contact'; link.dataset.service = service.name;
+    link.className = 'service-link'; link.setAttribute('aria-label', `Discuss ${service.name}`);
+    const arrow = document.createElement('span'); arrow.textContent = '\u2197'; arrow.setAttribute('aria-hidden', 'true'); link.append(arrow);
+    topline.append(icon, category, number);
+    article.append(topline, title, description, link); return article;
   }));
   selectBrand(industry === 'telecom' ? 'Metro by T-Mobile' : 'Gas Station / Vape Shop');
 }

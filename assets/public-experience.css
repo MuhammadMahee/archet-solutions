@@ -107,3 +107,30 @@ footer{background:#050b10ed}
  .fallback-building{width:500px;height:240px;left:calc(50% - 250px);top:54%;transform:perspective(1000px) rotateX(15deg) rotateY(-25deg) scale(.7)}.fallback-room{padding:20px 15px}.fallback-room>b{font-size:9px}.fallback-phones{gap:12px;padding:28px 10px 20px}.fallback-phones i{width:29px;height:65px}.fallback-monitors{gap:12px}.fallback-monitors i{width:80px;height:65px}
 }
 @media(max-width:360px){.hero h1{font-size:34px}.hero-actions{gap:14px}.hero-stats b{font-size:7px}.hero-stats p{font-size:8px}.hero-stats>a{gap:9px}.hero-stats>a:nth-child(even){padding-left:12px}.hero-meta{font-size:6px}}
+
+/* Give each capability room to breathe, with one quiet action per service. */
+.capabilities{background:radial-gradient(ellipse at 0 30%,#1b383547,transparent 55%),#050b10f5}
+.capabilities .section-heading{margin-bottom:48px;align-items:center}
+.capabilities .section-heading>div{max-width:290px}
+.capabilities .section-heading>div>p:first-child{font-size:14px;line-height:1.7}
+.capabilities .selected-industry{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+.capabilities .selected-industry strong{display:inline;margin-left:8px;font-size:11px;font-weight:400}
+.service-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;border:0}
+.service-card{position:relative;display:block;min-width:0;padding:29px 32px 30px;min-height:238px;border:1px solid #a4bdb522;border-radius:8px;background:linear-gradient(125deg,#15252c9c,#0b151be8);transition:border-color .25s,background .25s,transform .25s}
+.service-card:hover,.service-card:focus-within{background:linear-gradient(125deg,#1c353bb3,#101e24);border-color:#98c8bc77;transform:translateY(-3px)}
+.service-topline{display:flex;align-items:center;gap:12px;margin-bottom:23px}
+.service-icon{width:37px;height:37px;display:grid;place-items:center;flex:none;color:#a9cbc0;border:1px solid #a9cbc024;border-radius:9px;background:#a9cbc008}
+.service-icon svg{width:23px;height:23px}
+.service-category{font-size:9px;text-transform:uppercase;letter-spacing:.18em;color:#b4c3bc}
+.service-no{margin:0 0 0 auto;font:400 10px/1 Inter;color:#7e9298;letter-spacing:.06em}
+.service-card h3{font:400 clamp(20px,1.85vw,27px)/1.3 Inter;letter-spacing:-.035em;min-height:0;margin:0 46px 12px 0;color:#e7e9e1}
+.service-card p{max-width:420px;margin:0 48px 0 0;font:300 13px/1.8 Inter;color:#9eb0b5}
+.service-card .service-link{position:absolute;right:27px;bottom:30px;display:grid;place-items:center;width:42px;height:42px;margin:0;border:1px solid #c7d8d336;border-radius:50%;color:#d3b082;transition:color .25s,background .25s,border-color .25s}
+.service-card .service-link span{margin:0;font:300 22px/1 Inter;color:inherit}
+.service-card .service-link:hover,.service-card .service-link:focus-visible{background:#c5d6cb;color:#10232a;border-color:#c5d6cb}
+.services-footer{display:flex;align-items:center;justify-content:space-between;gap:25px;padding-top:29px;margin-top:20px;border-top:1px solid var(--line)}
+.services-footer p{font-size:12px;color:#8fa4aa}
+.services-footer .text-link{font-size:11px;font-weight:400;white-space:nowrap}
+@media(max-width:1050px){.service-card{padding:25px;min-height:260px}.service-card h3{font-size:23px}.service-card .service-link{right:22px;bottom:25px}.service-card p{font-size:12px;margin-right:42px}.service-card h3{margin-right:20px}}
+@media(max-width:700px){.capabilities .section-heading{margin-bottom:30px}.capabilities .section-heading>div{max-width:none}.capabilities .selected-industry{display:inline-block;margin-top:15px;padding:10px 14px;border:1px solid var(--line);border-radius:4px}.capabilities .section-heading>div>p:first-child{font-size:13px}.service-grid{grid-template-columns:1fr;gap:12px}.service-card{min-height:0;padding:22px 22px 26px}.service-topline{margin-bottom:20px}.service-card h3{font-size:22px;margin-right:0;max-width:290px}.service-card p{font-size:12px;margin-right:42px;line-height:1.8}.service-card .service-link{width:38px;height:38px;right:18px;bottom:25px}.service-category{font-size:8px}.service-icon{width:34px;height:34px}.service-no{font-size:9px}.services-footer{display:block;margin-top:28px;padding-top:22px}.services-footer p{font-size:11px}.services-footer .text-link{margin-top:15px}.service-card:hover{transform:none}}
+@media(max-width:360px){.service-card{padding:20px 18px 24px}.service-card h3{font-size:20px}.service-card p{font-size:11px;margin-right:38px}.service-card .service-link{width:34px;height:34px;right:15px}}
