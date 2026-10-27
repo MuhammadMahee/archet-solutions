@@ -5,13 +5,11 @@ import * as THREE from './public-three.module.min.js';
 const canvas = document.querySelector('#world');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const finePointer = matchMedia('(pointer: fine)');
-const motionButton = document.querySelector('#scene-motion');
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 } catch (_) {
   document.body.classList.add('webgl-unavailable');
-  if (motionButton) motionButton.hidden = true;
   window.dispatchEvent(new Event('scene-ready'));
 }
 
@@ -267,7 +265,7 @@ if (renderer) {
   const basePosition = shots[0].position.clone(), look = shots[0].target.clone();
   const pointer = new THREE.Vector2(), smoothPointer = new THREE.Vector2();
   let active = !document.body.classList.contains('is-loading');
-  let paused = false, lost = false, frame = 0, lastTime = null, elapsed = 0;
+  let lost = false, frame = 0, lastTime = null, elapsed = 0;
   let mobile = innerWidth < 700;
   function chooseShot() {
     const progress = reduced.matches ? 0 : scrollY;
@@ -285,7 +283,7 @@ if (renderer) {
     }
   }
   function draw(delta = 0, snap = false) {
-    const motion = !reduced.matches && !paused;
+    const motion = !reduced.matches;
     if (motion || snap) {
       chooseShot();
       const ease = snap ? 1 : 1 - Math.exp(-delta * 2.4);
@@ -310,25 +308,15 @@ if (renderer) {
   }
   function tick(time) {
     frame = 0;
-    if (!active || document.hidden || lost || reduced.matches || paused) return;
+    if (!active || document.hidden || lost || reduced.matches) return;
     const delta = lastTime === null ? 0 : Math.min((time - lastTime) / 1000, .05);
     lastTime = time; elapsed += delta; draw(delta); frame = requestAnimationFrame(tick);
   }
   function start() {
-    if (!frame && active && !document.hidden && !lost && !reduced.matches && !paused) {
+    if (!frame && active && !document.hidden && !lost && !reduced.matches) {
       lastTime = null; frame = requestAnimationFrame(tick);
     }
   }
-  function updateButton() {
-    if (!motionButton) return;
-    motionButton.disabled = reduced.matches;
-    motionButton.setAttribute('aria-pressed', String(paused || reduced.matches));
-    motionButton.textContent = reduced.matches ? 'Motion reduced' : paused ? 'Play motion' : 'Pause motion';
-  }
-  motionButton?.addEventListener('click', () => {
-    paused = !paused; updateButton();
-    if (paused) { cancelAnimationFrame(frame); frame = 0; } else start();
-  });
   addEventListener('pointermove', event => {
     if (finePointer.matches && event.pointerType !== 'touch') pointer.set(event.clientX / innerWidth * 2 - 1, 1 - event.clientY / innerHeight * 2);
   }, { passive: true });
@@ -340,21 +328,19 @@ if (renderer) {
     if (document.hidden) { cancelAnimationFrame(frame); frame = 0; } else start();
   });
   reduced.addEventListener('change', () => {
-    cancelAnimationFrame(frame); frame = 0; updateButton();
+    cancelAnimationFrame(frame); frame = 0;
     if (!lost) draw(0, true); start();
   });
   canvas.addEventListener('webglcontextlost', event => {
     event.preventDefault(); lost = true; cancelAnimationFrame(frame); frame = 0;
     document.body.classList.remove('webgl-ready');
     document.body.classList.add('webgl-unavailable');
-    if (motionButton) motionButton.hidden = true;
   });
   canvas.addEventListener('webglcontextrestored', () => {
     lost = false; resize(); document.body.classList.add('webgl-ready');
     document.body.classList.remove('webgl-unavailable');
-    if (motionButton) motionButton.hidden = false;
     start();
   });
-  updateButton(); resize(); document.body.classList.add('webgl-ready');
+  resize(); document.body.classList.add('webgl-ready');
   window.dispatchEvent(new Event('scene-ready')); start();
 }

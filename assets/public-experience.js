@@ -14,7 +14,6 @@ const sceneReady = new Promise(resolve => {
   window.addEventListener('scene-ready', resolve, { once: true });
   import('./public-scene.js').catch(() => {
     document.body.classList.add('webgl-unavailable');
-    $('#scene-motion').hidden = true;
     resolve();
   });
   setTimeout(resolve, 12000);

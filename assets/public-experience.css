@@ -55,12 +55,7 @@ h1,h2,h3{font-family:Inter,system-ui,sans-serif;font-weight:400}
 .hero-stats b{display:block;font-size:9px;font-weight:400;letter-spacing:.15em;text-transform:uppercase;color:#e3e5db}
 .hero-stats p{font-size:10px;line-height:1.6;margin-top:6px;max-width:180px;color:#8b9fa5}
 .hero-stats a:hover strong{color:var(--gold)}
-.scene-controls{position:fixed;z-index:31;bottom:17px;left:var(--pad);display:flex;align-items:center;gap:12px;font-size:8px;letter-spacing:.12em;color:#91a6ab}
-.scene-controls button{font:inherit;letter-spacing:inherit;text-transform:uppercase;color:#c5d4d0;background:#081016d9;border:1px solid #c7d8d333;padding:8px 12px;border-radius:2px;backdrop-filter:blur(10px)}
-.scene-controls button::before{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--gold);margin-right:8px}
-.scene-controls button[aria-pressed=true]::before{background:#809296}
-.scene-controls button:disabled{opacity:.7;cursor:default}
-.is-loading .scene-controls{visibility:hidden}
+
 .chapter{background:#050b10e8}
 .approach{background:linear-gradient(#050b1088,#050b10ed 22%,#050b10eb)}
 .chapter h2{font-weight:300;letter-spacing:-.045em}
@@ -102,7 +97,9 @@ footer{background:#050b10ed}
  .world-shade{background:linear-gradient(0deg,#050b10ef,transparent 28%,transparent 49%,#050b10e6 80%),linear-gradient(90deg,#050b1033,transparent)}
  .hero{padding-top:108px;min-height:960px}.hero-meta{font-size:7px}.hero-copy{padding:40px 0 330px;max-width:100%}.hero .eyebrow{font-size:7px;margin-bottom:18px}.hero h1{font-size:39px;line-height:1.13;max-width:350px}.hero-lead{font-size:12px;max-width:300px}.hero-actions{gap:21px;margin-top:22px}.hero-actions .button{font-size:9px}.hero-actions .quiet{gap:10px}
  .world-caption{bottom:285px;font-size:7px}.world-caption b{font-size:7px}.world-caption small{font-size:7px}.hero-cue{font-size:7px}.hero-stats{grid-template-columns:1fr 1fr;gap:24px 18px;padding-top:22px}.hero-stats>a+a{padding-left:0;border-left:0}.hero-stats>a:nth-child(even){border-left:1px solid var(--line);padding-left:18px}.hero-stats strong{font-size:24px}.hero-stats p{font-size:9px}.hero-stats b{font-size:8px;letter-spacing:.09em}
- .scene-controls{bottom:12px}.scene-controls button{padding:7px 9px;font-size:7px}.chapter-marker{bottom:13px;font-size:6px;max-width:48%;text-align:right}.scene-controls>span{display:none}
+
+.chapter-marker{bottom:13px;font-size:6px;max-width:48%;text-align:right}
+
  .scene-window{height:100svh;min-height:760px;padding:65px var(--pad)}.scene-window h2{font-size:38px;max-width:350px}.scene-window .tour-copy>p{font-size:12px;max-width:240px}.scene-window .tour-copy{margin-bottom:auto}.scene-coordinate{margin-top:320px;font-size:7px}.scene-window>.eyebrow{font-size:7px}
  .fallback-building{width:500px;height:240px;left:calc(50% - 250px);top:54%;transform:perspective(1000px) rotateX(15deg) rotateY(-25deg) scale(.7)}.fallback-room{padding:20px 15px}.fallback-room>b{font-size:9px}.fallback-phones{gap:12px;padding:28px 10px 20px}.fallback-phones i{width:29px;height:65px}.fallback-monitors{gap:12px}.fallback-monitors i{width:80px;height:65px}
 }
@@ -136,7 +133,7 @@ footer{background:#050b10ed}
 @media(max-width:360px){.service-card{padding:20px 18px 24px}.service-card h3{font-size:20px}.service-card p{font-size:11px;margin-right:38px}.service-card .service-link{width:34px;height:34px;right:15px}}
 
 /* A consistent, bold action style across the public experience. */
-.button,.hero-actions .button,.nav-quote,.industry-switch button,.brand-choice,.menu-toggle,.scene-controls button,.text-link,.services-footer .text-link,.back-top{font-weight:700}
+.button,.hero-actions .button,.nav-quote,.industry-switch button,.brand-choice,.menu-toggle,.text-link,.services-footer .text-link,.back-top{font-weight:700}
 .button,.hero-actions .button{border-radius:9px;min-height:50px;padding:8px 10px 8px 19px;gap:18px;font-size:12px;letter-spacing:.01em;transition:background .2s,border-color .2s,box-shadow .2s,transform .2s}
 .button.primary,.hero-actions .primary{color:#102c2b;background:linear-gradient(115deg,#d1e9de,#8cd4c4);border:1px solid #c4e8d9;box-shadow:inset 0 1px 0 #ffffff80,0 6px 24px #71c5af18}
 .button.primary>span,.hero-actions .primary>span{display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;border-radius:6px;background:#143d38;color:#d9f1e6;font-size:20px;font-weight:600;transition:background .2s,transform .2s}
@@ -153,7 +150,7 @@ footer{background:#050b10ed}
 .industry-switch button[aria-pressed=true] span{color:#3c675a;font-weight:700}
 .brand-choice{border-radius:10px;background:linear-gradient(125deg,#182b309c,#0b1820);font-weight:700}
 .brand-choice[aria-pressed=true]{border-color:#a8d2c394;background:linear-gradient(125deg,#28443f,#142c2f);box-shadow:inset 3px 0 #9ac9b5}
-.scene-controls button{border-radius:6px;letter-spacing:.08em}
+
 .button:active,.hero-actions .button:active,.nav-quote:active{transform:translateY(0);box-shadow:none}
 .button:disabled,.button:disabled:hover{cursor:wait;opacity:.65;transform:none;box-shadow:none}
 #quoteForm .button.primary{min-height:57px;padding:9px 11px 9px 20px;font-size:14px;font-weight:750;letter-spacing:0;border-radius:10px}
