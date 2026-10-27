@@ -12,7 +12,11 @@ const loading = setInterval(() => {
 }, 300);
 const sceneReady = new Promise(resolve => {
   window.addEventListener('scene-ready', resolve, { once: true });
-  import('./public-scene.js').catch(() => resolve());
+  import('./public-scene.js').catch(() => {
+    document.body.classList.add('webgl-unavailable');
+    $('#scene-motion').hidden = true;
+    resolve();
+  });
   setTimeout(resolve, 12000);
 });
 const logoReady = $('#intro-logo').decode?.().catch(() => {});
