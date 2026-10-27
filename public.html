@@ -722,45 +722,31 @@
         Phone
         <input autocomplete="tel" maxlength="50" name="phone" placeholder="Your phone number" type="tel"/>
        </label>
-       <label>
+      </div>
+      <div class="form-grid business-fields">
+       <label for="quote-brand">
         Industry / brand
         <span>
          *
         </span>
-        <select name="brand" required="">
-         <option>
-          Verizon Wireless
-         </option>
-         <option>
-          AT&amp;T
-         </option>
-         <option>
-          T-Mobile
-         </option>
-         <option selected="">
-          Metro by T-Mobile
-         </option>
-         <option>
-          Cricket Wireless
-         </option>
-         <option>
-          Boost Mobile
-         </option>
-         <option>
-          Visible
-         </option>
-         <option>
-          Total Wireless
-         </option>
-         <option>
-          Gas Station / Vape Shop
-         </option>
-         <option>
-          Website Development &amp; Design
-         </option>
-         <option>
-          Logo &amp; Brand Identity Design
-         </option>
+        <select id="quote-brand" name="brand" required="">
+         <optgroup label="Telecom brands">
+          <option>Verizon Wireless</option>
+          <option>AT&amp;T</option>
+          <option>T-Mobile</option>
+          <option selected="">Metro by T-Mobile</option>
+          <option>Cricket Wireless</option>
+          <option>Boost Mobile</option>
+          <option>Visible</option>
+          <option>Total Wireless</option>
+         </optgroup>
+         <optgroup label="Retail operations">
+          <option>Gas Station / Vape Shop</option>
+         </optgroup>
+         <optgroup label="Digital &amp; design">
+          <option>Website Development &amp; Design</option>
+          <option>Logo &amp; Brand Identity Design</option>
+         </optgroup>
         </select>
        </label>
        <label>
