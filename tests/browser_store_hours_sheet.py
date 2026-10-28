@@ -27,26 +27,26 @@ def check(page):
     page.get_by_label('Column name',exact=True).fill('Review Notes')
     page.get_by_role('button',name='Save column',exact=True).click()
     expect(page.locator('thead')).to_contain_text('Review Notes')
-    edit('O1','Needs follow-up')
-    edit('O2','Checked')
-    go('O1')
+    edit('P1','Needs follow-up')
+    edit('P2','Checked')
+    go('P1')
     page.keyboard.press('Control+b')
-    expect(cell('O1')).to_have_css('font-weight','700')
+    expect(cell('P1')).to_have_css('font-weight','700')
     page.keyboard.press('Control+z')
-    expect(cell('O1')).to_have_css('font-weight','400')
+    expect(cell('P1')).to_have_css('font-weight','400')
     page.keyboard.press('Control+y')
-    expect(cell('O1')).to_have_css('font-weight','700')
+    expect(cell('P1')).to_have_css('font-weight','700')
     page.locator('#sheet-fill-color').fill('#fff0aa')
     page.locator('#sheet-fill-color').dispatch_event('change')
-    expect(cell('O1')).to_have_css('background-color','rgb(255, 240, 170)')
-    go('N1')
+    expect(cell('P1')).to_have_css('background-color','rgb(255, 240, 170)')
+    go('O1')
     page.locator('#sheet-number-format').select_option('currency')
-    expect(cell('N1')).to_have_text('-$10.00')
+    expect(cell('O1')).to_have_text('-$10.00')
     save()
     page.reload()
-    expect(cell('O1')).to_have_text('Needs follow-up')
-    expect(cell('O1')).to_have_css('font-weight','700')
-    expect(cell('O1')).to_have_css('background-color','rgb(255, 240, 170)')
+    expect(cell('P1')).to_have_text('Needs follow-up')
+    expect(cell('P1')).to_have_css('font-weight','700')
+    expect(cell('P1')).to_have_css('background-color','rgb(255, 240, 170)')
     # Saved presentation and all custom columns are exported.
     page.get_by_role('button',name='File',exact=True).click()
     page.get_by_role('menuitem',name='Download Excel',exact=True).click()
@@ -55,10 +55,10 @@ def check(page):
     path=ROOT/'test-results/standalone-sheet.xlsx'
     download.value.save_as(str(path))
     book=load_workbook(path)
-    assert book.active['O2'].value=='Review Notes'
-    assert book.active['O3'].value=='Needs follow-up' and book.active['O3'].font.bold
-    assert book.active['O3'].fill.fgColor.rgb.endswith('FFF0AA') or book.active['O3'].fill.fgColor.rgb.endswith('fff0aa')
-    assert book.active['N3'].number_format=='$#,##0.00;[Red]-$#,##0.00'
+    assert book.active['P2'].value=='Review Notes'
+    assert book.active['P3'].value=='Needs follow-up' and book.active['P3'].font.bold
+    assert book.active['P3'].fill.fgColor.rgb.endswith('FFF0AA') or book.active['P3'].fill.fgColor.rgb.endswith('fff0aa')
+    assert book.active['O3'].number_format=='$#,##0.00;[Red]-$#,##0.00'
 
     # Default headings expose filters and explicitly prevent deletion.
     page.get_by_role('button',name='Filter Employee column employee',exact=True).click()
@@ -66,8 +66,8 @@ def check(page):
     page.get_by_label('Text contains',exact=True).fill('Closing')
     page.get_by_role('button',name='Apply filter',exact=True).click()
     expect(page.locator('#sheet-row-count')).to_contain_text('1 row')
-    expect(cell('D1')).to_have_text('CLOSING EMPLOYEE')
-    expect(cell('O1')).to_have_text('Checked')
+    expect(cell('E1')).to_have_text('CLOSING EMPLOYEE')
+    expect(cell('P1')).to_have_text('Checked')
     page.get_by_role('button',name='File',exact=True).click()
     page.get_by_role('menuitem',name='Download Excel',exact=True).click()
     with page.expect_download() as download:
@@ -81,10 +81,10 @@ def check(page):
     page.locator('#sheet-filter-toggle').click()
 
     # The value bar edits selected cells. Custom names are renameable and removable.
-    go('O2')
+    go('P2')
     page.locator('#sheet-value').fill('Verified in camera')
     page.locator('#sheet-value').press('Enter')
-    expect(cell('O2')).to_have_text('Verified in camera')
+    expect(cell('P2')).to_have_text('Verified in camera')
     save()
     page.get_by_role('button',name='Filter Review Notes column custom_1',exact=True).click()
     page.get_by_role('button',name='Rename column',exact=True).click()
@@ -98,11 +98,11 @@ def check(page):
             data={'action':'add','name':'Extra '+str(n),'format':'text','revision':n+2})
         assert response.ok
     page.reload()
-    expect(cell('AA1')).to_be_attached()
-    edit('AA1','Beyond Z')
-    go('AA1:AA3')
+    expect(cell('AB1')).to_be_attached()
+    edit('AB1','Beyond Z')
+    go('AB1:AB3')
     page.keyboard.press('Control+d')
-    expect(cell('AA3')).to_have_text('Beyond Z')
+    expect(cell('AB3')).to_have_text('Beyond Z')
     page.keyboard.press('Control+Space')
     expect(page.locator('#sh-table .sh-cell-selected')).to_have_count(7)
     save()

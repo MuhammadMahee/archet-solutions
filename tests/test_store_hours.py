@@ -144,11 +144,11 @@ def test_excel_columns_missing_values_colors_and_formula_safety():
     book = load_workbook(sh.excel_report(dict(rows=rows, start=DAY.isoformat(), end=DAY.isoformat(), updated_at=None, coverage={'complete': 0, 'expected': 2})))
     sheet = book.active
     assert [c.value for c in sheet[2]] == [heading for _, heading in sh.COLUMNS]
-    assert sheet['D3'].data_type == 's'
-    assert sheet['N3'].value == -10
-    assert sheet['I3'].fill.fgColor.rgb.endswith('FFC7CE')
-    assert sheet['H5'].value == 'No Clock In' and sheet['L5'].value == 'No Clock Out'
-    assert sheet['N5'].value == 'Pending'
+    assert sheet['E3'].data_type == 's'
+    assert sheet['O3'].value == -10
+    assert sheet['J3'].fill.fgColor.rgb.endswith('FFC7CE')
+    assert sheet['I5'].value == 'No Clock In' and sheet['M5'].value == 'No Clock Out'
+    assert sheet['O5'].value == 'Pending'
 
 
 def test_endpoints_auth_and_member_sync(client, monkeypatch):

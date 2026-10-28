@@ -35,7 +35,7 @@ from api.sales import (SOURCES, COLORS, MAX_REPORT_BYTES, ReportError, connect,
 
 REPORT_URL = 'https://myrtpos.com/newbdi/TimePunches.fwx'
 LOCK_ID = 731043260927
-COLUMNS = [('date', 'Date'), ('market', 'Market'), ('store', 'Store'),
+COLUMNS = [('date', 'Date'), ('dealer_name', 'Dealer'), ('market', 'Market'), ('store', 'Store'),
            ('employee', 'Employee'), ('store_status', 'Opening Status'),
            ('opening_time', 'Opening Time'), ('camera_in', 'Camera In View'),
            ('rt_clockin', 'RT Clockin'), ('opening_status', 'Opening Status'),
@@ -43,7 +43,7 @@ COLUMNS = [('date', 'Date'), ('market', 'Market'), ('store', 'Store'),
            ('rt_clockout', 'RT Clockout'), ('closing_status', 'Closing Status'),
            ('chargeback', 'Late Opening Chargeback')]
 TIME_FIELDS = ('opening_time', 'closing_time', 'camera_in', 'camera_out')
-OVERRIDE_FIELDS = {'date', 'market', 'store', 'employee', 'store_status', 'rt_clockin',
+OVERRIDE_FIELDS = {'date', 'dealer_name', 'market', 'store', 'employee', 'store_status', 'rt_clockin',
                    'opening_status', 'rt_clockout', 'closing_status', 'chargeback', 'camera_in', 'camera_out'}
 
 
@@ -366,8 +366,8 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                            scheduled_opening_time=iso_time(schedule.get('opening_time')),
                            scheduled_closing_time=iso_time(schedule.get('closing_time')),
                            **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
+                row['dealer_name'] = dealer
                 if compliance():
-                    row['dealer_name'] = dealer
                     row.update({field: None for field in CHECK_FIELDS})
                 row['source_date'] = day.isoformat()
                 row['cell_overrides'] = overrides
@@ -515,12 +515,12 @@ def excel_report(data):
             cell.fill = PatternFill('solid', fgColor='203C66')
             cell.font = Font(name='Calibri',color='FFFFFF', bold=True)
             cell.alignment = Alignment(horizontal='center')
-    widths = [14, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25]
+    widths = [14, 20, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25]
     if compliance():
         widths = [14,20,20,34,30] + [22] * 7
     for n, width in enumerate(widths + [24] * (len(columns)-len(report_columns())), 1):
         sheet.column_dimensions[get_column_letter(n)].width = width
-    sheet.freeze_panes = 'F3' if compliance() else 'E3'
+    sheet.freeze_panes = 'F3'
     sheet.auto_filter.ref = f'A2:{get_column_letter(len(columns))}{sheet.max_row}'
     meta = book.create_sheet('Report details')
     for values in [('Source', REPORT_URL), ('From', data['start']), ('To', data['end']),

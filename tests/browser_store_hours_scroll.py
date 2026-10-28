@@ -27,7 +27,7 @@ def check(page):
       await new Promise(resolve=>{function tick(now){samples.push({left:wrap.scrollLeft,time:now-start});if(now-start<600)requestAnimationFrame(tick);else resolve();}requestAnimationFrame(tick);});
       return {immediate,focus,samples};
     }''')
-    assert result['focus']=='N1' and result['immediate']==0,result
+    assert result['focus']=='O1' and result['immediate']==0,result
     samples=[s['left'] for s in result['samples']];end=samples[-1]
     assert end>500 and any(0<x<end-1 for x in samples),samples
     assert all(b>=a-1 for a,b in zip(samples,samples[1:])),samples
@@ -36,17 +36,17 @@ def check(page):
     # Moving back left animates, and a reversal replaces the pending destination.
     go('A1')
     page.keyboard.press('Control+ArrowRight')
-    expect(page.locator('[data-address="N1"]')).to_be_focused()
+    expect(page.locator('[data-address="O1"]')).to_be_focused()
     visible()
     go('A1')
     visible()
     for _ in range(13):page.keyboard.press('ArrowRight')
     visible()
-    expect(page.locator('[data-address="N1"]')).to_be_focused()
+    expect(page.locator('[data-address="O1"]')).to_be_focused()
     page.locator('#sheet-zoom').select_option('125%')
     go('A1')
     visible()
-    go('N1')
+    go('O1')
     visible()
     # Manual scrolling takes over instead of fighting the keyboard animation.
     result=page.evaluate('''async () => {
@@ -60,7 +60,7 @@ def check(page):
     go('A1');visible()
     result=page.evaluate('''() => {
       document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'End',bubbles:true}));
-      document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'F2',bubbles:true}));
+      document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'G2',bubbles:true}));
       return document.querySelector('.sheet-grid-wrap').scrollLeft;
     }''')
     assert result<=1,result

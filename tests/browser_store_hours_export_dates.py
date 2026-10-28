@@ -21,8 +21,8 @@ def check(page):
     page.get_by_role('button',name='Cancel',exact=True).click()
     assert not exports()
     # A download should include the latest edit and preserve current column filters.
-    page.locator('#sh-grid-address').fill('D1');page.locator('#sh-grid-address').press('Enter')
-    page.keyboard.press('F2');page.get_by_role('textbox',name='Edit D1',exact=True).fill('Export employee');page.keyboard.press('Enter')
+    page.locator('#sh-grid-address').fill('E1');page.locator('#sh-grid-address').press('Enter')
+    page.keyboard.press('F2');page.get_by_role('textbox',name='Edit E1',exact=True).fill('Export employee');page.keyboard.press('Enter')
     page.get_by_role('button',name='Filter Employee column employee',exact=True).click()
     page.get_by_label('Text contains',exact=True).fill('Export')
     page.get_by_role('button',name='Apply filter',exact=True).click()

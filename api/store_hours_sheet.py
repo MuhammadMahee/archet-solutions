@@ -124,7 +124,7 @@ def change_column(payload,user_id):
 
 def filter_rows(rows, columns, filters, sort):
     keys={c[0] for c in columns}
-    if not isinstance(filters,dict) or set(filters)-keys or len(filters)>54:
+    if not isinstance(filters,dict) or set(filters)-keys or len(filters)>len(columns):
         raise PortalError('Choose valid column filters.')
     for key,rule in filters.items():
         if not isinstance(rule,dict) or set(rule)-{'contains','values'}:
@@ -267,7 +267,7 @@ def presence_input(payload):
             if not isinstance(selected,dict) or set(selected)!={'rows','columns','areas'}:
                 raise PortalError('Choose a valid spreadsheet selection.')
             rows,columns,areas=(selected[k] for k in ('rows','columns','areas'))
-            if not isinstance(rows,list) or not 1<=len(rows)<=100 or not isinstance(columns,list) or not 1<=len(columns)<=54 or not isinstance(areas,list) or not 1<=len(areas)<=50:
+            if not isinstance(rows,list) or not 1<=len(rows)<=100 or not isinstance(columns,list) or not 1<=len(columns)<=len(report_columns())+40 or not isinstance(areas,list) or not 1<=len(areas)<=50:
                 raise PortalError('Choose a valid spreadsheet selection.')
             for row in rows:presence_row(row)
             for column in columns:presence_column(column)

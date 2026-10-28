@@ -97,12 +97,12 @@ def test_custom_cells_excel_values_and_formats_are_safe():
     rows[0]['cell_formats']={'custom_1':{'bold':True,'italic':True,'background':'#ffeeaa','color':'#123456','wrap':True,'align':'center'},'custom_2':{'number_format':'currency'}}
     result=sh.excel_report(dict(rows=rows,columns=sh.COLUMNS+[('custom_1','Notes'),('custom_2','Amount')],column_formats={},start='2026-10-20',end='2026-10-20',updated_at=None,coverage={'complete':0,'expected':1}))
     book=load_workbook(result)
-    text=book.active['O3'];amount=book.active['P3']
+    text=book.active['P3'];amount=book.active['Q3']
     assert text.data_type=='s' and text.value.startswith('=HYPERLINK')
     assert text.font.bold and text.font.italic and text.alignment.wrap_text
     assert text.fill.fgColor.rgb=='00ffeeaa'
     assert amount.value==12.5 and amount.number_format=='$#,##0.00;[Red]-$#,##0.00'
-    assert book.active.auto_filter.ref=='A2:P6'
+    assert book.active.auto_filter.ref=='A2:Q6'
 
 
 @pytest.mark.parametrize('fmt',[
@@ -128,7 +128,7 @@ def test_fonts_borders_uppercase_export_and_original_names():
     rows[0]['cell_formats']={'employee':{**fmt,'number_format':'text'}}
     book=load_workbook(sh.excel_report(dict(rows=rows,columns=sh.COLUMNS,column_formats={},
         start='2026-10-20',end='2026-10-20',updated_at=None,coverage={'complete':0,'expected':1})))
-    cell=book.active['D3']
+    cell=book.active['E3']
     assert cell.value==original.upper() and rows[0]['employee']==original
     assert cell.font.name=='Calibri' and cell.font.sz==14
     assert cell.border.top.style=='double' and cell.border.top.color.rgb=='00123456'

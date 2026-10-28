@@ -83,8 +83,8 @@ def test_excel_receives_resolved_weekend_hours():
     rows = sh.build_rows([store()], [], [], [], day, day)
     book = load_workbook(sh.excel_report(dict(rows=rows, start=day.isoformat(), end=day.isoformat(),
         updated_at=None, coverage={'complete': 0, 'expected': 1})))
-    assert book.active['F3'].value == '11:00:00 AM'
-    assert book.active['J3'].value == '7:00:00 PM'
+    assert book.active['G3'].value == '11:00:00 AM'
+    assert book.active['K3'].value == '7:00:00 PM'
 
 
 @pytest.mark.parametrize('opening,closing,expected', [
