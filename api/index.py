@@ -244,6 +244,18 @@ def internal():
     return send_from_directory(BASE_DIR, "index.html")
 
 
+@app.get('/compliance')
+@app.get('/compliance/')
+def compliance_spreadsheet():
+    if not portal_host():
+        return redirect('https://' + INTERNAL_HOST + '/compliance', code=302)
+    with open(os.path.join(BASE_DIR, 'spreadsheet.html'), encoding='utf-8') as source:
+        html = source.read()
+    html = html.replace('Opening &amp; Closing', 'Compliance').replace('Opening & Closing', 'Compliance')
+    html = html.replace('<body>', '<body data-sheet="compliance">')
+    return html
+
+
 @app.get('/spreadsheet')
 @app.get('/spreadsheet/')
 def spreadsheet():

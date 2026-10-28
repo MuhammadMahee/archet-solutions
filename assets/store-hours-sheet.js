@@ -1,7 +1,8 @@
 'use strict';
 (() => {
   const $=id=>document.getElementById(id),root=$('sheet-app'),table=$('sh-table');
-  const base=window.storeHoursSnapshot,columns=base.columns.map(c=>[...c]),fields=['opening_time','closing_time','camera_in','camera_out'];
+  const base=window.storeHoursSnapshot,columns=base.columns.map(c=>[...c]),fields=base.compliance?[]:['opening_time','closing_time','camera_in','camera_out'];
+  const sheetPage=base.compliance?'compliance':'spreadsheet',sheetPath=path=>base.compliance?path.replace('store-hours','compliance'):path;
   const key=r=>JSON.stringify([r.dealer,r.store_id,r.source_date||r.date,r.employee_key||'']);
   let user=null,data=null,rows=[],grid,historyPanel,saving=false,page=0,loading=false,filterRules={},sort={},popup=null;
   let autosaveTimer=null,saveFlight=null,saveFailed=false;
@@ -16,6 +17,7 @@
   const current=r=>drafts.get(key(r))||r,visible=()=>rows.slice(page*100,(page+1)*100).map(current);
   function message(text='',error=false){$('sheet-message').textContent=text;$('sheet-message').hidden=!text;$('sheet-message').classList.toggle('is-error',error);}
   async function api(path,method='GET',body,signal){
+    path=sheetPath(path);
     const response=await fetch('/api/internal/'+path,{method,signal,headers:method==='GET'?{}:{'Content-Type':'application/json','X-Archet-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
     let result;try{result=await response.json();}catch{throw new Error('The service could not respond. Please try again.');}
     if(!response.ok){if(result.code==='password_change_required'){root.hidden=true;drafts.clear();clearTimeout(autosaveTimer);presence?.clear();location.replace('/internal');throw new Error(result.message);}if(response.status===401&&user){user=null;root.hidden=true;$('sheet-login').hidden=false;drafts.clear();clearTimeout(autosaveTimer);grid.reset();historyPanel.clear();presence?.clear();$('sheet-dialog').close();closeMenu();}const error=new Error(result.message||'The request could not be completed.');error.status=response.status;throw error;}return result;
@@ -36,7 +38,8 @@
     return field.startsWith('custom_')?s:base.text(field,value);
   }
   function evaluate(row){
-    const sec=v=>v?v.split(':').reduce((s,v,i)=>s+Number(v)*[3600,60,1][i],0):null;
+    if(base.compliance)return {};
+    const sec=v=>v&&v!=='Camera Offline'?v.split(':').reduce((s,v,i)=>s+Number(v)*[3600,60,1][i],0):null;
     const [opening,closing,cin,cout]=fields.map(k=>sec(row[k]));
     const out={store_status:cin===null?'Pending camera review':'Open',opening_status:'Pending camera review',closing_status:'Pending camera review',chargeback:null};
     if(cin!==null){if(opening===null)out.opening_status='Schedule required';else{const delay=cin-opening;out.opening_status=delay>=60?'Late':'On Time';const threshold={HOUSTON:5,RENO:5,DALLAS:10}[row.market.trim().toUpperCase()];out.chargeback=row.dealer==='Connect'&&threshold&&delay>=threshold*60?-10:0;}}
@@ -46,7 +49,7 @@
   function refreshDraft(row,saved){
     for(const [field] of base.columns)if(!fields.includes(field))row[field]=Object.hasOwn(row.cell_overrides,field)?row.cell_overrides[field]:(Object.hasOwn(saved.source_values||{},field)?saved.source_values[field]:saved[field]);
     const preview={...row};for(const field of ['opening_time','closing_time'])if(!preview[field])preview[field]=saved['scheduled_'+field]||null;
-    Object.assign(row,evaluate(preview),row.cell_overrides);
+    Object.assign(row,evaluate(preview),Object.fromEntries(Object.entries(row.cell_overrides).filter(([k])=>!fields.includes(k))));
     for(const [field] of columns)if(field.startsWith('custom_'))row[field]=row.custom_cells[field]??null;
   }
   const equal=(a,b)=>a===b||!!(a&&b&&typeof a==='object'&&typeof b==='object'&&Array.isArray(a)===Array.isArray(b)&&Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(k=>Object.hasOwn(b,k)&&equal(a[k],b[k])));
@@ -154,7 +157,7 @@
     table.tHead.replaceChildren(header);table.tBodies[0].replaceChildren();page=Math.min(page,Math.max(0,Math.ceil(rows.length/100)-1));
     for(const [i,row] of visible().entries()){
       const tr=document.createElement('tr'),number=document.createElement('th');number.scope='row';number.textContent=page*100+i+1;number.dataset.sheetRow=i;tr.append(number);
-      for(const [field] of columns){const td=document.createElement('td'),fmt=row.cell_formats?.[field]||{};td.textContent=formatted(field,row[field],fmt);td.dataset.column=field;const tone=base.tone(field,row[field]);if(tone)td.classList.add('sh-'+tone);if(Object.hasOwn(row.cell_overrides||{},field))td.classList.add('sh-cell-corrected');cellStyle(td,fmt);tr.append(td);}table.tBodies[0].append(tr);
+      for(const [field] of columns){const td=document.createElement('td'),fmt=row.cell_formats?.[field]||{};td.textContent=formatted(field,row[field],fmt);td.dataset.column=field;const tone=base.tone(field,row[field]);if(tone)td.classList.add('sh-'+tone);if(Object.hasOwn(row.cell_overrides||{},field))td.classList.add('sh-cell-corrected');cellStyle(td,fmt);if(base.compliance&&base.checks.some(c=>c[0]===field)&&base.checkColors[row[field]]){td.style.color=base.checkColors[row[field]][0];td.style.backgroundColor=base.checkColors[row[field]][1];}tr.append(td);}table.tBodies[0].append(tr);
     }
     $('sheet-empty').hidden=!!rows.length;$('sheet-row-count').textContent=`${rows.length.toLocaleString()} row${rows.length===1?'':'s'}${Object.keys(filterRules).length?' · '+Object.keys(filterRules).length+' column filters':''}`;
     $('sheet-period').textContent=start===end?start:`${start} – ${end}`;$('sheet-page').textContent=rows.length?`${page*100+1}–${Math.min(rows.length,(page+1)*100)}`:'0';$('sheet-prev').disabled=page===0;$('sheet-next').disabled=(page+1)*100>=rows.length;dirty();grid?.refresh();
@@ -203,12 +206,13 @@
     presence?.render();
     const row=visible()[active.r],field=columns[active.c]?.[0],fmt=row?.cell_formats?.[field]||{};
     if(document.activeElement!==$('sheet-value'))$('sheet-value').value=rawText(row?.[field]);$('sheet-value-label').textContent=columns[active.c]?.[1]||'';
+    $('sheet-value').setAttribute('list',['camera_in','camera_out'].includes(field)?'sh-camera-options':base.compliance&&base.checks.some(c=>c[0]===field)?'sh-check-options':'');
     $('sheet-selection-status').textContent=cells.length>1?`${cells.length} cells selected`:address;
     document.querySelectorAll('[data-format]').forEach(button=>button.setAttribute('aria-pressed',String(!!fmt[button.dataset.format])));
     $('sheet-font-family').value=fmt.font_family||'Calibri';
     $('sheet-number-format').value=fmt.number_format||data?.column_formats?.[field]||'auto';$('sheet-font-size').value=fmt.font_size||10;$('sheet-align').value=fmt.align||'left';$('sheet-text-color').value=fmt.color||'#202124';$('sheet-fill-color').value=fmt.background||'#ffffff';
   }
-  grid=window.createStoreHoursGrid({root,table,columns,fields,gutter:true,autosave:true,moveOnPaste:true,animateSelection:true,text:(k,v)=>formatted(k,v),key,message,rows:visible,editing:()=>true,busy:()=>loading,user:()=>user?.id||'',today:()=>data?.today||today,
+  grid=window.createStoreHoursGrid({root,table,columns,fields,choices:base.compliance?Object.fromEntries(base.checks.map(([key])=>[key,['Yes','No','#N/A']])):{},gutter:true,autosave:true,moveOnPaste:true,animateSelection:true,text:(k,v)=>formatted(k,v),key,message,rows:visible,editing:()=>true,busy:()=>loading,user:()=>user?.id||'',today:()=>data?.today||today,
     manual:(r,c)=>{const row=visible()[r],field=columns[c][0];return fields.includes(field)||Object.hasOwn(field.startsWith('custom_')?row.custom_cells||{}:row.cell_overrides||{},field);},
     cellFormat:(r,c)=>({...visible()[r]?.cell_formats?.[columns[c][0]]}),onSelection:selectionChanged,
     apply(changes){const shown=rows.slice(page*100,(page+1)*100);for(const change of changes){const {r,c,value,reset,kind}=change,saved=shown[r],previous=current(saved),field=columns[c][0],row={...previous,cell_overrides:{...previous.cell_overrides},custom_cells:{...previous.custom_cells},cell_formats:{...previous.cell_formats}};
@@ -219,7 +223,7 @@
       refreshDraft(row,saved);drafts.set(key(saved),row);}render();scheduleAutosave();},save,find:()=>{setFiltersVisible(true);$('sheet-search').focus();},download:download,add:addRow});
   $('sheet-address-slot').append(root.querySelector('.sh-address-label'));
   historyPanel=window.createStoreHoursHistory({root,params:()=>params(false),request:api,columnLabels:()=>Object.fromEntries([...base.columns,...(data?.sheet?.columns||[]).map(c=>[c.id,c.name])])});
-  presence=window.createStoreHoursPresence({root,table,columns,rows:visible,user:()=>user,selection:()=>grid.selection(),editing:()=>grid.isEditing()||document.activeElement===$('sheet-value')});
+  presence=window.createStoreHoursPresence({root,table,columns,rows:visible,user:()=>user,selection:()=>grid.selection(),endpoint:'/api/internal/'+sheetPath('store-hours/sheet/presence'),editing:()=>grid.isEditing()||document.activeElement===$('sheet-value')});
   function setFiltersVisible(visible){$('sheet-filters').hidden=!visible;$('sheet-filter-toggle').setAttribute('aria-pressed',String(visible));}
   function openDialog(title){closeMenu();$('sheet-dialog').classList.remove('sheet-wide');$('sheet-dialog-title').textContent=title;$('sheet-dialog-content').replaceChildren();if(!$('sheet-dialog').open)$('sheet-dialog').showModal();return $('sheet-dialog-content');}
   $('sheet-dialog-close').onclick=()=>$('sheet-dialog').close();
@@ -319,7 +323,7 @@
   }
   function addRow(context){
     if(!data)return;const content=openDialog('Add employee row'),stores=data.directory.map(s=>[JSON.stringify([s.dealer,s.store_id]),`${s.dealer} · ${s.market} · ${s.store}`]),store=selectLabel('Store',content,stores),date=inputLabel('Date',content,'date',context?.dealer?context.date:end),name=inputLabel('Employee name',content);date.max=data.today;name.maxLength=160;if(context?.dealer)store.value=JSON.stringify([context.dealer,context.store_id]);
-    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);button('Cancel',()=>$('sheet-dialog').close(),footer);const submit=button('Add row',async()=>{submit.disabled=true;try{if(!await save())throw new Error('Resolve the unsaved edits before adding a row.');const [dealer,store_id]=JSON.parse(store.value);await api('store-hours/employees','POST',{dealer,store_id,date:date.value,employee:name.value});start=end=date.value;$('sheet-from').value=start;$('sheet-to').value=end;$('sheet-dealer').value='';$('sheet-market').value='';$('sheet-store').value='';$('sheet-search').value='';filterRules={};sort={};$('sheet-dialog').close();await load();message('Employee added. Enter their times and save.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');name.focus();
+    const error=paragraph('',content);error.className='sheet-dialog-error';const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);button('Cancel',()=>$('sheet-dialog').close(),footer);const submit=button('Add row',async()=>{submit.disabled=true;try{if(!await save())throw new Error('Resolve the unsaved edits before adding a row.');const [dealer,store_id]=JSON.parse(store.value);await api('store-hours/employees','POST',{dealer,store_id,date:date.value,employee:name.value});start=end=date.value;$('sheet-from').value=start;$('sheet-to').value=end;$('sheet-dealer').value='';$('sheet-market').value='';$('sheet-store').value='';$('sheet-search').value='';filterRules={};sort={};$('sheet-dialog').close();await load();message(base.compliance?'Employee added. Fill in their compliance checks.':'Employee added. Enter their times and save.');}catch(e){error.textContent=e.message;}finally{submit.disabled=false;}},footer,'sheet-primary');name.focus();
   }
   async function uploadSchedules(){
     if(loading||!await save())return;
@@ -364,9 +368,9 @@
   async function exportExcel(from,to){
     if(!await save())return false;
     const query=params();query.set('start',from);query.set('end',to);
-    const response=await fetch('/api/internal/store-hours/sheet/export?'+query);
+    const response=await fetch('/api/internal/'+sheetPath('store-hours/sheet/export')+'?'+query);
     if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.message||'Could not download Excel. Please try again.');}
-    const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=`opening-closing-sheet-${from}-${to}.xlsx`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
+    const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=`${base.compliance?'compliance':'opening-closing'}-sheet-${from}-${to}.xlsx`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
   }
   async function copySnapshot(){if(!data)return;if(!await save())return;try{const canvas=base.render({...data,rows:rows.map(current)},{dealer:$('sheet-dealer').value,market:$('sheet-market').value}),blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);message('Snapshot copied.');}catch(e){message(e.message||'Could not copy the snapshot.',true);}}
   async function sync(){if(!await save())return;loading=true;dirty();try{let result,continuation=false;do{message('Syncing source time punches…');result=await api('store-hours/refresh','POST',continuation?{continue:true}:{});continuation=true;}while(result.status!=='busy'&&result.pending&&result.workers?.some(w=>w.completed));loading=false;await load();message(result.remaining?'Some source days could not be fetched. Saved data was kept.':'Source sync completed. Your saved corrections and formats are preserved.',!!result.remaining);}catch(e){message(e.message,true);}finally{loading=false;dirty();}}
@@ -430,7 +434,7 @@
   $('sheet-month').onclick=()=>changePeriod(today.slice(0,8)+'01',today);
   $('sheet-period-button').onclick=chooseDates;
   $('sheet-prev').onclick=()=>{page--;render();};$('sheet-next').onclick=()=>{page++;render();};
-  async function enter(person){user=person;if(user.must_change_password||user.rest_mode||(!person.is_owner&&person.page_access&&!person.page_access.includes('spreadsheet'))){user=null;location.replace('/internal#settings');return;}$('sheet-login').hidden=true;root.hidden=false;$('sheet-account').textContent=(person.display_name||person.username||'U').slice(0,1).toUpperCase();await load();}
+  async function enter(person){user=person;if(user.must_change_password||user.rest_mode||(!person.is_owner&&person.page_access&&!person.page_access.includes(sheetPage))){user=null;location.replace('/internal#settings');return;}$('sheet-login').hidden=true;root.hidden=false;$('sheet-account').textContent=(person.display_name||person.username||'U').slice(0,1).toUpperCase();await load();}
   $('sheet-account').onclick=async()=>{if(!await save())return;await api('logout','POST',{});location.reload();};
   $('sheet-login-form').onsubmit=async e=>{e.preventDefault();const submit=e.target.querySelector('button[type=submit]');submit.disabled=true;try{const result=await api('login','POST',{username:$('sheet-username').value.trim(),password:$('sheet-password').value});$('sheet-password').value='';await enter(result.user);}catch(error){$('sheet-login-error').textContent=error.message;}finally{submit.disabled=false;}};
   window.addEventListener('beforeunload',e=>{if(drafts.size||grid.isEditing()){e.preventDefault();e.returnValue='';}});

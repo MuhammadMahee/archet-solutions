@@ -16,7 +16,7 @@ def check(page):
         tab.locator('#sh-grid-address').fill(address);tab.locator('#sh-grid-address').press('Enter')
     def cell(tab,address):return tab.locator(f'#sh-table [data-address="{address}"]')
     def edit(tab,address,value,commit=True):
-        go(tab,address);tab.keyboard.press('F2');tab.get_by_role('textbox',name='Edit '+address,exact=True).fill(value)
+        go(tab,address);tab.keyboard.press('F2');tab.get_by_label('Edit '+address,exact=True).fill(value)
         if commit:tab.keyboard.press('Enter')
     def saved(tab):expect(tab.locator('#sheet-save-state')).to_have_text('All changes saved',timeout=15000)
     # Updating another tab must preserve this tab's selection and viewport.
@@ -35,7 +35,7 @@ def check(page):
     edit(peer,'G1','10:14 AM',commit=False)
     edit(page,'D1','Primary name');saved(page)
     expect(peer.locator('#sheet-live-state')).to_have_text('Updates waiting',timeout=15000)
-    expect(peer.get_by_role('textbox',name='Edit G1',exact=True)).to_have_value('10:14 AM')
+    expect(peer.get_by_label('Edit G1',exact=True)).to_have_value('10:14 AM')
     peer.keyboard.press('Enter');saved(peer)
     expect(cell(peer,'D1')).to_have_text('PRIMARY NAME')
     expect(cell(page,'G1')).to_contain_text('10:14',timeout=15000)

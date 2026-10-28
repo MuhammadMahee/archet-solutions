@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 from flask import g, jsonify, request, send_file
 from psycopg.types.json import Jsonb
 
+from api.sheet_types import compliance, sheet_table, report_columns, CHECK_FIELDS, CHECK_COLORS, CAMERA_OFFLINE
 from api.portal import PortalError, body, require_user
 
 NUMBER_FORMATS = {'auto','text','number','currency','percent','date','time'}
@@ -17,7 +18,7 @@ FORMAT_KEYS = {'bold','italic','underline','color','background','align','wrap','
 
 
 def settings(conn, lock=False):
-    row = conn.execute('select * from public.store_hours_sheet_settings where id=true' + (' for update' if lock else '')).fetchone()
+    row = conn.execute(f'select * from {sheet_table("sheet_settings")} where id=true' + (' for update' if lock else '')).fetchone()
     return dict(columns=row['columns'], revision=row['revision'])
 
 
@@ -106,7 +107,7 @@ def change_column(payload,user_id):
                 if not isinstance(name,str) or not name.strip() or len(name)>60 or re.search(r'[\x00-\x1f]',name):
                     raise PortalError('Enter a column name of 1–60 characters.')
                 name=name.strip()
-                if name.casefold() in {label.casefold() for _,label in sh.COLUMNS} | {c['name'].casefold() for c in columns if c is not column and not c.get('deleted')}:
+                if name.casefold() in {label.casefold() for _,label in report_columns()} | {c['name'].casefold() for c in columns if c is not column and not c.get('deleted')}:
                     raise PortalError('Choose a unique column name.')
                 column['name']=name
             if action in ('add','rename','format'):
@@ -116,7 +117,7 @@ def change_column(payload,user_id):
                 column['format']=value
             if action=='delete':
                 column['deleted']=True
-            conn.execute('update public.store_hours_sheet_settings set columns=%s,revision=revision+1,updated_by=%s,updated_at=now() where id=true',
+            conn.execute(f'update {sheet_table("sheet_settings")} set columns=%s,revision=revision+1,updated_by=%s,updated_at=now() where id=true',
                          (Jsonb(columns),user_id))
             return dict(columns=columns,revision=config['revision']+1)
 
@@ -160,7 +161,7 @@ def report():
         config=settings(conn)
     custom=[c for c in config['columns'] if not c.get('deleted')]
     data['sheet']=config
-    data['columns']=sh.COLUMNS+[(c['id'],c['name']) for c in custom]
+    data['columns']=report_columns()+[(c['id'],c['name']) for c in custom]
     data['column_formats']={c['id']:c['format'] for c in custom}
     for row in data['rows']:
         for col in custom:
@@ -225,7 +226,7 @@ def format_excel_cell(cell, value, fmt):
 def live_revision():
     from api import store_hours as sh
     with sh.connect() as conn:
-        return str(conn.execute('select revision from public.store_hours_live_revision where id=true').fetchone()['revision'])
+        return str(conn.execute(f'select revision from {sheet_table("live_revision")} where id=true').fetchone()['revision'])
 
 
 def presence_row(value):
@@ -242,8 +243,7 @@ def presence_row(value):
 
 
 def presence_column(value):
-    from api.store_hours import COLUMNS
-    if not isinstance(value,str) or (value not in {k for k,_ in COLUMNS} and not re.fullmatch(r'custom_[a-zA-Z0-9_]{1,64}',value)):
+    if not isinstance(value,str) or (value not in {k for k,_ in report_columns()} and not re.fullmatch(r'custom_[a-zA-Z0-9_]{1,64}',value)):
         raise PortalError('Choose a valid spreadsheet column.')
 
 
@@ -286,15 +286,15 @@ def update_presence(payload,user,session_hash):
     client_id,sequence,active,selection,editing=presence_input(payload)
     with sh.connect() as conn:
         with conn.transaction():
-            conn.execute("delete from public.store_hours_presence where last_seen<now()-interval '1 day'")
-            conn.execute('''insert into public.store_hours_presence(user_id,client_id,session_hash,sequence,active,selection,editing)
+            conn.execute(f"delete from {sheet_table('presence')} where last_seen<now()-interval '1 day'")
+            conn.execute(f'''insert into {sheet_table("presence")} as presence(user_id,client_id,session_hash,sequence,active,selection,editing)
                 values(%s,%s,%s,%s,%s,%s,%s)
                 on conflict(user_id,client_id) do update set session_hash=excluded.session_hash,
                 sequence=excluded.sequence,active=excluded.active,selection=excluded.selection,editing=excluded.editing,last_seen=clock_timestamp()
-                where excluded.sequence>store_hours_presence.sequence''',
+                where excluded.sequence>presence.sequence''',
                 (user['id'],client_id,session_hash,sequence,active,Jsonb(selection) if selection else None,editing))
-            peers=conn.execute('''select p.user_id::text,p.client_id::text,u.display_name as name,u.username,p.selection,p.editing
-                from public.store_hours_presence p join public.portal_users u on u.id=p.user_id
+            peers=conn.execute(f'''select p.user_id::text,p.client_id::text,u.display_name as name,u.username,p.selection,p.editing
+                from {sheet_table("presence")} p join public.portal_users u on u.id=p.user_id
                 join public.portal_sessions s on s.token_hash=p.session_hash and s.user_id=p.user_id
                 where p.active and p.last_seen>clock_timestamp()-interval '15 seconds'
                 and u.active and not u.rest_mode and s.expires_at>now() and s.session_version=u.session_version
@@ -303,17 +303,20 @@ def update_presence(payload,user,session_hash):
 
 
 def register(app):
+    @app.post('/api/internal/compliance/sheet/presence')
     @app.post('/api/internal/store-hours/sheet/presence')
     @require_user()
     def sheet_presence():
         peers=update_presence(body(),g.portal_user,g.session_hash)
         return jsonify(peers=peers,revision=live_revision())
 
+    @app.get('/api/internal/compliance/sheet/updates')
     @app.get('/api/internal/store-hours/sheet/updates')
     @require_user()
     def sheet_updates():
         return jsonify(revision=live_revision())
 
+    @app.get('/api/internal/compliance/sheet')
     @app.get('/api/internal/store-hours/sheet')
     @require_user()
     def sheet_report():
@@ -323,15 +326,17 @@ def register(app):
         result['live_revision'] = revision
         return jsonify(result)
 
+    @app.post('/api/internal/compliance/sheet/columns')
     @app.post('/api/internal/store-hours/sheet/columns')
     @require_user()
     def sheet_columns():
         return jsonify(change_column(body(),g.portal_user['id']))
 
+    @app.get('/api/internal/compliance/sheet/export')
     @app.get('/api/internal/store-hours/sheet/export')
     @require_user()
     def sheet_export():
         from api.store_hours import excel_report
         data=report()
         return send_file(excel_report(data),mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                         as_attachment=True,download_name=f"opening-closing-sheet-{data['start']}-{data['end']}.xlsx")
+                         as_attachment=True,download_name=f"{'compliance' if compliance() else 'opening-closing'}-sheet-{data['start']}-{data['end']}.xlsx")

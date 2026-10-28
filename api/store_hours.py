@@ -25,6 +25,7 @@ from openpyxl.utils import get_column_letter
 import xlrd
 
 from api.calling_tree import active_roster, clean
+from api.sheet_types import compliance, sheet_table, report_columns, CHECK_FIELDS, CHECK_COLORS, CAMERA_OFFLINE
 from api.portal import PortalError, body, require_user
 from api.store_schedules import scheduled_hours
 from api.store_hours_directory import (roster_with_schedules, hours_for_store, parse_schedule_workbook,
@@ -43,15 +44,23 @@ COLUMNS = [('date', 'Date'), ('market', 'Market'), ('store', 'Store'),
            ('chargeback', 'Late Opening Chargeback')]
 TIME_FIELDS = ('opening_time', 'closing_time', 'camera_in', 'camera_out')
 OVERRIDE_FIELDS = {'date', 'market', 'store', 'employee', 'store_status', 'rt_clockin',
-                   'opening_status', 'rt_clockout', 'closing_status', 'chargeback'}
+                   'opening_status', 'rt_clockout', 'closing_status', 'chargeback', 'camera_in', 'camera_out'}
 
 
 def validate_cell_overrides(value):
-    if not isinstance(value, dict) or set(value) - OVERRIDE_FIELDS:
+    if not isinstance(value, dict) or set(value) - ({k for k,_ in report_columns()} if compliance() else OVERRIDE_FIELDS):
         raise PortalError('Choose valid report columns to edit.')
     result = {}
     for field, raw in value.items():
-        if field == 'date':
+        if compliance() and field in CHECK_FIELDS:
+            if raw not in (None, '', 'Yes', 'No', '#N/A'):
+                raise PortalError('Compliance checks accept only Yes, No, or #N/A.')
+            result[field] = raw or None
+        elif field in ('camera_in', 'camera_out'):
+            if raw != CAMERA_OFFLINE:
+                raise PortalError('Camera cells accept a time or Camera Offline.')
+            result[field] = raw
+        elif field == 'date':
             try:
                 day = date.fromisoformat(raw)
                 if day > today():
@@ -250,7 +259,7 @@ def run_sync(continuation=False):
 
 
 def seconds(value):
-    if not value:
+    if not value or value == CAMERA_OFFLINE:
         return None
     if isinstance(value, str):
         value = wall_time.fromisoformat(value)
@@ -285,7 +294,7 @@ def evaluate(row):
 
 
 def iso_time(value):
-    return value.isoformat() if value is not None else None
+    return value if isinstance(value, str) else value.isoformat() if value is not None else None
 
 
 def employee_key(name):
@@ -357,12 +366,14 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                            scheduled_opening_time=iso_time(schedule.get('opening_time')),
                            scheduled_closing_time=iso_time(schedule.get('closing_time')),
                            **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
+                if compliance():
+                    row.update({field: None for field in CHECK_FIELDS})
                 row['source_date'] = day.isoformat()
                 row['cell_overrides'] = overrides
                 row['custom_cells'] = review.get('custom_cells') or {}
                 row['cell_formats'] = review.get('cell_formats') or {}
                 row['schedule_overrides'] = {f: review.get(f) is not None for f in ('opening_time', 'closing_time')}
-                row['source_values'] = {k: row[k] for k in OVERRIDE_FIELDS if k in row}
+                row['source_values'] = {k: row[k] for k in ({k for k,_ in report_columns()} if compliance() else OVERRIDE_FIELDS) if k in row}
                 row.update({k: v for k, v in overrides.items() if k not in ('store_status','opening_status','closing_status','chargeback')})
                 row.update(evaluate(row))
                 row['source_values'].update({k: row[k] for k in ('store_status','opening_status','closing_status','chargeback')})
@@ -387,15 +398,15 @@ def report_range():
 def report_data(start, end):
     with connect() as conn:
         roster = roster_with_schedules(conn)
-        reviews = conn.execute('select * from public.store_hours_reviews where report_date between %s and %s', (start, end)).fetchall()
-        employee_reviews = conn.execute("""select * from public.store_hours_employee_reviews where
+        reviews = conn.execute(f'select * from {sheet_table("reviews")} where report_date between %s and %s', (start, end)).fetchall()
+        employee_reviews = conn.execute(f"""select * from {sheet_table('employee_reviews')} where
             report_date between %s and %s or cell_overrides->>'date' between %s and %s""",
             (start, end, start.isoformat(), end.isoformat())).fetchall()
         reviews += employee_reviews
         extra_days = sorted({r['report_date'] for r in employee_reviews if not start <= r['report_date'] <= end})
         args = (start, end, extra_days)
         punches = conn.execute('select * from public.store_time_punches where report_date between %s and %s or report_date=any(%s)', args).fetchall()
-        manual = conn.execute('select * from public.store_hours_manual_employees where report_date between %s and %s or report_date=any(%s)', args).fetchall()
+        manual = conn.execute(f'select * from {sheet_table("manual_employees")} where report_date between %s and %s or report_date=any(%s)', args).fetchall()
         imports = conn.execute('select * from public.store_hours_imports where report_date between %s and %s or report_date=any(%s)', args).fetchall()
         earliest = conn.execute('select min(report_date) as day from public.store_hours_imports').fetchone()['day']
     dealer, market, sid = (request.args.get(k, '') for k in ('dealer', 'market', 'store'))
@@ -434,7 +445,7 @@ def report_data(start, end):
     included = {(r['dealer'],r['store_id']) for r in rows}
     selected = [s for s in selected if (s['dealer'],s['store_id']) in included]
     query = request.args.get('search', '').strip().casefold()
-    if request.path.startswith('/api/internal/store-hours/sheet'):
+    if request.path.startswith(('/api/internal/store-hours/sheet','/api/internal/compliance/sheet')):
         query = ''
     if query:
         rows = [r for r in rows if query in ' '.join(r[k] for k in ('employee','store','dealer','market')).casefold()]
@@ -454,6 +465,8 @@ def report_data(start, end):
 
 
 def display_value(key, value):
+    if value == CAMERA_OFFLINE:
+        return value
     if key == 'employee' and isinstance(value, str):
         return value.upper()
     if key == 'chargeback':
@@ -468,10 +481,10 @@ def display_value(key, value):
 
 def excel_report(data):
     book = Workbook()
-    columns = data.get('columns', COLUMNS)
+    columns = data.get('columns', report_columns())
     sheet = book.active
-    sheet.title = 'Store Opening Closing'
-    sheet.append([f"STORE OPENING / CLOSING | {data['start']} to {data['end']}"])
+    sheet.title = 'Compliance' if compliance() else 'Store Opening Closing'
+    sheet.append([f"{'COMPLIANCE' if compliance() else 'STORE OPENING / CLOSING'} | {data['start']} to {data['end']}"])
     sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(columns))
     sheet.append([heading for _, heading in columns])
     for row in data['rows']:
@@ -491,13 +504,20 @@ def excel_report(data):
             if 'columns' in data:
                 from api.store_hours_sheet import format_excel_cell
                 format_excel_cell(cell, display_value(key, row.get(key)) if key == 'employee' else row.get(key), {**({'number_format':data['column_formats'][key]} if key in data.get('column_formats',{}) else {}), **(row.get('cell_formats') or {}).get(key,{})})
+            if compliance() and key in CHECK_FIELDS and row.get(key) in CHECK_COLORS:
+                foreground, background = CHECK_COLORS[row[key]]
+                from copy import copy
+                font = copy(cell.font); font.color = foreground; cell.font = font
+                cell.fill = PatternFill('solid', fgColor=background)
     for row in sheet.iter_rows(min_row=1, max_row=2):
         for cell in row:
             cell.fill = PatternFill('solid', fgColor='203C66')
             cell.font = Font(name='Calibri',color='FFFFFF', bold=True)
             cell.alignment = Alignment(horizontal='center')
     widths = [14, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25]
-    for n, width in enumerate(widths + [24] * (len(columns)-len(COLUMNS)), 1):
+    if compliance():
+        widths = [14,20,34,30] + [22] * 7
+    for n, width in enumerate(widths + [24] * (len(columns)-len(report_columns())), 1):
         sheet.column_dimensions[get_column_letter(n)].width = width
     sheet.freeze_panes = 'E3'
     sheet.auto_filter.ref = f'A2:{get_column_letter(len(columns))}{sheet.max_row}'
@@ -515,6 +535,10 @@ def excel_report(data):
                    ('Schedule correction', 'Connect Monday-Saturday opening is 10:00 AM, confirmed by the user.'),
                    ('Times', 'Source and camera times are store-local wall times.')]:
         meta.append(values)
+    if compliance():
+        meta.delete_rows(6, meta.max_row-5)
+        meta.append(('Checks', 'Yes, No, or #N/A. Blank checks have not been reviewed.'))
+        meta.append(('Employees', 'One row per unique employee/store/date from shared RTPOS punches. Manual rows and corrections are preserved.'))
     meta.column_dimensions['A'].width = 26
     meta.column_dimensions['B'].width = 110
     output = BytesIO()
@@ -526,9 +550,9 @@ def excel_report(data):
 def store_day_rows(conn, store, day, include_removed=False):
     punches = conn.execute('select * from public.store_time_punches where report_date=%s', (day,)).fetchall()
     args = (store['dealer'], store['store_id'], day)
-    reviews = conn.execute('select * from public.store_hours_reviews where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
-    reviews += conn.execute('select * from public.store_hours_employee_reviews where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
-    manual = conn.execute('select * from public.store_hours_manual_employees where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
+    reviews = conn.execute(f'select * from {sheet_table("reviews")} where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
+    reviews += conn.execute(f'select * from {sheet_table("employee_reviews")} where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
+    manual = conn.execute(f'select * from {sheet_table("manual_employees")} where dealer=%s and store_id=%s and report_date=%s', args).fetchall()
     return build_rows([store], punches, reviews, [], day, day, manual, include_removed=include_removed)
 
 
@@ -559,7 +583,9 @@ def save_review(payload, user_id, include_row=False):
     times = {}
     for field in TIME_FIELDS:
         value = payload.get(field)
-        if value is None or value == '':
+        if field in ('camera_in','camera_out') and value == CAMERA_OFFLINE:
+            times[field] = None
+        elif value is None or value == '':
             times[field] = None
         elif isinstance(value, str) and re.fullmatch(r'\d{2}:\d{2}(:\d{2})?', value):
             try:
@@ -581,11 +607,18 @@ def save_review(payload, user_id, include_row=False):
                 raise PortalError('Someone updated this review. Discard changes and reload before saving again.', 409)
             if overrides is None:
                 overrides = row.get('cell_overrides') or {}
+            overrides = dict(overrides)
+            if not compliance():
+                for field in ('camera_in', 'camera_out'):
+                    if payload.get(field) == CAMERA_OFFLINE:
+                        overrides[field] = CAMERA_OFFLINE
+                    else:
+                        overrides.pop(field, None)
             custom_cells, cell_formats = row.get('custom_cells') or {}, row.get('cell_formats') or {}
             if any(payload.get(field) or row.get(field) for field in ('custom_cells','cell_formats')):
                 from api.store_hours_sheet import settings, validate_row_extras
                 config = settings(conn, True)
-                custom_cells, cell_formats = validate_row_extras(payload, row, config, {k for k,_ in COLUMNS})
+                custom_cells, cell_formats = validate_row_extras(payload, row, config, {k for k,_ in report_columns()})
             effective_day = date.fromisoformat(overrides.get('date', day.isoformat()))
             schedule = hours_for_store(store, effective_day)
             for field in ('opening_time', 'closing_time'):
@@ -593,7 +626,7 @@ def save_review(payload, user_id, include_row=False):
                 if times[field] == schedule.get(field) or unchanged_default:
                     times[field] = None
             conn.execute("select set_config('archet.store_hours_employee',%s,true)", (row.get('employee', ''),))
-            result = conn.execute('''insert into public.store_hours_employee_reviews
+            result = conn.execute(f'''insert into {sheet_table("employee_reviews")}
                 (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,updated_by,revision,cell_overrides,custom_cells,cell_formats)
                 values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 on conflict(dealer,store_id,report_date,employee_key) do update set
@@ -641,10 +674,10 @@ def set_rows_removed(payload, user_id):
                 changes.append((dealer, sid, day, key, row))
             # Validate the complete selection before writing any row.
             for dealer, sid, day, key, row in changes:
-                times = [wall_time.fromisoformat(row[k]) if row.get(k) and
+                times = [wall_time.fromisoformat(row[k]) if row.get(k) and row[k] != CAMERA_OFFLINE and
                          (k not in ('opening_time', 'closing_time') or row['schedule_overrides'].get(k)) else None for k in TIME_FIELDS]
                 conn.execute("select set_config('archet.store_hours_employee',%s,true)", (row['employee'],))
-                conn.execute('''insert into public.store_hours_employee_reviews
+                conn.execute(f'''insert into {sheet_table("employee_reviews")}
                     (dealer,store_id,report_date,employee_key,opening_time,closing_time,camera_in,camera_out,
                      updated_by,revision,cell_overrides,custom_cells,cell_formats,removed)
                     values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
@@ -673,7 +706,7 @@ def add_manual_employee(payload, user_id):
                 raise PortalError('This employee already has a row for this store and date. Check Removed rows to restore it if needed.', 409)
             if len(rows) >= 100:
                 raise PortalError('A store can have up to 100 employee rows per date.')
-            conn.execute('''insert into public.store_hours_manual_employees
+            conn.execute(f'''insert into {sheet_table("manual_employees")}
                 (dealer,store_id,report_date,employee_key,employee,created_by) values(%s,%s,%s,%s,%s,%s)''',
                 (dealer, sid, day, key, name, user_id))
     return key
@@ -763,9 +796,9 @@ def version_history(start, end):
         clauses.append('id<%s')
         args.append(int(before))
     with connect() as conn:
-        rows = conn.execute('select * from public.store_hours_versions where ' + ' and '.join(clauses) +
+        rows = conn.execute(f'select * from {sheet_table("versions")} where ' + ' and '.join(clauses) +
                             ' order by id desc limit 51', args).fetchall()
-        tracking = conn.execute('select min(recorded_at) as started from public.store_hours_versions').fetchone()['started']
+        tracking = conn.execute(f'select min(recorded_at) as started from {sheet_table("versions")}').fetchone()['started']
     result = []
     for row in rows[:50]:
         result.append({**row, 'id': str(row['id']), 'transaction_id': str(row['transaction_id']),
@@ -778,21 +811,25 @@ def version_history(start, end):
 def register_store_hours(app):
     from api.store_hours_sheet import register
     register(app)
+    @app.get('/api/internal/compliance')
     @app.get('/api/internal/store-hours')
     @require_user()
     def get_report():
         return jsonify(report_data(*report_range()))
 
+    @app.get('/api/internal/compliance/history')
     @app.get('/api/internal/store-hours/history')
     @require_user()
     def get_version_history():
         return jsonify(version_history(*report_range()))
 
+    @app.post('/api/internal/compliance/refresh')
     @app.post('/api/internal/store-hours/refresh')
     @require_user()
     def sync_report():
         return jsonify(run_sync(body().get('continue') is True))
 
+    @app.post('/api/internal/compliance/review')
     @app.post('/api/internal/store-hours/review')
     @require_user()
     def review_report():
@@ -801,26 +838,31 @@ def register_store_hours(app):
             return jsonify(status='saved', **save_review(payload, g.portal_user['id'], include_row=True))
         return jsonify(status='saved', revision=save_review(payload, g.portal_user['id']))
 
+    @app.post('/api/internal/compliance/employees')
     @app.post('/api/internal/store-hours/employees')
     @require_user()
     def create_employee():
         return jsonify(status='saved', employee_key=add_manual_employee(body(), g.portal_user['id']))
 
+    @app.post('/api/internal/compliance/rows')
     @app.post('/api/internal/store-hours/rows')
     @require_user()
     def change_report_rows():
         return jsonify(status='saved', count=set_rows_removed(body(), g.portal_user['id']))
 
+    @app.post('/api/internal/compliance/schedules/preview')
     @app.post('/api/internal/store-hours/schedules/preview')
     @require_user()
     def preview_schedules():
         return jsonify(preview_schedule_upload(body(), g.portal_user['id']))
 
+    @app.post('/api/internal/compliance/schedules/apply')
     @app.post('/api/internal/store-hours/schedules/apply')
     @require_user()
     def apply_schedules():
         return jsonify(status='saved', count=apply_schedule_upload(body(), g.portal_user['id']))
 
+    @app.get('/api/internal/compliance/export')
     @app.get('/api/internal/store-hours/export')
     @require_user()
     def export_report():

@@ -18,7 +18,7 @@ INTERNAL_HOST = os.getenv("INTERNAL_HOST", "internal.archetsolutions.com")
 USERNAME = re.compile(r"^[A-Za-z0-9_]{3,32}$")
 PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,rest_mode,rest_version,page_access,must_change_password"
 
-PAGE_OPTIONS = {'sales':'Sales Update','spreadsheet':'Opening / Closing Spreadsheet',
+PAGE_OPTIONS = {'sales':'Sales Update','spreadsheet':'Opening / Closing Spreadsheet','compliance':'Compliance Spreadsheet',
     'quota':'Quota Update','callingtree':'Calling Tree','workforce':'AI Workforce',
     'overview':'Overview','quotes':'Quote inbox','users':'Accounts'}
 
@@ -44,7 +44,7 @@ def page_access_field(payload, role):
 
 def check_page_access(user):
     path=request.path.removeprefix('/api/internal/').split('/')[0]
-    page={'store-hours':'spreadsheet','sales':'sales','quota':'quota','calling-tree':'callingtree',
+    page={'compliance':'compliance','store-hours':'spreadsheet','sales':'sales','quota':'quota','calling-tree':'callingtree',
           'workforce':'workforce','invoices':'invoices','users':'users','quotes':'quotes'}.get(path)
     permitted=allowed_pages(user)
     # Overview reads the same inquiry summary; follow-up edits still need Quote inbox.
@@ -189,10 +189,10 @@ def register_portal(app):
 
     @app.before_request
     def guard_portal():
-        limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload','/api/internal/store-hours/schedules/preview') else 32*1024
+        limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload','/api/internal/store-hours/schedules/preview','/api/internal/compliance/schedules/preview') else 32*1024
         if request.path.startswith('/api/internal/invoices/'):
             limit = 512 * 1024
-        if request.path in ('/api/internal/store-hours/review','/api/internal/store-hours/sheet/presence'):
+        if request.path in ('/api/internal/store-hours/review','/api/internal/store-hours/sheet/presence','/api/internal/compliance/review','/api/internal/compliance/sheet/presence'):
             limit = 512 * 1024
         if request.method in ('POST', 'PATCH') and re.fullmatch(r'/api/internal/workforce/conversations/[0-9a-f-]{36}/(messages|profile)', request.path):
             limit = 3 * 1024 * 1024
@@ -213,7 +213,7 @@ def register_portal(app):
     def security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
-        if request.path.startswith(("/api/internal/", "/internal", "/spreadsheet", "/ai-workforce")) or request.host.split(":")[0] == INTERNAL_HOST:
+        if request.path.startswith(("/api/internal/", "/internal", "/spreadsheet", "/compliance", "/ai-workforce")) or request.host.split(":")[0] == INTERNAL_HOST:
             response.headers["Cache-Control"] = "no-store"
             response.headers["X-Robots-Tag"] = "noindex, nofollow"
             response.headers["X-Frame-Options"] = "DENY"

@@ -8,6 +8,7 @@ window.createStoreHoursGrid = function(api) {
   const letter=c=>{let label='';for(c++;c;c=Math.floor((c-1)/26))label=String.fromCharCode(65+(c-1)%26)+label;return label;}, address=p=>letter(p.c)+(p.r+1);
   const columnIndex=s=>[...s].reduce((n,c)=>n*26+c.charCodeAt(0)-64,0)-1;
   const writable=c=>api.editing()&&!!columns[c];
+  for(const [id,values] of [['sh-camera-options',['Camera Offline']],['sh-check-options',['Yes','No','#N/A']]]){if(!document.getElementById(id)){const list=document.createElement('datalist');list.id=id;for(const value of values)list.append(new Option(value,value));document.body.append(list);}}
   const timeColumns=[...fields,'rt_clockin','rt_clockout'];
   const cell=(r,c)=>table.tBodies[0]?.rows[r]?.cells[c+offset];
   const value=(r,c)=>api.rows()[r]?.[columns[c][0]]??null;
@@ -72,7 +73,7 @@ window.createStoreHoursGrid = function(api) {
   toolbar.before(welcome);
   const rangeInput=toolbar.querySelector('input'),status=toolbar.querySelector('[role=status]');
   const editButton=document.createElement('button');editButton.type='button';editButton.dataset.grid='edit';editButton.textContent='Edit cell';editButton.title='Edit selected cell (F2)';toolbar.querySelector('.sh-sheet-buttons').prepend(editButton);
-  const seenKey=()=>`archet.store-hours.sheet-tutorial.v1.${api.user()}`;
+  const seenKey=()=>`archet.${document.body.dataset.sheet||'store-hours'}.sheet-tutorial.v1.${api.user()}`;
   const markSeen=()=>{try{localStorage.setItem(seenKey(),'seen');}catch{}welcome.hidden=true;};
   welcome.querySelector('#sh-grid-dismiss').onclick=markSeen;
   const dialog=document.createElement('dialog');dialog.id='sh-grid-dialog';dialog.className='sh-grid-dialog';
@@ -145,6 +146,8 @@ window.createStoreHoursGrid = function(api) {
   function parseCell(r,c,raw){
     const field=columns[c][0],s=String(raw??'').trim();
     if(field.startsWith('custom_')){const value=String(raw??'');if(value.length>1000||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value))throw new Error('Custom cells accept text up to 1,000 characters.');return value;}
+    if(api.choices?.[field]){if(!s)return null;const match=api.choices[field].find(v=>v.toLowerCase()===s.toLowerCase());if(!match)throw new Error('Choose Yes, No, or #N/A for compliance checks.');return match;}
+    if(['camera_in','camera_out'].includes(field)){if(s.toLowerCase()==='camera offline')return 'Camera Offline';return parseTime(s);}
     if(timeColumns.includes(field)){if(/^No Clock (In|Out)$/i.test(s))return null;return parseTime(s.includes('T')?s.split('T')[1]:s);}
     if(field==='date'){
       let match=s.match(/^(\d{4})-(\d{2})-(\d{2})$/),y,m,d;
@@ -210,6 +213,8 @@ window.createStoreHoursGrid = function(api) {
     if(!writable(active.c)||api.busy()){notice('This cell is read only in the report view. Open the form to edit it.',true);return;}
     cancelEdit();const pos={...active},td=cell(pos.r,pos.c);if(!td)return;
     const input=document.createElement('input');input.type='text';input.className='sh-cell-editor';input.setAttribute('aria-label','Edit '+address(pos));const field=columns[pos.c][0],original=value(pos.r,pos.c);input.value=initial??(timeColumns.includes(field)&&typeof original==='string'&&original.includes('T')?original.split('T')[1]:original)??'';input.placeholder=timeColumns.includes(field)?'9:02 AM':field==='date'?'YYYY-MM-DD':'Enter value';input.spellcheck=false;editor=input;td.append(input);input.focus({preventScroll:true});if(initial===undefined)input.select();
+    if(['camera_in','camera_out'].includes(field)){input.setAttribute('list','sh-camera-options');input.placeholder='Time or Camera Offline';}
+    if(api.choices?.[field]){input.setAttribute('list','sh-check-options');input.placeholder='Yes, No, or #N/A';}
     let closing=false;
     const finish=(all=false)=>{if(closing||editor!==input)return true;let changes;try{changes=(all?selected().filter(x=>writable(x.c)):[pos]).map(x=>({...x,value:parseCell(x.r,x.c,input.value)}));}catch(e){notice(e.message,true);input.setAttribute('aria-invalid','true');return false;}closing=true;cancelEdit();commit(changes,'Edit');drawSelection();return true;};
     finishEditor=finish;
@@ -290,6 +295,8 @@ window.createStoreHoursGrid = function(api) {
     ['Fill and preview patterns','Select a range and press Ctrl+D to repeat its top row downward, or Ctrl+R to repeat its leftmost value rightward. On one cell, these copy from directly above or left.','For flash fill, enter two time examples and select them plus blank cells below in the same column. Ctrl+E previews the repeated or evenly spaced time pattern. It fills blanks only after you apply the preview. Verify camera times against your observations.'],
     ['Save your work','The dedicated spreadsheet autosaves after you finish an edit; check the AutoSave status before closing. Ctrl+S saves immediately. Undo covers the last 100 operations; reload, filter, and page changes reset it. A page refresh or sign-out discards unsaved drafts. Version history permanently records saved changes; undo never removes a saved version.','F8 opens the command menu instead of Excel’s Alt ribbon. For example, F8 then D fills down; F8 then S saves. Use Tutorial or F1 to reopen this guide. On Mac, Command can replace Ctrl.']
   ];
+  if(Object.keys(api.choices||{}).length){lessons[1]=['Enter compliance checks','Date, market, store and employee come from RTPOS. Each check accepts Yes, No, or #N/A. Blank means not yet reviewed. Green means Yes, red means No, and amber means #N/A.','Double-click a check or press F2 to type or choose a suggested value. Enter saves and moves down; Tab moves right. Ctrl+Enter applies a value across your selection.'];lessons[3]=['Fill checks quickly','Select a range and press Ctrl+D to repeat the top row downward, or Ctrl+R to repeat the leftmost value rightward.','Copy and paste Yes, No, or #N/A from Excel or another sheet. Invalid values reject the entire paste. Your checks remain saved when RTPOS is synced again.'];}
+  else lessons[1][2]+=' Camera In View and Camera Out View also accept Camera Offline; type C for its suggestion. Offline cameras leave automatic status and chargeback pending.';
   function tutorial(step){tutorialStep=step;openDialog('tutorial',`Quick start · ${step+1} of ${lessons.length}`);const [heading,body,detail]=lessons[step];const h=document.createElement('h3');h.textContent=heading;content.append(h);for(const text of [body,detail]){const p=document.createElement('p');p.textContent=text;content.append(p);}
     if(step===4){const list=document.createElement('dl');list.className='sh-shortcut-guide';[['Arrows / Shift+arrows','Move / extend selection'],['Tab / Shift+Tab','Next / previous cell'],['Enter / Shift+Enter','Move down / up'],['Home / End','First / last column'],['Ctrl+Home / Ctrl+End','First / last cell on this page'],['Ctrl+arrows','Jump to page edges; add Shift to extend'],['Shift+Space','Select entire row(s)'],['Ctrl+Space','Select entire column(s) on this page'],['Page Up / Page Down','Move ten rows'],['Ctrl+A','Select current page'],['Ctrl+G','Go to cell or range'],['Ctrl+F','Search employees and stores'],['F2 / Escape','Edit / cancel'],...(api.animateSelection?[['Ctrl++ / Ctrl+=','Add an employee when whole rows are selected; otherwise add a custom column'],['Ctrl+-','Remove selected whole rows or the active custom column; default columns are protected']]:[]),...commands.slice(0,10).map(x=>[x[2],x[1]])].forEach(([key,description])=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=description;list.append(dt,dd);});content.append(list);}
     const footer=document.createElement('div');footer.className='sh-tutorial-footer';const back=document.createElement('button');back.type='button';back.className='sh-button';back.textContent='Back';back.disabled=!step;back.onclick=()=>tutorial(step-1);const next=document.createElement('button');next.type='button';next.className='sh-button sh-primary';next.id='sh-tutorial-next';next.textContent=step===4?'Start working':'Next';next.onclick=()=>{if(step===4){markSeen();dialog.close();}else tutorial(step+1);};footer.append(back,next);content.append(footer);next.focus();

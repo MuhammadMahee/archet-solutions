@@ -17,7 +17,7 @@ def check(page):
     def edit(address, value):
         go(address)
         page.keyboard.press('F2')
-        page.get_by_role('textbox', name='Edit '+address, exact=True).fill(value)
+        page.get_by_label('Edit '+address,exact=True).fill(value)
         page.keyboard.press('Enter')
 
     def saved():

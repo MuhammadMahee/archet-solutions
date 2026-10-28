@@ -17,6 +17,7 @@ window.createStoreHoursHistory=function({root,params,request,columnLabels=()=>({
         'Closing time override':data.closing_time??'Workbook default','Camera out':time(data.camera_out),'Review revision':String(data.revision)};
       for(const [key,label] of [['date','Date'],['market','Market'],['store','Store'],['employee','Employee'],['store_status','Store opening status'],['rt_clockin','RT clock-in'],['opening_status','Opening punctuality'],['rt_clockout','RT clock-out'],['closing_status','Closing status'],['chargeback','Chargeback']])
         out[label+' correction']=Object.hasOwn(data.cell_overrides||{},key)?String(data.cell_overrides[key]??'Blank / pending'):'Source / automatic';
+      for(const [key,value] of Object.entries(data.cell_overrides||{}))out[(columnLabels()[key]||key)+' correction']=String(value??'Blank / pending');
       for(const [key,value] of Object.entries(data.custom_cells||{}))out['Cell · '+(columnLabels()[key]||key)]=value??'Blank';
       for(const [key,value] of Object.entries(data.cell_formats||{}))out['Format · '+(columnLabels()[key]||key)]=JSON.stringify(value);
       return out;

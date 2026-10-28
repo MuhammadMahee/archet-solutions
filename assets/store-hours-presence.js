@@ -96,7 +96,7 @@ window.createStoreHoursPresence=function(api){
   function render(){if(!frame)frame=requestAnimationFrame(draw);}
   function leave(){
     if(!api.user())return;
-    fetch('/api/internal/store-hours/sheet/presence',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Archet-Request':'1'},body:JSON.stringify(capture(false))}).catch(()=>{});clear();
+    fetch(api.endpoint||'/api/internal/store-hours/sheet/presence',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json','X-Archet-Request':'1'},body:JSON.stringify(capture(false))}).catch(()=>{});clear();
   }
   wrap.addEventListener('scroll',render,{passive:true});window.addEventListener('resize',render);
   const observer=new ResizeObserver(render);observer.observe(table);observer.observe(wrap);

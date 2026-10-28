@@ -65,6 +65,7 @@
     <nav class="nav" aria-label="Workspace navigation">
       <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
       <button data-page="spreadsheet"><span class="nav-icon">▦</span>Opening / Closing Spreadsheet</button>
+      <button data-page="compliance"><span class="nav-icon">?</span>Compliance Spreadsheet</button>
       <button data-page="quota"><span class="nav-icon">◈</span>Quota Update</button>
       <button data-page="callingtree"><span class="nav-icon">▦</span>Calling Tree</button>
       <button data-page="workforce"><span class="nav-icon">◉</span>AI Workforce</button>
@@ -300,7 +301,7 @@ function canOpen(name) {
   if (!currentUser || currentUser.must_change_password) return false;
   if (name === 'users' && currentUser.role !== 'admin') return false;
   if (name === 'invoices') return window.invoiceDashboard.allowed();
-  return (currentUser.page_access || ['sales','spreadsheet','quota','callingtree','workforce','overview','quotes','users','settings']).includes(name);
+  return (currentUser.page_access || ['sales','spreadsheet','compliance','quota','callingtree','workforce','overview','quotes','users','settings']).includes(name);
 }
 function enterWorkspace(user, freshLogin = false) {
   if (user.must_change_password) { requirePasswordChange(user); return; }
@@ -314,12 +315,13 @@ function enterWorkspace(user, freshLogin = false) {
   document.querySelectorAll('[data-page]').forEach(button => { button.hidden = !canOpen(button.dataset.page); });
   const requested=location.hash.slice(1)||(location.pathname==='/ai-workforce'?'workforce':'sales');
   const initial=['storehours','storehoursreport'].includes(requested)?'spreadsheet':requested;
-  showPage(canOpen(initial)?initial:['sales','spreadsheet','quota','callingtree','workforce','overview','quotes','users','settings'].find(canOpen));
+  showPage(canOpen(initial)?initial:['sales','spreadsheet','compliance','quota','callingtree','workforce','overview','quotes','users','settings'].find(canOpen));
 }
 async function showPage(name) {
   if (!currentUser || currentUser.rest_mode || currentUser.must_change_password) return;
   if (name === 'storehours' || name === 'storehoursreport') name='spreadsheet';
   if (!canOpen(name)) { notice('You do not have access to this page. Contact your administrator.',true); return; }
+  if (name === 'compliance') { location.assign('/compliance'); return; }
   if (name === 'spreadsheet') { location.assign('/spreadsheet'); return; }
   if (name === 'users' && currentUser?.role !== 'admin') return;
   if (name === 'invoices' && !window.invoiceDashboard.allowed()) return;
