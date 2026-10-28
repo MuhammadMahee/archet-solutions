@@ -25,7 +25,7 @@ from openpyxl.utils import get_column_letter
 import xlrd
 
 from api.calling_tree import active_roster, clean
-from api.sheet_types import compliance, sheet_table, report_columns, CHECK_FIELDS, CHECK_COLORS, CAMERA_OFFLINE
+from api.sheet_types import compliance, sheet_table, report_columns, CHECK_FIELDS, CAMERA_OFFLINE, cell_colors
 from api.portal import PortalError, body, require_user
 from api.store_schedules import scheduled_hours
 from api.store_hours_directory import (roster_with_schedules, hours_for_store, parse_schedule_workbook,
@@ -496,17 +496,12 @@ def excel_report(data):
                 cell.data_type = 's'  # Imported names are never executable Excel formulas.
             if key == 'chargeback' and isinstance(cell.value, (int, float)):
                 cell.number_format = '$0.00;[Red]-$0.00'
-            if row[key] in ('Late', 'Early') or (key == 'chargeback' and row[key] is not None and row[key] < 0):
-                cell.fill = PatternFill('solid', fgColor='FFC7CE')
-            elif row[key] in ('Open', 'On Time'):
-                cell.fill = PatternFill('solid', fgColor='C6EFCE')
-            if key in ('rt_clockin', 'rt_clockout') and not row[key]:
-                cell.font = Font(name='Calibri',color='C00000')
             if 'columns' in data:
                 from api.store_hours_sheet import format_excel_cell
                 format_excel_cell(cell, display_value(key, row.get(key)) if key == 'employee' else row.get(key), {**({'number_format':data['column_formats'][key]} if key in data.get('column_formats',{}) else {}), **(row.get('cell_formats') or {}).get(key,{})})
-            if compliance() and key in CHECK_FIELDS and row.get(key) in CHECK_COLORS:
-                foreground, background = CHECK_COLORS[row[key]]
+            colors = cell_colors(key, row.get(key))
+            if colors:
+                foreground, background = colors
                 from copy import copy
                 font = copy(cell.font); font.color = foreground; cell.font = font
                 cell.fill = PatternFill('solid', fgColor=background)

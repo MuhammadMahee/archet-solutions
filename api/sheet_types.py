@@ -22,3 +22,17 @@ def sheet_table(suffix):
 def report_columns():
     from api.store_hours import COLUMNS
     return COMPLIANCE_COLUMNS if compliance() else COLUMNS
+
+
+def cell_colors(key, value):
+    if compliance() and key in CHECK_FIELDS:
+        return CHECK_COLORS.get(value)
+    if value in ('Late', 'Early') or (key == 'chargeback' and value is not None and value < 0):
+        return CHECK_COLORS['No']
+    if value in ('Open', 'On Time'):
+        return CHECK_COLORS['Yes']
+    if value in ('Pending camera review', 'Schedule required', CAMERA_OFFLINE) or (key == 'chargeback' and value is None):
+        return CHECK_COLORS['#N/A']
+    if key in ('rt_clockin', 'rt_clockout') and not value:
+        return CHECK_COLORS['No']
+    return None

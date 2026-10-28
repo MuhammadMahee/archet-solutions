@@ -26,6 +26,10 @@
     if(['rt_clockin','rt_clockout'].includes(key)&&!value)return 'missing';
     return '';
   }
+  function colors(key,value){
+    if(compliance&&checks.some(c=>c[0]===key))return checkColors[value];
+    return {good:checkColors.Yes,bad:checkColors.No,wait:checkColors['#N/A'],missing:checkColors.No}[tone(key,value)];
+  }
   function render(data,filters={}){
     const sheetColumns=data.columns||columns;
     if(data.rows.length>500)throw new Error('Choose a smaller date range or store filter to copy up to 500 rows in one readable snapshot. Excel includes all filtered rows.');
@@ -64,10 +68,10 @@
       ctx.fillStyle=isHead?theme[0]:n%2?'#f7fafc':'#fff';ctx.fillRect(pad,y,tableWidth,h);
       let x=pad;
       sheetColumns.forEach(([key,heading],i)=>{
-        const state=isHead?'':tone(key,row[key]);
-        const fill=isHead?theme[0]:({yes:'#C6EFCE',no:'#FFC7CE',na:'#FFEB9C',good:'#c6efce',bad:'#ffc7ce',wait:'#fff2d5'}[state]||(n%2?'#f7fafc':'#fff'));
+        const pair=isHead?null:colors(key,row[key]);
+        const fill=isHead?theme[0]:(pair?.[1]||(n%2?'#f7fafc':'#fff'));
         raised(x+4,y+5,widths[i]-8,h-10,fill,isHead);
-        label(isHead?heading.toUpperCase():text(key,key==='employee'?String(row[key]??'').toUpperCase():row[key]),x,y,widths[i],h,isHead?17:19,isHead?'#fff':(compliance&&checks.some(c=>c[0]===key)&&checkColors[row[key]])?checkColors[row[key]][0]:state==='missing'||state==='bad'?'#ad1d32':'#16354a',key==='store'&&!isHead?'left':'center');
+        label(isHead?heading.toUpperCase():text(key,key==='employee'?String(row[key]??'').toUpperCase():row[key]),x,y,widths[i],h,isHead?17:19,isHead?'#fff':(pair?.[0]||'#16354a'),key==='store'&&!isHead?'left':'center');
         x+=widths[i];
       });
     }
@@ -78,5 +82,5 @@
     label(`SOURCE COVERAGE: ${data.coverage.complete}/${data.coverage.expected} ACCOUNT-DAYS. ${compliance?'Blank checks have not been reviewed.':'Missing camera or scheduled times remain pending.'}`,pad,top+tableHeight+43,tableWidth,26,14,'#865c20','left');
     return canvas;
   }
-  window.storeHoursSnapshot={render,columns,text,tone,compliance,checks,checkColors};
+  window.storeHoursSnapshot={render,columns,text,tone,colors,compliance,checks,checkColors};
 })();
