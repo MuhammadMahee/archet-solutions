@@ -137,7 +137,7 @@ def register_portal(app):
         limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload','/api/internal/store-hours/schedules/preview') else 32*1024
         if request.path.startswith('/api/internal/invoices/'):
             limit = 512 * 1024
-        if request.path == '/api/internal/store-hours/review':
+        if request.path in ('/api/internal/store-hours/review','/api/internal/store-hours/sheet/presence'):
             limit = 512 * 1024
         if request.method in ('POST', 'PATCH') and re.fullmatch(r'/api/internal/workforce/conversations/[0-9a-f-]{36}/(messages|profile)', request.path):
             limit = 3 * 1024 * 1024

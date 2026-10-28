@@ -228,6 +228,25 @@ def live_revision():
         return str(conn.execute('select revision from public.store_hours_live_revision where id=true').fetchone()['revision'])
 
 
+def presence_row(value):
+    keys={'dealer','store_id','source_date','employee_key'}
+    if not isinstance(value,dict) or set(value)!=keys or any(not isinstance(v,str) for v in value.values()):
+        raise PortalError('Choose a valid spreadsheet row.')
+    if any(not 0<len(value[k])<=160 for k in ('dealer','store_id')) or len(value['employee_key'])>500:
+        raise PortalError('Choose a valid spreadsheet row.')
+    try:
+        if date.fromisoformat(value['source_date']).isoformat()!=value['source_date']:
+            raise ValueError
+    except ValueError:
+        raise PortalError('Choose a valid spreadsheet date.') from None
+
+
+def presence_column(value):
+    from api.store_hours import COLUMNS
+    if not isinstance(value,str) or (value not in {k for k,_ in COLUMNS} and not re.fullmatch(r'custom_[a-zA-Z0-9_]{1,64}',value)):
+        raise PortalError('Choose a valid spreadsheet column.')
+
+
 def presence_input(payload):
     try:
         client_id=str(UUID(payload.get('client_id','')))
@@ -239,16 +258,25 @@ def presence_input(payload):
     selection=payload.get('selection')
     if selection is not None:
         keys={'dealer','store_id','source_date','employee_key','column'}
-        if not isinstance(selection,dict) or set(selection)!=keys or any(not isinstance(v,str) for v in selection.values()):
+        if not isinstance(selection,dict) or not keys<=set(selection) or set(selection)-keys-{'range'}:
             raise PortalError('Choose a valid spreadsheet cell.')
-        from api.store_hours import COLUMNS
-        if any(not 0<len(selection[k])<=160 for k in ('dealer','store_id')) or len(selection['employee_key'])>500 or selection['column'] not in {k for k,_ in COLUMNS} and not re.fullmatch(r'custom_[a-zA-Z0-9_]{1,64}',selection['column']):
-            raise PortalError('Choose a valid spreadsheet cell.')
-        try:
-            if date.fromisoformat(selection['source_date']).isoformat()!=selection['source_date']:
-                raise ValueError
-        except ValueError:
-            raise PortalError('Choose a valid spreadsheet date.') from None
+        presence_row({k:selection[k] for k in keys-{'column'}})
+        presence_column(selection['column'])
+        if 'range' in selection:
+            selected=selection['range']
+            if not isinstance(selected,dict) or set(selected)!={'rows','columns','areas'}:
+                raise PortalError('Choose a valid spreadsheet selection.')
+            rows,columns,areas=(selected[k] for k in ('rows','columns','areas'))
+            if not isinstance(rows,list) or not 1<=len(rows)<=100 or not isinstance(columns,list) or not 1<=len(columns)<=54 or not isinstance(areas,list) or not 1<=len(areas)<=50:
+                raise PortalError('Choose a valid spreadsheet selection.')
+            for row in rows:presence_row(row)
+            for column in columns:presence_column(column)
+            for area in areas:
+                if not isinstance(area,list) or len(area)!=4 or any(type(v) is not int for v in area):
+                    raise PortalError('Choose a valid spreadsheet range.')
+                top,left,bottom,right=area
+                if not (0<=top<=bottom<len(rows) and 0<=left<=right<len(columns)):
+                    raise PortalError('Choose a valid spreadsheet range.')
     active=payload['active']
     return client_id,sequence,active,selection if active else None,bool(active and selection and payload['editing'])
 
@@ -265,7 +293,7 @@ def update_presence(payload,user,session_hash):
                 sequence=excluded.sequence,active=excluded.active,selection=excluded.selection,editing=excluded.editing,last_seen=clock_timestamp()
                 where excluded.sequence>store_hours_presence.sequence''',
                 (user['id'],client_id,session_hash,sequence,active,Jsonb(selection) if selection else None,editing))
-            peers=conn.execute('''select p.user_id::text,p.client_id::text,u.display_name as name,p.selection,p.editing
+            peers=conn.execute('''select p.user_id::text,p.client_id::text,u.display_name as name,u.username,p.selection,p.editing
                 from public.store_hours_presence p join public.portal_users u on u.id=p.user_id
                 join public.portal_sessions s on s.token_hash=p.session_hash and s.user_id=p.user_id
                 where p.active and p.last_seen>clock_timestamp()-interval '15 seconds'

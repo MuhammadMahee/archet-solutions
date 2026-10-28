@@ -98,9 +98,9 @@ def main(grid_check=None, spreadsheet=False):
         client_id,sequence,active,selection,editing=sheet.presence_input(payload)
         identity=(user['id'],client_id)
         if sequence>presence_rows.get(identity,{}).get('sequence',-1):
-            presence_rows[identity]=dict(user_id=user['id'],client_id=client_id,name=user['display_name'],selection=selection,editing=editing,active=active,sequence=sequence,seen=time.monotonic(),session_hash=session_hash)
+            presence_rows[identity]=dict(user_id=user['id'],client_id=client_id,name=user['display_name'],username=user['username'],selection=selection,editing=editing,active=active,sequence=sequence,seen=time.monotonic(),session_hash=session_hash)
         sessions={row['token_hash'] for row in fake.tables['portal_sessions']}
-        return [{k:r[k] for k in ('user_id','client_id','name','selection','editing')} for r in presence_rows.values() if r['active'] and time.monotonic()-r['seen']<15 and r['session_hash'] in sessions]
+        return [{k:r[k] for k in ('user_id','client_id','name','username','selection','editing')} for r in presence_rows.values() if r['active'] and time.monotonic()-r['seen']<15 and r['session_hash'] in sessions]
     def history(start,end):
         before=int(request.args.get('before') or len(versions)+1)
         rows=[v for v in reversed(versions) if int(v['id'])<before]

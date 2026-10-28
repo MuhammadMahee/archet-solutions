@@ -51,3 +51,29 @@ def test_presence_authentication_csrf_and_server_identity(client,store,monkeypat
     assert result.json=={'peers':[],'revision':'12'}
     assert seen[0][0]==store.member['id'] and seen[0][1]
     assert result.headers['Cache-Control']=='no-store'
+
+
+def range_payload():
+    data=payload()
+    row={k:v for k,v in data['selection'].items() if k!='column'}
+    data['selection']['range']={'rows':[row,{**row,'employee_key':'person:other'}],
+        'columns':['employee','opening_time'],'areas':[[0,0,1,1]]}
+    return data
+
+
+def test_shared_range_preserves_only_row_and_column_identities():
+    data=range_payload()
+    assert sheet.presence_input(data)[3]==data['selection']
+    data['active']=False
+    assert sheet.presence_input(data)[3] is None
+
+
+@pytest.mark.parametrize('change',[
+    {'rows':[]},{'rows':[{}]},{'columns':['bad-column']},{'columns':[]},
+    {'areas':[]},{'areas':[[0,0,2,1]]},{'areas':[[0,0,1,2]]},
+    {'areas':[[1,0,0,1]]},{'areas':[[False,0,1,1]]},{'areas':[[0,0,1]]},
+    {'areas':[[0,0,1,1]]*51},{'draft':'unfinished text'},
+])
+def test_invalid_shared_range(change):
+    data=range_payload();data['selection']['range'].update(change)
+    with pytest.raises(PortalError):sheet.presence_input(data)
