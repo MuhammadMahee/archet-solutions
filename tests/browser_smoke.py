@@ -57,6 +57,8 @@ def main():
                 page.locator("#user-display-name").fill("Team Person")
                 page.locator("#user-username").fill("Team_User")
                 page.locator("#user-password").fill("TeamPass123")
+                for checkbox in page.locator('#user-page-options input:not(:disabled)').all():
+                    if checkbox.input_value() not in ('overview','quotes'):checkbox.uncheck()
                 page.get_by_role("button", name="Save account").click()
                 expect(page.locator("#user-list")).to_contain_text("Team_User")
                 page.screenshot(path=str(artifacts / "accounts-desktop.png"), full_page=True)
@@ -75,9 +77,20 @@ def main():
                 expect(member.locator("#users-nav")).to_be_hidden()
                 assert member.request.get(origin + "/api/internal/users").status == 403
                 expect(member.locator("#stat-total")).to_have_text("1")
+                expect(member.locator('.nav [data-page="sales"]')).to_be_hidden()
+                expect(member.locator('[data-page="spreadsheet"]')).to_be_hidden()
+                assert member.request.get(origin + '/api/internal/store-hours/sheet').status==403
+                assert member.request.get(origin + '/api/internal/sales/export').status==403
+                member.goto(origin+'/spreadsheet')
+                expect(member).to_have_url(origin+'/internal#settings')
+                expect(member.locator('#page-settings')).to_be_visible()
+                member.goto(origin+'/internal#overview');member.reload()
+                expect(member.locator('#stat-total')).to_have_text('1')
                 assert member.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 member.screenshot(path=str(artifacts / "workspace-mobile.png"), full_page=True)
                 page.get_by_role("row").filter(has_text="Team_User").get_by_role("button", name="Manage").click()
+                expect(page.locator('#user-page-options input[value="quotes"]')).to_be_checked()
+                expect(page.locator('#user-page-options input[value="sales"]')).not_to_be_checked()
                 page.locator("#user-active").select_option("false")
                 page.get_by_role("button", name="Save account").click()
                 expect(page.locator("#user-dialog")).not_to_be_visible()

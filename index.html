@@ -48,7 +48,7 @@
     <div class="workspace-label">WORKSPACE</div>
     <nav class="nav" aria-label="Workspace navigation">
       <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
-      <button onclick="location.assign('/spreadsheet')"><span class="nav-icon">▦</span>Opening / Closing Spreadsheet</button>
+      <button data-page="spreadsheet"><span class="nav-icon">▦</span>Opening / Closing Spreadsheet</button>
       <button data-page="quota"><span class="nav-icon">◈</span>Quota Update</button>
       <button data-page="callingtree"><span class="nav-icon">▦</span>Calling Tree</button>
       <button data-page="workforce"><span class="nav-icon">◉</span>AI Workforce</button>
@@ -212,7 +212,8 @@
   <div class="dialog-head row between"><h2 id="user-title">Create account</h2><button class="subtle close" data-close="user-dialog" aria-label="Close account form">×</button></div>
   <form id="user-form">
     <div id="new-user-fields"><div class="field"><label for="user-display-name">Full name</label><input id="user-display-name" maxlength="100" autocomplete="off"></div><div class="field"><label for="user-username">Username</label><input id="user-username" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="off"></div><p class="hint">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p></div>
-    <div class="field"><label for="user-role">Role</label><select id="user-role"><option value="member">Member — inquiries and follow-ups</option><option value="admin">Admin — accounts and inquiries</option></select></div>
+    <div class="field"><label for="user-role">Role</label><select id="user-role"><option value="member">Member - assigned pages</option><option value="admin">Admin - assigned pages and account management</option></select></div>
+    <fieldset id="user-page-access"><legend>Page access</legend><p class="hint">Choose the pages this person can open. Settings stays available for changing their password. Invoices remain available only to Mahee.</p><div id="user-page-options"></div></fieldset>
     <div class="field" id="user-active-field" hidden><label for="user-active">Account access</label><select id="user-active"><option value="true">Active</option><option value="false">Disabled</option></select></div>
     <div class="field"><label id="user-password-label" for="user-password">Initial password</label><input id="user-password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div>
     <p id="user-hint" class="hint">Share the username and password privately with your team member.</p>
@@ -227,6 +228,7 @@
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
+let accountPageOptions = {}, assignablePages = [];
 let currentUser = null, page = 'overview', quotes = [], users = [], offset = 0, hasMore = false, editingUser = null, editingQuote = null;
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date = value => new Date(value).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
@@ -239,7 +241,7 @@ function signedOut(message = '') {
   window.invoiceDashboard?.clear();
   window.workforceDashboard?.clear();
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
-  currentUser = null; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
+  currentUser = null; accountPageOptions={}; assignablePages=[]; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
   ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
   ['password-form','user-form','quote-form'].forEach(id => $(id).reset());
   $('workspace').hidden = true; $('boot').hidden = true; $('login').hidden = false; $('login-error').textContent = message;
@@ -265,6 +267,12 @@ async function submit(form, errorId, action) {
   const button = form.querySelector('[type=submit]'); button.disabled = true; $(errorId).textContent = '';
   try { await action(); } catch (error) { $(errorId).textContent = error.message; } finally { button.disabled = false; }
 }
+function canOpen(name) {
+  if (!currentUser) return false;
+  if (name === 'users' && currentUser.role !== 'admin') return false;
+  if (name === 'invoices') return window.invoiceDashboard.allowed();
+  return (currentUser.page_access || ['sales','spreadsheet','quota','callingtree','workforce','overview','quotes','users','settings']).includes(name);
+}
 function enterWorkspace(user, freshLogin = false) {
   if (user.rest_mode) { window.accountRest.show(user, freshLogin); return; }
   window.accountRest?.hide();
@@ -272,12 +280,16 @@ function enterWorkspace(user, freshLogin = false) {
   $('identity-name').textContent = user.display_name; $('identity-role').textContent = user.is_owner ? 'Workspace owner' : user.role === 'admin' ? 'Administrator' : 'Team member';
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
   $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice('');
-  $('invoices-nav').hidden = !window.invoiceDashboard.allowed();
-  const initial=location.hash.slice(1)||(location.pathname==='/ai-workforce'?'workforce':'');showPage(['sales','storehours','storehoursreport','quota','callingtree','workforce','overview','quotes','settings'].includes(initial)||(initial==='users'&&user.role==='admin')||(initial==='invoices'&&window.invoiceDashboard.allowed())?initial:'sales');
+  document.querySelectorAll('[data-page]').forEach(button => { button.hidden = !canOpen(button.dataset.page); });
+  const requested=location.hash.slice(1)||(location.pathname==='/ai-workforce'?'workforce':'sales');
+  const initial=['storehours','storehoursreport'].includes(requested)?'spreadsheet':requested;
+  showPage(canOpen(initial)?initial:['sales','spreadsheet','quota','callingtree','workforce','overview','quotes','users','settings'].find(canOpen));
 }
 async function showPage(name) {
   if (!currentUser || currentUser.rest_mode) return;
-  if (name === 'storehours' || name === 'storehoursreport') { location.replace('/spreadsheet'); return; }
+  if (name === 'storehours' || name === 'storehoursreport') name='spreadsheet';
+  if (!canOpen(name)) { notice('You do not have access to this page. Contact your administrator.',true); return; }
+  if (name === 'spreadsheet') { location.assign('/spreadsheet'); return; }
   if (name === 'users' && currentUser?.role !== 'admin') return;
   if (name === 'invoices' && !window.invoiceDashboard.allowed()) return;
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
@@ -299,6 +311,8 @@ async function loadOverview() {
   const data = await api('quotes'); if (!currentUser || page !== 'overview') return; quotes = data.quotes;
   $('stat-total').textContent = quotes.length; $('stat-new').textContent = quotes.filter(q => q.status === 'new').length; $('stat-contacted').textContent = quotes.filter(q => q.status === 'contacted').length;
   $('recent-quotes').innerHTML = quoteTable(quotes.slice(0,5));
+  if(!canOpen('quotes')) $('recent-quotes').querySelectorAll('[data-quote]').forEach(button=>button.hidden=true);
+  document.querySelectorAll('[data-open-inbox]').forEach(button=>button.hidden=!canOpen('quotes'));
 }
 async function loadQuotes() {
   $('quote-list').innerHTML = '<div class="empty">Loading inquiries…</div>';
@@ -307,19 +321,38 @@ async function loadQuotes() {
   $('previous').disabled = offset === 0; $('next').disabled = !hasMore; $('page-number').textContent = 'Page ' + (offset / 50 + 1);
 }
 async function loadUsers() {
+  accountPageOptions={}; assignablePages=[]; $('add-user').disabled=true;
   $('user-list').innerHTML = '<div class="empty">Loading accounts…</div>';
-  const data = await api('users'); if (!currentUser || page !== 'users') return; users = data.users;
+  const data = await api('users'); if (!currentUser || page !== 'users') return; users = data.users; accountPageOptions=data.page_options; assignablePages=data.assignable_pages; $('add-user').disabled=false;
   $('user-list').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Team member</th><th>Username</th><th>Role</th><th>Access</th><th>Manage</th></tr></thead><tbody>' + users.map(u => '<tr><td><strong>' + escapeHTML(u.display_name) + '</strong><small>Added ' + escapeHTML(date(u.created_at)) + '</small></td><td>' + escapeHTML(u.username) + '</td><td>' + (u.is_owner ? 'Owner' : escapeHTML(u.role)) + '</td><td><span class="badge ' + (!u.active ? 'closed' : u.rest_mode ? 'resting' : 'new') + '">' + (!u.active ? 'Disabled' : u.rest_mode ? 'On rest' : 'Active') + '</span></td><td>' + (u.is_owner ? '<span class="muted small">Permanent owner</span>' : u.id === currentUser.id ? '<span class="muted small">Your account</span>' : '<button class="subtle table-button" data-user="' + escapeHTML(u.id) + '">Manage</button>') + (currentUser.is_owner && currentUser.username === 'Mahee' ? ' <button class="subtle table-button rest-toggle" data-rest-user="' + escapeHTML(u.id) + '"' + (u.is_owner || u.id === currentUser.id ? ' disabled title="The permanent owner and your own account are protected"' : '') + '>' + (u.rest_mode ? 'Back to Work' : 'Take a Rest') + '</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>';
 }
 function userDialog(user = null) {
+  if(!Object.keys(accountPageOptions).length){notice('Wait for the account list to finish loading.',true);return;}
   editingUser = user; $('user-form').reset(); $('user-error').textContent = '';
   $('user-title').textContent = user ? 'Manage ' + user.username : 'Create account'; $('new-user-fields').hidden = !!user; $('user-active-field').hidden = !user;
   $('user-display-name').required = !user; $('user-username').required = !user; $('user-password').required = !user;
   $('user-password-label').textContent = user ? 'Reset password (optional)' : 'Initial password';
   $('user-hint').textContent = user ? 'Leave the password blank to keep it. Saving revokes all current sessions for this account.' : 'Share the username and password privately with your team member.';
   if (user) { $('user-role').value = user.role; $('user-active').value = String(user.active); }
+  renderPageAccess(user);
   $('user-dialog').showModal();
 }
+function renderPageAccess(user) {
+  const selected=user?.page_access || assignablePages;
+  const container=$('user-page-options');container.replaceChildren();
+  for (const [key,title] of Object.entries(accountPageOptions)) {
+    const label=document.createElement('label');label.className='check';
+    const input=document.createElement('input');input.type='checkbox';input.value=key;input.name='page_access';
+    input.checked=selected.includes(key);input.disabled=!assignablePages.includes(key);
+    label.append(input,document.createTextNode(title));container.append(label);
+  }
+  updateAccountRole();
+}
+function updateAccountRole() {
+  const accounts=$('user-page-options').querySelector('[value="users"]');
+  if(accounts){accounts.disabled=$('user-role').value!=='admin'||!assignablePages.includes('users');if(accounts.disabled)accounts.checked=false;}
+}
+$('user-role').onchange=updateAccountRole;
 function quoteDialog(quote) {
   editingQuote = quote; $('quote-error').textContent = ''; $('quote-title').textContent = quote.company;
   const fields = [['Contact',quote.full_name],['Email',quote.email],['Phone',quote.phone || 'Not provided'],['Industry',quote.brand],['Locations',quote.stores || 'Not provided'],['Received',date(quote.received_at)],['Email notification',quote.notification_status]];
@@ -334,14 +367,14 @@ document.addEventListener('click', event => {
   const close = event.target.closest('[data-close]'); if (close) $(close.dataset.close).close();
   if (event.target.closest('[data-open-inbox]')) { offset = 0; showPage('quotes'); }
   const user = event.target.closest('[data-user]'); if (user) { const found = users.find(u => u.id === user.dataset.user); if (found) userDialog(found); }
-  const quote = event.target.closest('[data-quote]'); if (quote) { const found = quotes.find(q => q.id === quote.dataset.quote); if (found) quoteDialog(found); }
+  const quote = event.target.closest('[data-quote]'); if (quote && canOpen('quotes')) { const found = quotes.find(q => q.id === quote.dataset.quote); if (found) quoteDialog(found); }
 });
 $('add-user').onclick = () => userDialog();
 $('refresh-quotes').onclick = () => showPage('quotes');
 $('previous').onclick = () => { offset = Math.max(0,offset - 50); showPage('quotes'); };
 $('next').onclick = () => { if (hasMore) { offset += 50; showPage('quotes'); } };
 $('user-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'user-error', async () => {
-  const data = {role:$('user-role').value}; const password = $('user-password').value;
+  const data = {role:$('user-role').value,page_access:[...$('user-page-options').querySelectorAll('input:checked:not(:disabled)')].map(input=>input.value)}; const password = $('user-password').value;
   if (editingUser) { data.active = $('user-active').value === 'true'; if (password) data.password = password; await api('users/' + editingUser.id,'PATCH',data); }
   else { Object.assign(data,{username:$('user-username').value.trim(), display_name:$('user-display-name').value.trim(), password}); await api('users','POST',data); }
   $('user-dialog').close(); $('user-form').reset(); notice(editingUser ? 'Account updated. Previous sessions were revoked.' : 'Account created. Your team member can now sign in.'); await loadUsers();

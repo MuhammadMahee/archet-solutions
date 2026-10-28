@@ -417,7 +417,7 @@
   $('sheet-month').onclick=()=>changePeriod(today.slice(0,8)+'01',today);
   $('sheet-period-button').onclick=chooseDates;
   $('sheet-prev').onclick=()=>{page--;render();};$('sheet-next').onclick=()=>{page++;render();};
-  async function enter(person){user=person;if(user.rest_mode){location.assign('/internal');return;}$('sheet-login').hidden=true;root.hidden=false;$('sheet-account').textContent=(person.display_name||person.username||'U').slice(0,1).toUpperCase();await load();}
+  async function enter(person){user=person;if(user.rest_mode||(!person.is_owner&&person.page_access&&!person.page_access.includes('spreadsheet'))){user=null;location.replace('/internal#settings');return;}$('sheet-login').hidden=true;root.hidden=false;$('sheet-account').textContent=(person.display_name||person.username||'U').slice(0,1).toUpperCase();await load();}
   $('sheet-account').onclick=async()=>{if(!await save())return;await api('logout','POST',{});location.reload();};
   $('sheet-login-form').onsubmit=async e=>{e.preventDefault();const submit=e.target.querySelector('button[type=submit]');submit.disabled=true;try{const result=await api('login','POST',{username:$('sheet-username').value.trim(),password:$('sheet-password').value});$('sheet-password').value='';await enter(result.user);}catch(error){$('sheet-login-error').textContent=error.message;}finally{submit.disabled=false;}};
   window.addEventListener('beforeunload',e=>{if(drafts.size||grid.isEditing()){e.preventDefault();e.returnValue='';}});

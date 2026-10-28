@@ -16,7 +16,42 @@ except ModuleNotFoundError:
 
 INTERNAL_HOST = os.getenv("INTERNAL_HOST", "internal.archetsolutions.com")
 USERNAME = re.compile(r"^[A-Za-z0-9_]{3,32}$")
-PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,rest_mode,rest_version"
+PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,rest_mode,rest_version,page_access"
+
+PAGE_OPTIONS = {'sales':'Sales Update','spreadsheet':'Opening / Closing Spreadsheet',
+    'quota':'Quota Update','callingtree':'Calling Tree','workforce':'AI Workforce',
+    'overview':'Overview','quotes':'Quote inbox','users':'Accounts'}
+
+
+def allowed_pages(user):
+    if user.get('is_owner'):
+        return list(PAGE_OPTIONS)+['invoices','settings']
+    selected=user.get('page_access')
+    pages=[key for key in PAGE_OPTIONS if selected is None or key in selected]
+    return [key for key in pages if key!='users' or user['role']=='admin']+['settings']
+
+
+def page_access_field(payload, role):
+    selected=payload.get('page_access')
+    if not isinstance(selected,list) or len(selected)>len(PAGE_OPTIONS) or any(not isinstance(key,str) or key not in PAGE_OPTIONS for key in selected) or len(set(selected))!=len(selected):
+        raise PortalError('Choose valid page access.')
+    if role!='admin' and 'users' in selected:
+        raise PortalError('Accounts access requires the Admin role.')
+    if set(selected)-set(allowed_pages(g.portal_user)):
+        raise PortalError('You can only grant pages available to your own account.',403)
+    return [key for key in PAGE_OPTIONS if key in selected]
+
+
+def check_page_access(user):
+    path=request.path.removeprefix('/api/internal/').split('/')[0]
+    page={'store-hours':'spreadsheet','sales':'sales','quota':'quota','calling-tree':'callingtree',
+          'workforce':'workforce','invoices':'invoices','users':'users','quotes':'quotes'}.get(path)
+    permitted=allowed_pages(user)
+    # Overview reads the same inquiry summary; follow-up edits still need Quote inbox.
+    if page=='quotes' and request.method=='GET' and 'overview' in permitted:
+        return
+    if page and page not in permitted:
+        raise PortalError('You do not have access to this page. Contact your administrator.',403)
 
 
 def local_request():
@@ -89,7 +124,7 @@ def valid_id(value):
 
 
 def user_view(user):
-    return {key: user[key] for key in PUBLIC_USER_FIELDS.split(",")}
+    return {**{key: user[key] for key in PUBLIC_USER_FIELDS.split(",") if key!="page_access"}, "page_access":allowed_pages(user)}
 
 
 def require_user(admin=False, allow_rest=False):
@@ -114,6 +149,7 @@ def require_user(admin=False, allow_rest=False):
                                user=user_view(g.portal_user)), 403
             if admin and g.portal_user["role"] != "admin":
                 raise PortalError("Administrator access is required.", 403)
+            check_page_access(g.portal_user)
             return fn(*args, **kwargs)
         return wrapper
     return decorator
@@ -221,7 +257,8 @@ def register_portal(app):
     @app.get("/api/internal/users")
     @require_user(admin=True)
     def users_list():
-        return jsonify(users=db("portal_users", select=PUBLIC_USER_FIELDS, order="created_at.asc", limit=1000))
+        return jsonify(users=[user_view(user) for user in db("portal_users", select=PUBLIC_USER_FIELDS, order="created_at.asc", limit=1000)],
+                       page_options=PAGE_OPTIONS,assignable_pages=allowed_pages(g.portal_user))
 
     @app.post("/api/internal/users")
     @require_user(admin=True)
@@ -237,6 +274,8 @@ def register_portal(app):
         role = payload.get("role", "member")
         if role not in ("admin", "member"):
             raise PortalError("Invalid role.")
+        selected=payload.get("page_access",[key for key in PAGE_OPTIONS if key in allowed_pages(g.portal_user) and (key!="users" or role=="admin")])
+        page_access=page_access_field({"page_access":selected},role)
         if db("portal_users", username_key="eq." + username.lower(), limit=1):
             raise PortalError("That username already exists.", 409)
         try:
@@ -247,7 +286,7 @@ def register_portal(app):
             raise
         uid = result["id"]
         try:
-            user = db("portal_users", "POST", {"id": uid, "username": username, "display_name": display_name, "role": role})[0]
+            user = db("portal_users", "POST", {"id": uid, "username": username, "display_name": display_name, "role": role, "page_access":page_access})[0]
         except StoreError:
             try:
                 auth("admin/users/" + uid, "DELETE")
@@ -269,6 +308,8 @@ def register_portal(app):
             raise PortalError("The permanent owner cannot be changed here. Use Change password for your own password.", 403)
         if uid == g.portal_user["id"]:
             raise PortalError("Ask another administrator to change your account.", 403)
+        if set(allowed_pages(target))-set(allowed_pages(g.portal_user)):
+            raise PortalError("Ask an administrator with all of this account's pages to manage it.",403)
         changes = {}
         if "role" in payload:
             if payload["role"] not in ("admin", "member"):
@@ -278,6 +319,8 @@ def register_portal(app):
             if not isinstance(payload["active"], bool):
                 raise PortalError("Invalid account status.")
             changes["active"] = payload["active"]
+        if "page_access" in payload:
+            changes["page_access"]=page_access_field(payload,changes.get("role",target["role"]))
         password = password_field(payload) if "password" in payload else None
         if not changes and password is None:
             raise PortalError("No account changes supplied.")
