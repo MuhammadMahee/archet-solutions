@@ -1,10 +1,10 @@
 """Request-scoped spreadsheet definitions; shared sources, isolated editable data."""
 from flask import has_request_context, request
 
-COMPLIANCE_COLUMNS = [('date','Date'),('market','Market'),('store','Store'),('employee','Employee'),
+COMPLIANCE_COLUMNS = [('date','Date'),('dealer_name','Dealer'),('market','Market'),('store','Store'),('employee','Employee'),
     ('store_cleaning','Store Cleaning'),('name_tag','Name Tag'),('shirt','Shirt'),('shoes','Shoes'),
     ('safe_closed','Safe Closed'),('demos_removed','Demos Removed'),('alarm_activated','Alarm Activated')]
-CHECK_FIELDS = {key for key, _ in COMPLIANCE_COLUMNS[4:]}
+CHECK_FIELDS = {key for key, _ in COMPLIANCE_COLUMNS[5:]}
 CHECK_COLORS = {'No': ('9C0006','FFC7CE'), 'Yes': ('006100','C6EFCE'), '#N/A': ('9C5700','FFEB9C')}
 CAMERA_OFFLINE = 'Camera Offline'
 

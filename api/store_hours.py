@@ -367,6 +367,7 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                            scheduled_closing_time=iso_time(schedule.get('closing_time')),
                            **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
                 if compliance():
+                    row['dealer_name'] = dealer
                     row.update({field: None for field in CHECK_FIELDS})
                 row['source_date'] = day.isoformat()
                 row['cell_overrides'] = overrides
@@ -516,10 +517,10 @@ def excel_report(data):
             cell.alignment = Alignment(horizontal='center')
     widths = [14, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25]
     if compliance():
-        widths = [14,20,34,30] + [22] * 7
+        widths = [14,20,20,34,30] + [22] * 7
     for n, width in enumerate(widths + [24] * (len(columns)-len(report_columns())), 1):
         sheet.column_dimensions[get_column_letter(n)].width = width
-    sheet.freeze_panes = 'E3'
+    sheet.freeze_panes = 'F3' if compliance() else 'E3'
     sheet.auto_filter.ref = f'A2:{get_column_letter(len(columns))}{sheet.max_row}'
     meta = book.create_sheet('Report details')
     for values in [('Source', REPORT_URL), ('From', data['start']), ('To', data['end']),

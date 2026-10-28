@@ -4,7 +4,7 @@
   const checks=[['store_cleaning','Store Cleaning'],['name_tag','Name Tag'],['shirt','Shirt'],['shoes','Shoes'],['safe_closed','Safe Closed'],['demos_removed','Demos Removed'],['alarm_activated','Alarm Activated']];
   const checkColors={'No':['#9C0006','#FFC7CE'],'Yes':['#006100','#C6EFCE'],'#N/A':['#9C5700','#FFEB9C']};
   const columns = [['date','Date'],['market','Market'],['store','Store'],['employee','Employee'],['store_status','Opening Status'],['opening_time','Opening Time'],['camera_in','Camera In View'],['rt_clockin','RT Clockin'],['opening_status','Opening Status'],['closing_time','Closing Time'],['camera_out','Camera Out View'],['rt_clockout','RT Clockout'],['closing_status','Closing Status'],['chargeback','Late Opening Chargeback']];
-  if(compliance)columns.splice(4,columns.length-4,...checks);
+  if(compliance){columns.splice(4,columns.length-4,...checks);columns.splice(1,0,['dealer_name','Dealer']);}
   const themes = {'':['#095570','#083c51'],Connect:['#095570','#083c51'],California:['#a92d49','#491c2c'],SRH:['#a06118','#503718'],AMQ:['#365cad','#20335b'],ARM:['#176b56','#104735'],ARBF:['#7646a5','#3d2652']};
   const dateLabel = value => new Date(value+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   function text(key,value) {
@@ -30,7 +30,7 @@
     const sheetColumns=data.columns||columns;
     if(data.rows.length>500)throw new Error('Choose a smaller date range or store filter to copy up to 500 rows in one readable snapshot. Excel includes all filtered rows.');
     let widths=[150,150,310,270,210,142,150,150,210,142,150,150,210,250,...Array(Math.max(0,sheetColumns.length-columns.length)).fill(220)];
-    if(compliance)widths=sheetColumns.map(([key],i)=>i===2?310:i===3?270:180);
+    if(compliance)widths=sheetColumns.map(([key])=>key==='store'?310:key==='employee'?270:180);
     const tableWidth=widths.reduce((a,b)=>a+b,0),pad=32,width=tableWidth+64,top=164,head=54,rowHeight=44;
     const tableHeight=head+data.rows.length*rowHeight,height=top+tableHeight+94;
     const canvas=document.createElement('canvas'),scale=Math.min(1920/width,15000/height);
@@ -67,7 +67,7 @@
         const state=isHead?'':tone(key,row[key]);
         const fill=isHead?theme[0]:({yes:'#C6EFCE',no:'#FFC7CE',na:'#FFEB9C',good:'#c6efce',bad:'#ffc7ce',wait:'#fff2d5'}[state]||(n%2?'#f7fafc':'#fff'));
         raised(x+4,y+5,widths[i]-8,h-10,fill,isHead);
-        label(isHead?heading.toUpperCase():text(key,key==='employee'?String(row[key]??'').toUpperCase():row[key]),x,y,widths[i],h,isHead?17:19,isHead?'#fff':(compliance&&checks.some(c=>c[0]===key)&&checkColors[row[key]])?checkColors[row[key]][0]:state==='missing'||state==='bad'?'#ad1d32':'#16354a',i===2&&!isHead?'left':'center');
+        label(isHead?heading.toUpperCase():text(key,key==='employee'?String(row[key]??'').toUpperCase():row[key]),x,y,widths[i],h,isHead?17:19,isHead?'#fff':(compliance&&checks.some(c=>c[0]===key)&&checkColors[row[key]])?checkColors[row[key]][0]:state==='missing'||state==='bad'?'#ad1d32':'#16354a',key==='store'&&!isHead?'left':'center');
         x+=widths[i];
       });
     }

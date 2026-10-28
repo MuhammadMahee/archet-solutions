@@ -8,7 +8,8 @@ def check(page):
     page.goto(origin+'/compliance?start=2026-10-20&end=2026-10-20')
     expect(page.locator('#sheet-row-count')).to_contain_text('7 rows')
     expect(page.locator('.sheet-heading h1')).to_contain_text('Compliance')
-    assert page.locator('#sh-table thead th').count()==12
+    assert page.locator('#sh-table thead th').count()==13
+    expect(page.locator('#sh-table tbody tr').first.locator('[data-column=dealer_name]')).to_have_text('Connect')
     def edit(field,value):
         cell=page.locator('#sh-table tbody tr').first.locator('[data-column='+field+']')
         cell.dblclick()

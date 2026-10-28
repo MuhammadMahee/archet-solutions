@@ -40,14 +40,14 @@ def test_compliance_export_colors_and_text():
     with index.app.test_request_context('/api/internal/compliance/sheet/export'):
         row=sample_rows()[0]
         row.update({k:None for k in CHECK_FIELDS})
-        row.update(store_cleaning='No',name_tag='Yes',shirt='#N/A')
+        row.update(dealer_name=row['dealer'],store_cleaning='No',name_tag='Yes',shirt='#N/A')
         row['cell_formats']={'shirt':{'background':'#FFFFFF','color':'#000000'}}
         data=dict(rows=[row],columns=COMPLIANCE_COLUMNS,start=row['date'],end=row['date'],updated_at=None,coverage={'complete':1,'expected':1})
         book=load_workbook(sh.excel_report(data))
         ws=book.active
         assert ws.title=='Compliance'
         assert [c.value for c in ws[2]]==[label for _,label in COMPLIANCE_COLUMNS]
-        for col,value in [(5,'No'),(6,'Yes'),(7,'#N/A')]:
+        for col,value in [(6,'No'),(7,'Yes'),(8,'#N/A')]:
             cell=ws.cell(3,col)
             assert cell.value==value and cell.data_type=='s'
             assert cell.font.color.rgb.endswith(CHECK_COLORS[value][0])
