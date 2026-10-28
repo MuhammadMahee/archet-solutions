@@ -5,6 +5,9 @@
   const key=r=>JSON.stringify([r.dealer,r.store_id,r.source_date||r.date,r.employee_key||'']);
   let user=null,data=null,rows=[],grid,historyPanel,saving=false,page=0,loading=false,filterRules={},sort={},popup=null;
   let autosaveTimer=null,saveFlight=null,saveFailed=false;
+  let viewEpoch=0,liveBusy=false,liveDue=0,liveFailures=0;
+  const conflicts=new Map(),liveStatus=document.createElement('span');liveStatus.id='sheet-live-state';liveStatus.className='sheet-live-state';liveStatus.textContent='Connecting...';liveStatus.setAttribute('role','status');$('sheet-save-state').after(liveStatus);
+  const resolveButton=document.createElement('button');resolveButton.id='sheet-resolve-conflict';resolveButton.textContent='Resolve conflict';resolveButton.hidden=true;resolveButton.onclick=resolveConflict;liveStatus.after(resolveButton);
   const drafts=new Map();let today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const initialPeriod=new URLSearchParams(location.search);
   let start=initialPeriod.get('start')||today,end=initialPeriod.get('end')||today;
@@ -12,8 +15,8 @@
   $('sheet-from').value=start;$('sheet-to').value=end;$('sheet-from').max=$('sheet-to').max=today;
   const current=r=>drafts.get(key(r))||r,visible=()=>rows.slice(page*100,(page+1)*100).map(current);
   function message(text='',error=false){$('sheet-message').textContent=text;$('sheet-message').hidden=!text;$('sheet-message').classList.toggle('is-error',error);}
-  async function api(path,method='GET',body){
-    const response=await fetch('/api/internal/'+path,{method,headers:method==='GET'?{}:{'Content-Type':'application/json','X-Archet-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
+  async function api(path,method='GET',body,signal){
+    const response=await fetch('/api/internal/'+path,{method,signal,headers:method==='GET'?{}:{'Content-Type':'application/json','X-Archet-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
     let result;try{result=await response.json();}catch{throw new Error('The service could not respond. Please try again.');}
     if(!response.ok){if(response.status===401&&user){user=null;root.hidden=true;$('sheet-login').hidden=false;drafts.clear();clearTimeout(autosaveTimer);grid.reset();historyPanel.clear();$('sheet-dialog').close();closeMenu();}const error=new Error(result.message||'The request could not be completed.');error.status=response.status;throw error;}return result;
   }
@@ -46,14 +49,84 @@
     Object.assign(row,evaluate(preview),row.cell_overrides);
     for(const [field] of columns)if(field.startsWith('custom_'))row[field]=row.custom_cells[field]??null;
   }
+  const equal=(a,b)=>a===b||!!(a&&b&&typeof a==='object'&&typeof b==='object'&&Array.isArray(a)===Array.isArray(b)&&Object.keys(a).length===Object.keys(b).length&&Object.keys(a).every(k=>Object.hasOwn(b,k)&&equal(a[k],b[k])));
+  function mergeDraft(baseline,local,remote,preferRemote=false){
+    const merged={...remote,cell_overrides:{...remote.cell_overrides},custom_cells:{...remote.custom_cells},cell_formats:{...remote.cell_formats}},changed=[];
+    function merge(group,field,before,mine,theirs){
+      if(equal(before,mine))return;
+      const conflict=!equal(before,theirs)&&!equal(mine,theirs);
+      if(conflict)changed.push({group,field,mine,theirs});
+      if(conflict&&preferRemote)return;
+      if(group==='time')merged[field]=local[field];
+      else if(mine===undefined)delete merged[group][field];else merged[group][field]=mine;
+    }
+    for(const field of fields){
+      const scheduled=['opening_time','closing_time'].includes(field),before=scheduled&&!baseline.schedule_overrides?.[field]?null:baseline[field];
+      const mine=scheduled&&local[field]===baseline[field]&&!baseline.schedule_overrides?.[field]?null:local[field];
+      const theirs=scheduled&&!remote.schedule_overrides?.[field]?null:remote[field];
+      merge('time',field,before,mine,theirs);
+    }
+    for(const group of ['cell_overrides','custom_cells','cell_formats'])for(const field of new Set([...Object.keys(baseline[group]||{}),...Object.keys(local[group]||{})]))merge(group,field,baseline[group]?.[field],local[group]?.[field],remote[group]?.[field]);
+    refreshDraft(merged,remote);return {row:merged,conflicts:changed};
+  }
+  async function rebaseDraft(id){
+    const fresh=await api('store-hours/sheet?'+params(false));if(!user)return false;
+    const baseline=data.rows.find(r=>key(r)===id),local=drafts.get(id),remote=fresh.rows.find(r=>key(r)===id);
+    if(!remote)throw new Error('This row was removed or moved outside your filters. Copy your unsaved values, then use Edit > Discard unsaved edits to reload.');
+    const activeFields=new Set(fresh.columns.map(c=>c[0]));
+    for(const group of ['custom_cells','cell_formats'])for(const field of new Set([...Object.keys(local[group]||{}),...Object.keys(baseline[group]||{})]))if(!activeFields.has(field)&&!equal(local[group]?.[field],baseline[group]?.[field]))throw new Error('A column you edited was removed. Copy your unsaved values, then use Edit > Discard unsaved edits to reload.');
+    const merged=mergeDraft(baseline,local,remote);
+    if(merged.conflicts.length){conflicts.set(id,{remote});dirty();throw new Error('Someone edited the same cell. Choose Resolve conflict to review both values.');}
+    Object.assign(baseline,remote);drafts.set(id,merged.row);grid.resetHistory();return true;
+  }
+  function resolveConflict(){
+    if(!grid.finishEditing()||!conflicts.size)return;
+    const [id,{remote}]=conflicts.entries().next().value,baseline=data.rows.find(r=>key(r)===id),local=drafts.get(id),merged=mergeDraft(baseline,local,remote);
+    const content=openDialog('Review conflicting edits');paragraph(`${local.date} | ${local.store} | ${formatted('employee',local.employee)}`,content);
+    paragraph('Both people edited the same cell. Other changes will be combined automatically. Choose which conflicting values to keep.',content);
+    for(const change of merged.conflicts){const label=columns.find(c=>c[0]===change.field)?.[1]||change.field,format=v=>change.group==='cell_formats'?JSON.stringify(v||{}):v===undefined?'Source/default':formatted(change.field,v);paragraph(`${label}${change.group==='cell_formats'?' formatting':''}: Your value: ${format(change.mine)} | Latest saved value: ${format(change.theirs)}`,content);}
+    const footer=document.createElement('div');footer.className='sheet-dialog-actions';content.append(footer);button('Cancel',()=>$('sheet-dialog').close(),footer);
+    const choose=async preferRemote=>{const rebased=mergeDraft(baseline,drafts.get(id),remote,preferRemote);Object.assign(baseline,remote);drafts.set(id,rebased.row);conflicts.delete(id);grid.resetHistory();$('sheet-dialog').close();render();await save();};
+    button('Use latest values',()=>choose(true),footer);button('Keep my values',()=>choose(false),footer,'sheet-primary');
+  }
+  function liveBlocked(){return loading||saving||drafts.size||grid.isEditing()||document.activeElement===$('sheet-value')||document.querySelector('dialog[open]')||popup||grid.isSelecting();}
+  async function pollLive(){
+    if(!user||!data||document.hidden||liveBusy||performance.now()<liveDue)return;
+    if(!navigator.onLine){liveStatus.textContent='Offline - reconnecting';return;}
+    liveBusy=true;const epoch=viewEpoch,query=params(false).toString(),userId=user.id;
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),30000);
+    const valid=()=>user?.id===userId&&viewEpoch===epoch&&query===params(false).toString()&&!document.hidden;
+    try{
+      const update=await api('store-hours/sheet/updates','GET',undefined,controller.signal);if(!valid())return;
+      liveFailures=0;liveDue=0;
+      if(update.revision===data.live_revision){liveStatus.textContent='Live';return;}
+      if(liveBlocked()){liveStatus.textContent='Updates waiting';return;}
+      const fresh=await api('store-hours/sheet?'+query,'GET',undefined,controller.signal);if(!valid()||liveBlocked())return;
+      if(equal({...data,live_revision:null},{...fresh,live_revision:null})){data.live_revision=fresh.live_revision;liveStatus.textContent='Live';return;}
+      const position=grid.selection().active,selected=visible()[position.r],selectedKey=selected&&key(selected),field=columns[position.c]?.[0],wrap=table.parentElement,left=wrap.scrollLeft,top=wrap.scrollTop,focused=table.contains(document.activeElement);
+      const oldShape=JSON.stringify([columns.map(c=>c[0]),visible().map(key)]);
+      data=fresh;today=fresh.today||today;columns.splice(0,columns.length,...fresh.columns);
+      for(const name of Object.keys(filterRules))if(!columns.some(c=>c[0]===name))delete filterRules[name];if(!columns.some(c=>c[0]===sort.key))sort={};
+      options('sheet-dealer',data.dealers,'All dealers');options('sheet-market',data.markets,'All markets');options('sheet-store',data.stores,'All stores');
+      applyFilters({preservePage:true,refresh:false});const index=rows.findIndex(r=>key(r)===selectedKey);if(index>=0)page=Math.floor(index/100);
+      grid.resetHistory();render();
+      if(oldShape!==JSON.stringify([columns.map(c=>c[0]),visible().map(key)]))grid.restoreCell(index>=0?index%100:position.r,Math.max(0,columns.findIndex(c=>c[0]===field)));
+      wrap.scrollLeft=left;wrap.scrollTop=top;if(focused)table.querySelector('.sh-cell-active')?.focus({preventScroll:true});
+      liveStatus.textContent='Live';
+    }catch(error){if(valid()){liveFailures++;liveDue=performance.now()+Math.min(30000,1000*2**Math.min(liveFailures,5));liveStatus.textContent='Reconnecting...';}}
+    finally{clearTimeout(timeout);liveBusy=false;}
+  }
+  setInterval(pollLive,1000);
+  for(const event of ['online','visibilitychange'])window.addEventListener(event,()=>{liveDue=0;pollLive();});
   function dirty(){
+    if(!drafts.size)conflicts.clear();resolveButton.hidden=!conflicts.size;
     $('sheet-save').disabled=saving||loading||!drafts.size;
     $('sheet-save-state').textContent=loading?'Loading...':saving?'Saving...':saveFailed?'Not saved - retry':drafts.size?'Waiting to autosave...':'All changes saved';
     $('sheet-save-state').classList.toggle('is-error',saveFailed);
   }
   function scheduleAutosave(){
-    clearTimeout(autosaveTimer);saveFailed=false;dirty();
-    autosaveTimer=setTimeout(()=>{if(grid.isEditing()||document.activeElement===$('sheet-value')){scheduleAutosave();return;}save({quiet:true});},1200);
+    clearTimeout(autosaveTimer);if(conflicts.size){dirty();return;}saveFailed=false;dirty();
+    autosaveTimer=setTimeout(()=>{if(grid.isEditing()||document.activeElement===$('sheet-value')){scheduleAutosave();return;}save({quiet:true});},500);
   }
   function rememberPeriod(){
     $('sheet-from').value=start;$('sheet-to').value=end;$('sheet-from').max=$('sheet-to').max=today;
@@ -61,12 +134,12 @@
     const url=new URL(location.href);url.searchParams.set('start',start);url.searchParams.set('end',end);window.history.replaceState(null,'',url);
   }
   function options(id,values,label){const el=$(id),selected=el.value;el.replaceChildren(new Option(label,''));for(const v of values)el.add(new Option(typeof v==='string'?v:v.name,typeof v==='string'?v:v.id));el.value=selected;}
-  function applyFilters(){
+  function applyFilters({preservePage=false,refresh=true}={}){
     const search=$('sheet-search').value.trim().toLowerCase();
     rows=(data?.rows||[]).filter(original=>{const row=current(original);return (!search||columns.some(([k])=>rawText(row[k]).toLowerCase().includes(search)))&&Object.entries(filterRules).every(([k,rule])=>rawText(row[k]).toLowerCase().includes((rule.contains||'').toLowerCase())&&(!rule.values||rule.values.includes(rawText(row[k]))));});
     if(sort.key){const value=r=>current(r)[sort.key],number=v=>Number(rawText(v).replaceAll('$','').replaceAll(',',''));
       rows.sort((a,b)=>{const av=value(a),bv=value(b);if(av==null||av==='')return bv==null||bv===''?0:1;if(bv==null||bv==='')return -1;const an=number(av),bn=number(bv),comparison=Number.isFinite(an)&&Number.isFinite(bn)?an-bn:rawText(av).localeCompare(rawText(bv),undefined,{numeric:true,sensitivity:'base'});return sort.direction==='desc'?-comparison:comparison;});}
-    page=0;render();
+    if(!preservePage)page=0;if(refresh)render();
   }
   function cellStyle(td,fmt){
     if(fmt.font_family)td.style.fontFamily=`"${fmt.font_family}", Arial, sans-serif`;
@@ -87,6 +160,7 @@
     $('sheet-period').textContent=start===end?start:`${start} – ${end}`;$('sheet-page').textContent=rows.length?`${page*100+1}–${Math.min(rows.length,(page+1)*100)}`:'0';$('sheet-prev').disabled=page===0;$('sheet-next').disabled=(page+1)*100>=rows.length;dirty();grid?.refresh();
   }
   async function load(){
+    viewEpoch++;
     if(loading)return false;if(!await save({quiet:true}))return false;
     loading=true;dirty();message();grid.reset();
     try{const result=await api('store-hours/sheet?'+params(false));if(!user)return false;data=result;today=result.today||today;rememberPeriod();columns.splice(0,columns.length,...data.columns);for(const field of Object.keys(filterRules))if(!columns.some(c=>c[0]===field))delete filterRules[field];if(!columns.some(c=>c[0]===sort.key))sort={};options('sheet-dealer',data.dealers,'All dealers');options('sheet-market',data.markets,'All markets');options('sheet-store',data.stores,'All stores');applyFilters();return true;}catch(error){message(error.message,true);return false;}finally{loading=false;dirty();}
@@ -95,14 +169,16 @@
     if(!quiet&&!grid.finishEditing())return Promise.resolve(false);
     clearTimeout(autosaveTimer);
     if(saveFlight)return saveFlight;
-    if(!drafts.size)return Promise.resolve(true);
+    if(!drafts.size){conflicts.clear();return Promise.resolve(true);}
+    if(conflicts.size)return Promise.resolve(false);
     if(loading)return Promise.resolve(false);
-    saving=true;saveFailed=false;dirty();
+    viewEpoch++;saving=true;saveFailed=false;dirty();
     saveFlight=(async()=>{
       try{
-        while(drafts.size){
+        let rebases=0;while(drafts.size){
           const [id,sent]=drafts.entries().next().value;
-          const result=await api('store-hours/review','POST',{...sent,include_row:true});
+          let result;try{result=await api('store-hours/review','POST',{...sent,include_row:true});}
+          catch(error){if(error.status===409&&rebases++<3){if(await rebaseDraft(id))continue;return false;}throw error;}
           if(!user)return false;
           const saved=data.rows.find(r=>key(r)===id),canonical=result.row||{...sent,revision:result.revision};
           for(const [field] of columns)if(field.startsWith('custom_'))canonical[field]=canonical.custom_cells?.[field]??null;
@@ -300,7 +376,7 @@
     Insert:[['Custom column',()=>columnDialog('add'),'Ctrl++'],['Employee row',addRow]],
     Format:[['Bold',()=>toggleFormat('bold')],['Italic',()=>toggleFormat('italic')],['Underline',()=>toggleFormat('underline')],['Wrap text',()=>toggleFormat('wrap')],['Borders',borderDialog],['Clear formatting',()=>grid.format(null)]],
     Data:[['Filter selected column',()=>columnMenu(columns[grid.selection().active.c][0])],['Clear all column filters',()=>{filterRules={};sort={};applyFilters();}],['Sync RT-POS sources',sync,'Admin'],['Upload store schedules',uploadSchedules,'Admin']],
-    Help:[['Spreadsheet tutorial',()=>grid.command('tutorial'),'F1'],['Keyboard commands',()=>grid.command('commands'),'F8'],['Custom columns & formatting',()=>{const content=openDialog('Working with your spreadsheet');paragraph('Use + Column to add a shared custom column. Each column heading opens filters, sorting, rename, and delete. Default report columns cannot be deleted. Removed custom columns and their saved values remain in version history.',content);paragraph('Select cells or a range, then choose a font family, bold, colors, alignment, wrapping, font size, borders, or number formats. Employee names display in uppercase, including clipboard copies and exports. Formatting changes display only; the cell-value bar always shows the underlying value. Custom cell values are plain data; formulas are not evaluated.',content);paragraph('Filters apply to all loaded rows in your selected period. Editing and formatting apply to the current page of up to 100 rows. Edits autosave after you finish typing. Exports, syncs, and date changes wait for saving to finish. Column changes save immediately for everyone. Excel includes all filtered rows and active custom columns with their saved formats.',content);}]]
+    Help:[['Spreadsheet tutorial',()=>grid.command('tutorial'),'F1'],['Keyboard commands',()=>grid.command('commands'),'F8'],['Custom columns & formatting',()=>{const content=openDialog('Working with your spreadsheet');paragraph('Use + Column to add a shared custom column. Each column heading opens filters, sorting, rename, and delete. Default report columns cannot be deleted. Removed custom columns and their saved values remain in version history.',content);paragraph('Select cells or a range, then choose a font family, bold, colors, alignment, wrapping, font size, borders, or number formats. Employee names display in uppercase, including clipboard copies and exports. Formatting changes display only; the cell-value bar always shows the underlying value. Custom cell values are plain data; formulas are not evaluated.',content);paragraph('Live checks for saved changes every second. Incoming updates wait while you type or use a dialog. Different-cell edits merge automatically; Resolve conflict lets you choose between competing values for the same cell. Applying another person’s changes clears local undo history; your own autosaves preserve it.',content);paragraph('Filters apply to all loaded rows in your selected period. Editing and formatting apply to the current page of up to 100 rows. Edits autosave after you finish typing. Exports, syncs, and date changes wait for saving to finish. Column changes save immediately for everyone. Excel includes all filtered rows and active custom columns with their saved formats.',content);}]]
   };
   for(const [name,items] of Object.entries(menus)){const trigger=button(name,e=>{const was=trigger.getAttribute('aria-expanded')==='true';closeMenu();if(was)return;trigger.setAttribute('aria-expanded','true');popup=document.createElement('div');popup.className='sheet-menu-popup';popup.setAttribute('role','menu');for(const [label,action,shortcut] of items){const b=button(label,()=>{closeMenu();action();},popup);b.setAttribute('role','menuitem');if(shortcut){const small=document.createElement('small');small.textContent=shortcut;b.append(small);}if(shortcut==='Admin')b.disabled=user?.role!=='admin';}document.body.append(popup);const box=trigger.getBoundingClientRect();popup.style.left=Math.min(box.left,innerWidth-popup.offsetWidth-8)+'px';popup.style.top=box.bottom+3+'px';popup.querySelector('button')?.focus();},$('sheet-menu'));trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');}
   document.addEventListener('pointerdown',e=>{if(popup&&!popup.contains(e.target)&&!$('sheet-menu').contains(e.target))closeMenu();});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMenu();if(popup&&['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();const buttons=[...popup.querySelectorAll('button:not(:disabled)')],i=buttons.indexOf(document.activeElement);buttons[(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}});

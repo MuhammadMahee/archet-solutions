@@ -115,7 +115,7 @@ window.createStoreHoursGrid = function(api) {
     }
     drawClipboard();drawSelection();
   }
-  function select(r,c,extend=false,add=false){if(!api.rows().length)return;selectionKind='cells';if(add&&extraRanges.length<49)extraRanges.push(bounds());else if(!extend)extraRanges=[];active=clamp({r,c});if(!extend||add)anchor={...active};paint(true);}
+  function select(r,c,extend=false,add=false,focus=true){if(!api.rows().length)return;selectionKind='cells';if(add&&extraRanges.length<49)extraRanges.push(bounds());else if(!extend)extraRanges=[];active=clamp({r,c});if(!extend||add)anchor={...active};paint(focus);}
   function resetHistory(){undo=[];redo=[];toolbar.querySelector('[data-grid=undo]').disabled=true;toolbar.querySelector('[data-grid=redo]').disabled=true;}
   function reset(){selectionKind='cells';stopScroll();clearClipboard();selectionOutline.hidden=true;rangeInput.disabled=true;generation++;cancelEdit();if(dialog.open)dialog.close();content.replaceChildren();title.textContent='';resetHistory();signature='';extraRanges=[];anchor=active={r:0,c:0};welcome.hidden=true;}
   function refresh(){
@@ -324,5 +324,5 @@ window.createStoreHoursGrid = function(api) {
   const layoutChanged=()=>{if(horizontalScroll){const target=cell(active.r,active.c);if(target)revealColumn(target);else stopScroll();}drawClipboard();drawSelection();};
   window.addEventListener('resize',layoutChanged);
   if(api.animateSelection){const observer=new ResizeObserver(layoutChanged);observer.observe(table);observer.observe(table.parentElement);}
-  return {refresh,reset,resetHistory,borders,layout:layoutChanged,selectCell:(r,c)=>select(r,c),isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected(),kind:structuralSelection()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
+  return {refresh,reset,resetHistory,borders,layout:layoutChanged,selectCell:(r,c)=>select(r,c),restoreCell:(r,c)=>select(r,c,false,false,false),isSelecting:()=>dragging,isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected(),kind:structuralSelection()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
 };

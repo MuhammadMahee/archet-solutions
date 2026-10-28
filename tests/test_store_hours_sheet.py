@@ -78,9 +78,14 @@ def test_sheet_routes_authentication_and_same_origin(client,monkeypatch):
     assert client.get('/spreadsheet').status_code==200
     assert client.get('/api/internal/store-hours/sheet').status_code==401
     assert client.get('/api/internal/store-hours/sheet/export').status_code==401
+    assert client.get('/api/internal/store-hours/sheet/updates').status_code==401
     login(client,'Member')
     monkeypatch.setattr(sheet,'report',lambda:{'rows':[]})
+    monkeypatch.setattr(sheet,'live_revision',lambda:'7')
     assert client.get('/api/internal/store-hours/sheet').status_code==200
+    assert client.get('/api/internal/store-hours/sheet').json['live_revision']=='7'
+    update=client.get('/api/internal/store-hours/sheet/updates')
+    assert update.json=={'revision':'7'} and update.headers['Cache-Control']=='no-store'
     assert client.post('/api/internal/store-hours/sheet/columns',json={}).status_code==403
     monkeypatch.setattr(sheet,'change_column',lambda payload,user_id:{'revision':1,'columns':[]})
     assert write(client,'store-hours/sheet/columns',{}).json['revision']==1

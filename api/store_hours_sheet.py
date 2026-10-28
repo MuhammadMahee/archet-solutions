@@ -222,11 +222,26 @@ def format_excel_cell(cell, value, fmt):
         cell.number_format='@'
 
 
+def live_revision():
+    from api import store_hours as sh
+    with sh.connect() as conn:
+        return str(conn.execute('select revision from public.store_hours_live_revision where id=true').fetchone()['revision'])
+
+
 def register(app):
+    @app.get('/api/internal/store-hours/sheet/updates')
+    @require_user()
+    def sheet_updates():
+        return jsonify(revision=live_revision())
+
     @app.get('/api/internal/store-hours/sheet')
     @require_user()
     def sheet_report():
-        return jsonify(report())
+        # Read the token first: a write during report loading is picked up next poll.
+        revision = live_revision()
+        result = report()
+        result['live_revision'] = revision
+        return jsonify(result)
 
     @app.post('/api/internal/store-hours/sheet/columns')
     @require_user()

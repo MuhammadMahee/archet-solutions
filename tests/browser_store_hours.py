@@ -46,6 +46,7 @@ def main(grid_check=None, spreadsheet=False):
                   dict(dealer='The Fix',store_id='WB-PRIME',market='CHICAGO',store='PRIME',source_id=None),
                   dict(dealer='Smoke Magic',store_id='WB-MAGIC',market='DALLAS',store='MAGIC 1',source_id=None)]
     def row_key(row): return row['dealer'],row['store_id'],row.get('source_date',row['date']),row.get('employee_key','')
+    initial_revisions={row_key(row):row['revision'] for row in sample_rows()}
     def fixture(start, end):
         rows = sample_rows()
         rows += sh.build_rows(directory[3:], [], [], [], start, end, manual)
@@ -62,6 +63,8 @@ def main(grid_check=None, spreadsheet=False):
         return dict(rows=[r for r in rows if not r.get('removed')], removed_rows=[r for r in rows if r.get('removed')], start=start.isoformat(), end=end.isoformat(), today='2026-10-20', earliest='2026-10-01',
                     dealers=sorted({s['dealer'] for s in directory}), directory=directory, manual_store_count=2, markets=markets, stores=stores, updated_at=None, coverage={'complete': 2, 'expected': 2, 'errors': []})
     def save(payload, user_id, include_row=False):
+        if payload['revision']!=saved.get(row_key(payload),{}).get('revision',initial_revisions.get(row_key(payload),0)):
+            raise PortalError('Someone updated this review.',409)
         row = deepcopy(payload)
         row.update(sh.evaluate(row))
         row.update(row.get('cell_overrides', {}))
@@ -96,7 +99,7 @@ def main(grid_check=None, spreadsheet=False):
     server = make_server('127.0.0.1', 0, index.app, threaded=True)
     origin = f'http://127.0.0.1:{server.server_port}'
     from contextlib import nullcontext
-    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'set_rows_removed',change_rows), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history), patch.object(sheet,'settings',lambda *args:deepcopy(sheet_config)), patch.object(sheet,'change_column',column_change), patch.object(sh,'connect',lambda:nullcontext(None)):
+    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'set_rows_removed',change_rows), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history), patch.object(sheet,'live_revision',lambda:str(len(versions))), patch.object(sheet,'settings',lambda *args:deepcopy(sheet_config)), patch.object(sheet,'change_column',column_change), patch.object(sh,'connect',lambda:nullcontext(None)):
         Thread(target=server.serve_forever, daemon=True).start()
         try:
             with sync_playwright() as p:
