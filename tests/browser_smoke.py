@@ -25,7 +25,7 @@ def main():
     artifacts.mkdir(exist_ok=True)
     server = make_server("127.0.0.1", 0, index.app, threaded=True)
     origin = f"http://127.0.0.1:{server.server_port}"
-    with patch.object(portal, "db", fake.db), patch.object(portal, "auth", fake.auth), patch.object(index, "db", fake.db), patch.object(sales, "report_data", fixture_report):
+    with patch.object(portal,"password_write",fake.password_write), patch.object(portal,"reveal_password",fake.reveal_password), patch.object(portal, "db", fake.db), patch.object(portal, "auth", fake.auth), patch.object(index, "db", fake.db), patch.object(sales, "report_data", fixture_report):
         worker = Thread(target=server.serve_forever, daemon=True)
         worker.start()
         try:
@@ -61,6 +61,20 @@ def main():
                     if checkbox.input_value() not in ('overview','quotes'):checkbox.uncheck()
                 page.get_by_role("button", name="Save account").click()
                 expect(page.locator("#user-list")).to_contain_text("Team_User")
+                created=page.get_by_role('row').filter(has_text='Team_User')
+                created.locator('[data-reveal-password]').click()
+                expect(created.locator('[data-password-value]')).to_have_text('TeamPass123')
+                created.locator('[data-reveal-password]').click()
+                expect(created.locator('[data-password-value]')).to_have_text('Hidden')
+                legacy=page.get_by_role('row').filter(has_text='OtherAdmin')
+                legacy.locator('[data-reveal-password]').click()
+                expect(legacy.locator('[data-password-value]')).to_have_text('Unavailable until reset')
+                other_context=browser.new_context();other=other_context.new_page()
+                other.goto(origin+'/internal#users');other.locator('#login-username').fill('OtherAdmin');other.locator('#login-password').fill('TestPass123');other.get_by_role('button',name='Sign in to workspace').click()
+                expect(other.locator('#user-list')).to_contain_text('Team_User')
+                expect(other.locator('[data-reveal-password]')).to_have_count(0)
+                expect(other.locator('#user-list th').filter(has_text='Password')).to_have_count(0)
+                other_context.close()
                 page.screenshot(path=str(artifacts / "accounts-desktop.png"), full_page=True)
                 member_context = browser.new_context(viewport={"width": 390, "height": 844})
                 member = member_context.new_page()

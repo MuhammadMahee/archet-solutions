@@ -121,6 +121,6 @@ def test_manual_and_upload_access(client,monkeypatch):
     assert write(client,'store-hours/employees',{}).status_code==401
     login(client,'Member')
     for path in ('store-hours/schedules/preview','store-hours/schedules/apply'):
-        assert write(client,path,{}).status_code==403
+        assert write(client,path,{}).status_code==400
     monkeypatch.setattr(sh,'add_manual_employee',lambda *args:'person:jane')
     assert write(client,'store-hours/employees',{}).json['employee_key']=='person:jane'

@@ -789,7 +789,7 @@ def register_store_hours(app):
         return jsonify(version_history(*report_range()))
 
     @app.post('/api/internal/store-hours/refresh')
-    @require_user(admin=True)
+    @require_user()
     def sync_report():
         return jsonify(run_sync(body().get('continue') is True))
 
@@ -812,12 +812,12 @@ def register_store_hours(app):
         return jsonify(status='saved', count=set_rows_removed(body(), g.portal_user['id']))
 
     @app.post('/api/internal/store-hours/schedules/preview')
-    @require_user(admin=True)
+    @require_user()
     def preview_schedules():
         return jsonify(preview_schedule_upload(body(), g.portal_user['id']))
 
     @app.post('/api/internal/store-hours/schedules/apply')
-    @require_user(admin=True)
+    @require_user()
     def apply_schedules():
         return jsonify(status='saved', count=apply_schedule_upload(body(), g.portal_user['id']))
 

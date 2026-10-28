@@ -228,12 +228,15 @@
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-let accountPageOptions = {}, assignablePages = [];
+let accountPageOptions = {}, assignablePages = [], canRevealPasswords = false;
+const passwordTimers=new Map();
+function hideAccountPasswords(){for(const timer of passwordTimers.values())clearTimeout(timer);passwordTimers.clear();document.querySelectorAll('[data-password-value]').forEach(el=>el.textContent='Hidden');document.querySelectorAll('[data-reveal-password]').forEach(el=>el.textContent='Show');}
 let currentUser = null, page = 'overview', quotes = [], users = [], offset = 0, hasMore = false, editingUser = null, editingQuote = null;
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date = value => new Date(value).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
 function notice(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = !message; }
 function signedOut(message = '') {
+  hideAccountPasswords();canRevealPasswords=false;
   window.accountRest?.hide();
   if (window.salesDashboard) window.salesDashboard.clear();
   if (window.callingTree) window.callingTree.clear();
@@ -292,6 +295,7 @@ async function showPage(name) {
   if (name === 'spreadsheet') { location.assign('/spreadsheet'); return; }
   if (name === 'users' && currentUser?.role !== 'admin') return;
   if (name === 'invoices' && !window.invoiceDashboard.allowed()) return;
+  if(name!=='users')hideAccountPasswords();
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
   document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
@@ -321,10 +325,11 @@ async function loadQuotes() {
   $('previous').disabled = offset === 0; $('next').disabled = !hasMore; $('page-number').textContent = 'Page ' + (offset / 50 + 1);
 }
 async function loadUsers() {
+  hideAccountPasswords();
   accountPageOptions={}; assignablePages=[]; $('add-user').disabled=true;
   $('user-list').innerHTML = '<div class="empty">Loading accounts…</div>';
-  const data = await api('users'); if (!currentUser || page !== 'users') return; users = data.users; accountPageOptions=data.page_options; assignablePages=data.assignable_pages; $('add-user').disabled=false;
-  $('user-list').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Team member</th><th>Username</th><th>Role</th><th>Access</th><th>Manage</th></tr></thead><tbody>' + users.map(u => '<tr><td><strong>' + escapeHTML(u.display_name) + '</strong><small>Added ' + escapeHTML(date(u.created_at)) + '</small></td><td>' + escapeHTML(u.username) + '</td><td>' + (u.is_owner ? 'Owner' : escapeHTML(u.role)) + '</td><td><span class="badge ' + (!u.active ? 'closed' : u.rest_mode ? 'resting' : 'new') + '">' + (!u.active ? 'Disabled' : u.rest_mode ? 'On rest' : 'Active') + '</span></td><td>' + (u.is_owner ? '<span class="muted small">Permanent owner</span>' : u.id === currentUser.id ? '<span class="muted small">Your account</span>' : '<button class="subtle table-button" data-user="' + escapeHTML(u.id) + '">Manage</button>') + (currentUser.is_owner && currentUser.username === 'Mahee' ? ' <button class="subtle table-button rest-toggle" data-rest-user="' + escapeHTML(u.id) + '"' + (u.is_owner || u.id === currentUser.id ? ' disabled title="The permanent owner and your own account are protected"' : '') + '>' + (u.rest_mode ? 'Back to Work' : 'Take a Rest') + '</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>';
+  const data = await api('users'); if (!currentUser || page !== 'users') return; users = data.users; canRevealPasswords=data.can_view_passwords===true; accountPageOptions=data.page_options; assignablePages=data.assignable_pages; $('add-user').disabled=false;
+  $('user-list').innerHTML = '<div class="table-wrap"><table><thead><tr><th>Team member</th><th>Username</th><th>Role</th><th>Access</th>' + (canRevealPasswords?'<th>Password</th>':'') + '<th>Manage</th></tr></thead><tbody>' + users.map(u => '<tr><td><strong>' + escapeHTML(u.display_name) + '</strong><small>Added ' + escapeHTML(date(u.created_at)) + '</small></td><td>' + escapeHTML(u.username) + '</td><td>' + (u.is_owner ? 'Owner' : escapeHTML(u.role)) + '</td><td><span class="badge ' + (!u.active ? 'closed' : u.rest_mode ? 'resting' : 'new') + '">' + (!u.active ? 'Disabled' : u.rest_mode ? 'On rest' : 'Active') + '</span></td>' + (canRevealPasswords?'<td class="account-password">'+(u.id===currentUser.id?'Change in Settings':'<span data-password-value="'+escapeHTML(u.id)+'">Hidden</span> <button class="subtle table-button" data-reveal-password="'+escapeHTML(u.id)+'">Show</button>')+'</td>':'') + '<td>' + (u.is_owner ? '<span class="muted small">Permanent owner</span>' : u.id === currentUser.id ? '<span class="muted small">Your account</span>' : '<button class="subtle table-button" data-user="' + escapeHTML(u.id) + '">Manage</button>') + (currentUser.is_owner && currentUser.username === 'Mahee' ? ' <button class="subtle table-button rest-toggle" data-rest-user="' + escapeHTML(u.id) + '"' + (u.is_owner || u.id === currentUser.id ? ' disabled title="The permanent owner and your own account are protected"' : '') + '>' + (u.rest_mode ? 'Back to Work' : 'Take a Rest') + '</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>';
 }
 function userDialog(user = null) {
   if(!Object.keys(accountPageOptions).length){notice('Wait for the account list to finish loading.',true);return;}
@@ -368,6 +373,21 @@ document.addEventListener('click', event => {
   if (event.target.closest('[data-open-inbox]')) { offset = 0; showPage('quotes'); }
   const user = event.target.closest('[data-user]'); if (user) { const found = users.find(u => u.id === user.dataset.user); if (found) userDialog(found); }
   const quote = event.target.closest('[data-quote]'); if (quote && canOpen('quotes')) { const found = quotes.find(q => q.id === quote.dataset.quote); if (found) quoteDialog(found); }
+});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)hideAccountPasswords();});
+window.addEventListener('pagehide',hideAccountPasswords);
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('[data-reveal-password]');if(!button||!canRevealPasswords)return;
+  const uid=button.dataset.revealPassword,value=document.querySelector(`[data-password-value="${uid}"]`),viewer=currentUser?.id;
+  if(passwordTimers.has(uid)){clearTimeout(passwordTimers.get(uid));passwordTimers.delete(uid);value.textContent='Hidden';button.textContent='Show';return;}
+  button.disabled=true;
+  try{
+    const result=await api('users/'+uid+'/password/reveal','POST',{});
+    if(currentUser?.id!==viewer||page!=='users'||document.hidden||!value.isConnected)return;
+    value.textContent=result.available?result.password:'Unavailable until reset';
+    button.textContent=result.available?'Hide':'Show';
+    if(result.available)passwordTimers.set(uid,setTimeout(()=>{value.textContent='Hidden';button.textContent='Show';passwordTimers.delete(uid);},30000));
+  }catch(error){notice(error.message,true);}finally{button.disabled=false;}
 });
 $('add-user').onclick = () => userDialog();
 $('refresh-quotes').onclick = () => showPage('quotes');

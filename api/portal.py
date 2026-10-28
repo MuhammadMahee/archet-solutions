@@ -54,6 +54,20 @@ def check_page_access(user):
         raise PortalError('You do not have access to this page. Contact your administrator.',403)
 
 
+def password_write(uid):
+    from api.password_vault import password_write as write
+    return write(uid)
+
+
+def reveal_password(uid,actor):
+    from api.password_vault import reveal
+    return reveal(uid,actor)
+
+
+def can_view_passwords(user):
+    return user.get('role')=='admin' and user.get('username','').casefold() in {'mahee','mughees','sharjeel'}
+
+
 def local_request():
     return not os.getenv("VERCEL") and request.host.split(":")[0] in ("localhost", "127.0.0.1")
 
@@ -258,7 +272,7 @@ def register_portal(app):
     @require_user(admin=True)
     def users_list():
         return jsonify(users=[user_view(user) for user in db("portal_users", select=PUBLIC_USER_FIELDS, order="created_at.asc", limit=1000)],
-                       page_options=PAGE_OPTIONS,assignable_pages=allowed_pages(g.portal_user))
+                       page_options=PAGE_OPTIONS,assignable_pages=allowed_pages(g.portal_user),can_view_passwords=can_view_passwords(g.portal_user))
 
     @app.post("/api/internal/users")
     @require_user(admin=True)
@@ -286,7 +300,9 @@ def register_portal(app):
             raise
         uid = result["id"]
         try:
-            user = db("portal_users", "POST", {"id": uid, "username": username, "display_name": display_name, "role": role, "page_access":page_access})[0]
+            with password_write(uid) as remember:
+                user = db("portal_users", "POST", {"id": uid, "username": username, "display_name": display_name, "role": role, "page_access":page_access})[0]
+                remember(password)
         except StoreError:
             try:
                 auth("admin/users/" + uid, "DELETE")
@@ -310,6 +326,8 @@ def register_portal(app):
             raise PortalError("Ask another administrator to change your account.", 403)
         if set(allowed_pages(target))-set(allowed_pages(g.portal_user)):
             raise PortalError("Ask an administrator with all of this account's pages to manage it.",403)
+        if target['username'].casefold() in {'mahee','mughees','sharjeel'} and not can_view_passwords(g.portal_user):
+            raise PortalError('Only Mahee, Sharjeel and Mughees can manage password-viewer accounts.',403)
         changes = {}
         if "role" in payload:
             if payload["role"] not in ("admin", "member"):
@@ -328,15 +346,31 @@ def register_portal(app):
         changes["session_version"] = str(uuid4())
         db("portal_users", "PATCH", changes, id="eq." + uid)
         if password is not None:
-            try:
-                auth("admin/users/" + uid, "PUT", {"password": password})
-            except StoreError as exc:
-                if exc.status in (400, 422):
-                    raise PortalError("The password does not meet the project policy. Existing sessions were revoked.") from None
-                raise
-            # Revoke logins which started while the Auth update was in flight.
-            db("portal_users", "PATCH", {"session_version": str(uuid4())}, id="eq." + uid)
+            with password_write(uid) as remember:
+                try:
+                    auth("admin/users/" + uid, "PUT", {"password": password})
+                except StoreError as exc:
+                    if exc.status in (400, 422):
+                        raise PortalError("The password does not meet the project policy. Existing sessions were revoked.") from None
+                    raise
+                # Revoke logins which started while the Auth update was in flight.
+                db("portal_users", "PATCH", {"session_version": str(uuid4())}, id="eq." + uid)
+                remember(password)
         return jsonify(status="success")
+
+    @app.post('/api/internal/users/<uid>/password/reveal')
+    @require_user(admin=True)
+    def users_password_reveal(uid):
+        if not can_view_passwords(g.portal_user):
+            raise PortalError('Only Mahee, Sharjeel and Mughees can view account passwords.',403)
+        uid=valid_id(uid)
+        if uid==g.portal_user['id']:
+            raise PortalError('Use Settings to change your own password.',400)
+        if not db('portal_users',id='eq.'+uid,limit=1):
+            raise PortalError('Account not found.',404)
+        rate_limit('password-view',g.portal_user['id'],60)
+        password=reveal_password(uid,g.portal_user['id'])
+        return jsonify(password=password,available=password is not None)
 
     @app.patch('/api/internal/users/<uid>/rest')
     @require_user(admin=True)
@@ -365,19 +399,21 @@ def register_portal(app):
             raise PortalError("Current password is required.")
         password = password_field(payload, "new_password")
         rate_limit("password", g.portal_user["id"], 10)
-        try:
-            auth("token", data={"email": login_email(g.portal_user["username"]), "password": current}, grant_type="password")
-        except StoreError as exc:
-            if exc.status in (400, 401, 422):
-                raise PortalError("Current password is incorrect.", 403) from None
-            raise
-        try:
-            auth("admin/users/" + g.portal_user["id"], "PUT", {"password": password})
-        except StoreError as exc:
-            if exc.status in (400, 422):
-                raise PortalError("The new password does not meet the project policy.") from None
-            raise
-        db("portal_users", "PATCH", {"session_version": str(uuid4())}, id="eq." + g.portal_user["id"])
+        with password_write(g.portal_user['id']) as remember:
+            try:
+                auth("token", data={"email": login_email(g.portal_user["username"]), "password": current}, grant_type="password")
+            except StoreError as exc:
+                if exc.status in (400, 401, 422):
+                    raise PortalError("Current password is incorrect.", 403) from None
+                raise
+            try:
+                auth("admin/users/" + g.portal_user["id"], "PUT", {"password": password})
+            except StoreError as exc:
+                if exc.status in (400, 422):
+                    raise PortalError("The new password does not meet the project policy.") from None
+                raise
+            db("portal_users", "PATCH", {"session_version": str(uuid4())}, id="eq." + g.portal_user["id"])
+            remember(password)
         response = jsonify(status="success", message="Password updated. Please sign in again.")
         response.delete_cookie(cookie_name(), path="/", secure=not local_request(), httponly=True, samesite="Strict")
         return response

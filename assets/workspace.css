@@ -34,3 +34,5 @@
 @media(prefers-reduced-motion:reduce){.sales-mode{transition:none}}
 
 #user-page-access{border:1px solid var(--border);border-radius:8px;padding:16px;margin:0 0 20px}#user-page-access legend{font-weight:600;padding:0 6px}#user-page-access .hint{margin:0 0 12px}#user-page-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}#user-page-options label{margin:0;align-items:flex-start;font-size:13px}#user-page-options input{width:16px;height:16px;flex-shrink:0;margin:1px 0 0;accent-color:#00cfb8}#user-page-options label:has(input:disabled){opacity:.5}@media(max-width:480px){#user-page-options{grid-template-columns:1fr}}
+
+.account-password{max-width:260px;overflow-wrap:anywhere}.account-password [data-password-value]{white-space:pre-wrap;font-family:monospace}

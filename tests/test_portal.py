@@ -1,5 +1,6 @@
 """Security and persistence behavior, with Supabase isolated at its boundary."""
 from copy import deepcopy
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ class FakeStore:
     def __init__(self):
         self.tables = {name: [] for name in ("portal_users", "portal_sessions", "quote_requests")}
         self.auth_users = {}
+        self.password_values = {}
         self.rate_allowed = True
         self.unavailable = False
         self.owner = self.add_user("Mahee", "admin", owner=True)
@@ -24,6 +26,15 @@ class FakeStore:
         self.auth_users[portal.login_email(username)] = {"id": uid, "password": "TestPass123"}
         return self.db("portal_users", "POST", {"id": uid, "username": username,
             "display_name": username, "role": role, "is_owner": owner})[0]
+
+    @contextmanager
+    def password_write(self,uid):
+        yield lambda password:self.password_values.update({uid:password})
+
+    def reveal_password(self,uid,actor):
+        saved=self.password_values.get(uid)
+        actual=next((v['password'] for v in self.auth_users.values() if v['id']==uid),None)
+        return saved if saved==actual else None
 
     def db(self, table, method="GET", data=None, **params):
         if self.unavailable:
@@ -94,6 +105,8 @@ def store(monkeypatch):
     fake = FakeStore()
     monkeypatch.setattr(portal, "db", fake.db)
     monkeypatch.setattr(portal, "auth", fake.auth)
+    monkeypatch.setattr(portal,"password_write",fake.password_write)
+    monkeypatch.setattr(portal,"reveal_password",fake.reveal_password)
     monkeypatch.setattr(index, "db", fake.db)
     monkeypatch.setattr(index, "send_lead_notification", lambda record: None)
     monkeypatch.setattr(index, "send_confirmation_email", lambda *args: None)

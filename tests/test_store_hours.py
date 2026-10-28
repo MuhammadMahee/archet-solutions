@@ -151,11 +151,16 @@ def test_excel_columns_missing_values_colors_and_formula_safety():
     assert sheet['N5'].value == 'Pending'
 
 
-def test_endpoints_auth_and_sync_admin_only(client, monkeypatch):
+def test_endpoints_auth_and_member_sync(client, monkeypatch):
     for path in ('store-hours', 'store-hours/export'):
         assert client.get('/api/internal/'+path).status_code == 401
     login(client, 'Member')
-    assert write(client, 'store-hours/refresh', {}).status_code == 403
+    monkeypatch.setattr(sh,'run_sync',lambda *args:{'status':'complete'})
+    assert write(client, 'store-hours/refresh', {}).status_code == 200
+    monkeypatch.setattr(sh,'preview_schedule_upload',lambda *args:{'rows':[]})
+    monkeypatch.setattr(sh,'apply_schedule_upload',lambda *args:1)
+    assert write(client,'store-hours/schedules/preview',{}).status_code==200
+    assert write(client,'store-hours/schedules/apply',{}).status_code==200
     monkeypatch.setattr(sh, 'report_data', lambda *args: {'rows': []})
     assert client.get('/api/internal/store-hours').status_code == 200
     monkeypatch.setattr(sh, 'save_review', lambda p, user_id: 2)
