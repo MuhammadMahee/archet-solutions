@@ -40,10 +40,17 @@ window.createStoreHoursPresence=function(api){
       const r=shown.get(identity(peer.selection)),c=columns.findIndex(column=>column[0]===peer.selection.column),cell=r===undefined?null:table.tBodies[0]?.rows[r]?.cells[c+1];
       if(c<0||!cell)continue;
       const key=peer.client_id;kept.add(key);let outline=outlines.get(key);
-      if(!outline){outline=document.createElement('div');outline.className='sheet-peer-selection';outline.dataset.clientId=key;const label=document.createElement('span');label.className='sheet-peer-label';const name=document.createElement('span'),dots=document.createElement('span');dots.className='sheet-peer-dots';dots.textContent='...';label.append(name,dots);outline.append(label);wrap.append(outline);outlines.set(key,outline);}
-      const label=outline.firstChild,marker=label.lastChild,caption=peer.name+(peer.user_id===api.user()?.id?' (other tab)':'');
-      if(label.firstChild.textContent!==caption)label.firstChild.textContent=caption;
-      marker.hidden=!peer.editing;outline.dataset.editing=String(peer.editing);outline.dataset.peerAddress=cell.dataset.address||'';
+      if(!outline){
+        outline=document.createElement('div');outline.className='sheet-peer-selection';outline.dataset.clientId=key;
+        const label=document.createElement('span');label.className='sheet-peer-label';label.tabIndex=0;
+        const initial=document.createElement('span'),dots=document.createElement('span'),name=document.createElement('span');
+        initial.className='sheet-peer-initial';dots.className='sheet-peer-dots';dots.textContent='...';name.className='sheet-peer-name';
+        label.append(initial,dots,name);outline.append(label);wrap.append(outline);outlines.set(key,outline);
+      }
+      const label=outline.firstChild,[initial,marker,name]=label.children,caption=peer.name+(peer.user_id===api.user()?.id?' (other tab)':'');
+      if(name.textContent!==caption){name.textContent=caption;initial.textContent=Array.from(peer.name.trim())[0]?.toUpperCase()||'?';label.style.setProperty('--peer-name-width',name.scrollWidth+'px');}
+      initial.hidden=peer.editing;marker.hidden=!peer.editing;outline.dataset.editing=String(peer.editing);outline.dataset.peerAddress=cell.dataset.address||'';
+      label.setAttribute('aria-label',`${caption}${peer.editing?' is editing':''}`);
       outline.setAttribute('aria-label',`${caption} ${peer.editing?'editing':'viewing'} ${columns[c][1]}`);
       const rect=cell.getBoundingClientRect(),position=`${r}:${c}`,depth=occupants.get(position)||0;occupants.set(position,depth+1);
       const inset=(depth%4)*2;outline.style.setProperty('--person-color',colors.get(peer.user_id));

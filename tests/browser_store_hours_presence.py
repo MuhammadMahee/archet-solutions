@@ -24,12 +24,27 @@ def check(page):
     expect(member_box).to_have_attribute('data-peer-address','D2',timeout=15000)
     expect(admin_box).to_have_attribute('data-peer-address','G1',timeout=15000)
     assert member_box.evaluate('el=>getComputedStyle(el).borderColor')!=admin_box.evaluate('el=>getComputedStyle(el).borderColor')
+    # Compact initials expand on hover/focus without being recreated each heartbeat.
+    label=member_box.locator('.sheet-peer-label');initial=label.locator('.sheet-peer-initial');name=label.locator('.sheet-peer-name')
+    expect(initial).to_have_text('M');expect(initial).to_be_visible()
+    expect(name).to_have_css('opacity','0')
+    compact=label.bounding_box()['width']
+    label.hover();expect(name).to_have_css('opacity','1');expect(name).to_have_text('Member')
+    assert label.bounding_box()['width']>compact
+    page.mouse.move(0,0);expect(name).to_have_css('opacity','0')
+    label.focus();expect(name).to_have_css('opacity','1')
+    page.locator('#sh-grid-address').focus();expect(name).to_have_css('opacity','0')
+    expect(page.locator('#sheet-font-family')).to_have_value('Calibri')
+    assert page.locator('[data-address="D2"]').evaluate('el=>getComputedStyle(el).fontFamily').startswith('Calibri')
     # Focus moves, but unfinished cell text is never sent to other users.
     member.keyboard.press('F2');member.get_by_role('textbox',name='Edit D2',exact=True).fill('Unfinished private text')
     expect(member_box).to_have_attribute('data-editing','true',timeout=15000)
     expect(member_box.locator('.sheet-peer-dots')).to_be_visible()
+    expect(initial).to_be_hidden()
+    expect(member_box.locator('.sheet-peer-dots')).to_have_css('font-weight','900')
     expect(page.locator('[data-address="D2"]')).to_have_text('CLOSING EMPLOYEE')
     member.keyboard.press('Escape');expect(member_box).to_have_attribute('data-editing','false',timeout=15000)
+    expect(initial).to_be_visible();expect(member_box.locator('.sheet-peer-dots')).to_be_hidden()
     # Formula-bar editing also signals the same cell.
     member.locator('#sheet-value').focus()
     expect(member_box).to_have_attribute('data-editing','true',timeout=15000)

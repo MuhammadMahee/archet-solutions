@@ -487,14 +487,14 @@ def excel_report(data):
             elif row[key] in ('Open', 'On Time'):
                 cell.fill = PatternFill('solid', fgColor='C6EFCE')
             if key in ('rt_clockin', 'rt_clockout') and not row[key]:
-                cell.font = Font(color='C00000')
+                cell.font = Font(name='Calibri',color='C00000')
             if 'columns' in data:
                 from api.store_hours_sheet import format_excel_cell
                 format_excel_cell(cell, display_value(key, row.get(key)) if key == 'employee' else row.get(key), {**({'number_format':data['column_formats'][key]} if key in data.get('column_formats',{}) else {}), **(row.get('cell_formats') or {}).get(key,{})})
     for row in sheet.iter_rows(min_row=1, max_row=2):
         for cell in row:
             cell.fill = PatternFill('solid', fgColor='203C66')
-            cell.font = Font(color='FFFFFF', bold=True)
+            cell.font = Font(name='Calibri',color='FFFFFF', bold=True)
             cell.alignment = Alignment(horizontal='center')
     widths = [14, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25]
     for n, width in enumerate(widths + [24] * (len(columns)-len(COLUMNS)), 1):

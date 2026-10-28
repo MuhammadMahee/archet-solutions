@@ -32,8 +32,8 @@
     const rounded=(x,y,w,h,r,fill)=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();};
     function label(value,x,y,w,h,font=19,color='#16354a',align='center'){
       ctx.save();ctx.beginPath();ctx.rect(x+7,y,w-14,h);ctx.clip();ctx.fillStyle=color;ctx.textAlign=align;ctx.textBaseline='middle';
-      ctx.font=`700 ${font}px Arial, sans-serif`;
-      while(ctx.measureText(value).width>w-22&&font>10){font--;ctx.font=`700 ${font}px Arial, sans-serif`;}
+      ctx.font=`700 ${font}px Calibri, Arial, sans-serif`;
+      while(ctx.measureText(value).width>w-22&&font>10){font--;ctx.font=`700 ${font}px Calibri, Arial, sans-serif`;}
       ctx.fillText(value,align==='left'?x+12:x+w/2,y+h/2);ctx.restore();
     }
     // Same banner, dealer palette, raised cells and PNG export treatment as Sales Update.
