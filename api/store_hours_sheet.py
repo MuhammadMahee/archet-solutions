@@ -1,9 +1,9 @@
 """Shared spreadsheet columns, cell presentation, and filtered sheet exports."""
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from flask import g, jsonify, request, send_file
 from psycopg.types.json import Jsonb
@@ -228,7 +228,59 @@ def live_revision():
         return str(conn.execute('select revision from public.store_hours_live_revision where id=true').fetchone()['revision'])
 
 
+def presence_input(payload):
+    try:
+        client_id=str(UUID(payload.get('client_id','')))
+    except (ValueError,TypeError,AttributeError):
+        raise PortalError('Choose a valid spreadsheet session.') from None
+    sequence=payload.get('sequence')
+    if type(sequence) is not int or not 0 <= sequence <= 9007199254740991 or type(payload.get('active')) is not bool or type(payload.get('editing')) is not bool:
+        raise PortalError('Invalid spreadsheet presence.')
+    selection=payload.get('selection')
+    if selection is not None:
+        keys={'dealer','store_id','source_date','employee_key','column'}
+        if not isinstance(selection,dict) or set(selection)!=keys or any(not isinstance(v,str) for v in selection.values()):
+            raise PortalError('Choose a valid spreadsheet cell.')
+        from api.store_hours import COLUMNS
+        if any(not 0<len(selection[k])<=160 for k in ('dealer','store_id')) or len(selection['employee_key'])>500 or selection['column'] not in {k for k,_ in COLUMNS} and not re.fullmatch(r'custom_[a-zA-Z0-9_]{1,64}',selection['column']):
+            raise PortalError('Choose a valid spreadsheet cell.')
+        try:
+            if date.fromisoformat(selection['source_date']).isoformat()!=selection['source_date']:
+                raise ValueError
+        except ValueError:
+            raise PortalError('Choose a valid spreadsheet date.') from None
+    active=payload['active']
+    return client_id,sequence,active,selection if active else None,bool(active and selection and payload['editing'])
+
+
+def update_presence(payload,user,session_hash):
+    from api import store_hours as sh
+    client_id,sequence,active,selection,editing=presence_input(payload)
+    with sh.connect() as conn:
+        with conn.transaction():
+            conn.execute("delete from public.store_hours_presence where last_seen<now()-interval '1 day'")
+            conn.execute('''insert into public.store_hours_presence(user_id,client_id,session_hash,sequence,active,selection,editing)
+                values(%s,%s,%s,%s,%s,%s,%s)
+                on conflict(user_id,client_id) do update set session_hash=excluded.session_hash,
+                sequence=excluded.sequence,active=excluded.active,selection=excluded.selection,editing=excluded.editing,last_seen=clock_timestamp()
+                where excluded.sequence>store_hours_presence.sequence''',
+                (user['id'],client_id,session_hash,sequence,active,Jsonb(selection) if selection else None,editing))
+            peers=conn.execute('''select p.user_id::text,p.client_id::text,u.display_name as name,p.selection,p.editing
+                from public.store_hours_presence p join public.portal_users u on u.id=p.user_id
+                join public.portal_sessions s on s.token_hash=p.session_hash and s.user_id=p.user_id
+                where p.active and p.last_seen>clock_timestamp()-interval '15 seconds'
+                and u.active and not u.rest_mode and s.expires_at>now() and s.session_version=u.session_version
+                order by p.user_id,p.client_id''').fetchall()
+    return peers
+
+
 def register(app):
+    @app.post('/api/internal/store-hours/sheet/presence')
+    @require_user()
+    def sheet_presence():
+        peers=update_presence(body(),g.portal_user,g.session_hash)
+        return jsonify(peers=peers,revision=live_revision())
+
     @app.get('/api/internal/store-hours/sheet/updates')
     @require_user()
     def sheet_updates():

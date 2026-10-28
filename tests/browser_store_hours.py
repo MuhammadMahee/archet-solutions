@@ -5,6 +5,7 @@ from copy import deepcopy
 from datetime import date, datetime, timezone
 from pathlib import Path
 import sys
+import time
 from threading import Thread
 from unittest.mock import patch
 
@@ -92,6 +93,14 @@ def main(grid_check=None, spreadsheet=False):
     def apply_upload(payload,user_id):
         directory.extend(preview_rows)
         return len(preview_rows)
+    presence_rows={}
+    def presence(payload,user,session_hash):
+        client_id,sequence,active,selection,editing=sheet.presence_input(payload)
+        identity=(user['id'],client_id)
+        if sequence>presence_rows.get(identity,{}).get('sequence',-1):
+            presence_rows[identity]=dict(user_id=user['id'],client_id=client_id,name=user['display_name'],selection=selection,editing=editing,active=active,sequence=sequence,seen=time.monotonic(),session_hash=session_hash)
+        sessions={row['token_hash'] for row in fake.tables['portal_sessions']}
+        return [{k:r[k] for k in ('user_id','client_id','name','selection','editing')} for r in presence_rows.values() if r['active'] and time.monotonic()-r['seen']<15 and r['session_hash'] in sessions]
     def history(start,end):
         before=int(request.args.get('before') or len(versions)+1)
         rows=[v for v in reversed(versions) if int(v['id'])<before]
@@ -99,7 +108,7 @@ def main(grid_check=None, spreadsheet=False):
     server = make_server('127.0.0.1', 0, index.app, threaded=True)
     origin = f'http://127.0.0.1:{server.server_port}'
     from contextlib import nullcontext
-    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'set_rows_removed',change_rows), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history), patch.object(sheet,'live_revision',lambda:str(len(versions))), patch.object(sheet,'settings',lambda *args:deepcopy(sheet_config)), patch.object(sheet,'change_column',column_change), patch.object(sh,'connect',lambda:nullcontext(None)):
+    with patch.object(portal, 'db', fake.db), patch.object(portal, 'auth', fake.auth), patch.object(sh, 'report_data', fixture), patch.object(sh, 'save_review', save), patch.object(sh, 'today', lambda: date(2026, 10, 20)), patch.object(sh, 'run_sync', lambda *args: dict(status='complete', remaining=0, pending=0, workers=[])), patch.object(sh,'add_manual_employee',add_employee), patch.object(sh,'set_rows_removed',change_rows), patch.object(sh,'preview_schedule_upload',preview), patch.object(sh,'apply_schedule_upload',apply_upload), patch.object(sh,'version_history',history), patch.object(sheet,'update_presence',presence), patch.object(sheet,'live_revision',lambda:str(len(versions))), patch.object(sheet,'settings',lambda *args:deepcopy(sheet_config)), patch.object(sheet,'change_column',column_change), patch.object(sh,'connect',lambda:nullcontext(None)):
         Thread(target=server.serve_forever, daemon=True).start()
         try:
             with sync_playwright() as p:

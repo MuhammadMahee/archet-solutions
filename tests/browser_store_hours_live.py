@@ -26,7 +26,7 @@ def check(page):
     expect(cell(page,'G2')).to_be_focused()
     assert abs(page.locator('.sheet-grid-wrap').evaluate('el=>el.scrollLeft')-scroll)<1
     # Idle ticks query the small change token and leave the DOM untouched.
-    checks=[];page.on('request',lambda request:checks.append(request.url) if '/sheet/updates' in request.url else None)
+    checks=[];page.on('request',lambda request:checks.append(request.url) if '/sheet/presence' in request.url else None)
     cell(page,'D1').evaluate("el=>el.dataset.liveProbe='kept'")
     page.wait_for_timeout(2300)
     assert len(checks)>=2,checks
@@ -62,10 +62,10 @@ def check(page):
     expect(page.locator('#sh-table thead')).to_contain_text('Live notes',timeout=15000)
     expect(cell(page,'D1')).to_be_focused()
     # Network errors back off and recover; existing contents remain visible.
-    page.route('**/sheet/updates',lambda route:route.abort())
+    page.route('**/sheet/presence',lambda route:route.abort())
     expect(page.locator('#sheet-live-state')).to_have_text('Reconnecting...',timeout=15000)
     edit(peer,'D2','After reconnect');saved(peer)
-    page.unroute('**/sheet/updates')
+    page.unroute('**/sheet/presence')
     expect(cell(page,'D2')).to_have_text('AFTER RECONNECT',timeout=15000)
     expect(page.locator('#sheet-live-state')).to_have_text('Live')
     # Polling our own save must not clear undo or move focus.
