@@ -18,7 +18,7 @@
   async function api(path,method='GET',body,signal){
     const response=await fetch('/api/internal/'+path,{method,signal,headers:method==='GET'?{}:{'Content-Type':'application/json','X-Archet-Request':'1'},body:body===undefined?undefined:JSON.stringify(body)});
     let result;try{result=await response.json();}catch{throw new Error('The service could not respond. Please try again.');}
-    if(!response.ok){if(response.status===401&&user){user=null;root.hidden=true;$('sheet-login').hidden=false;drafts.clear();clearTimeout(autosaveTimer);grid.reset();historyPanel.clear();presence?.clear();$('sheet-dialog').close();closeMenu();}const error=new Error(result.message||'The request could not be completed.');error.status=response.status;throw error;}return result;
+    if(!response.ok){if(result.code==='password_change_required'){root.hidden=true;drafts.clear();clearTimeout(autosaveTimer);presence?.clear();location.replace('/internal');throw new Error(result.message);}if(response.status===401&&user){user=null;root.hidden=true;$('sheet-login').hidden=false;drafts.clear();clearTimeout(autosaveTimer);grid.reset();historyPanel.clear();presence?.clear();$('sheet-dialog').close();closeMenu();}const error=new Error(result.message||'The request could not be completed.');error.status=response.status;throw error;}return result;
   }
   function params(withFilters=true){const p=new URLSearchParams({start,end,dealer:$('sheet-dealer').value,market:$('sheet-market').value,store:$('sheet-store').value});if(withFilters){p.set('filters',JSON.stringify(filterRules));p.set('sort',JSON.stringify(sort));p.set('search',$('sheet-search').value.trim());}return p;}
   const rawText=value=>value==null?'':String(value);
@@ -430,7 +430,7 @@
   $('sheet-month').onclick=()=>changePeriod(today.slice(0,8)+'01',today);
   $('sheet-period-button').onclick=chooseDates;
   $('sheet-prev').onclick=()=>{page--;render();};$('sheet-next').onclick=()=>{page++;render();};
-  async function enter(person){user=person;if(user.rest_mode||(!person.is_owner&&person.page_access&&!person.page_access.includes('spreadsheet'))){user=null;location.replace('/internal#settings');return;}$('sheet-login').hidden=true;root.hidden=false;$('sheet-account').textContent=(person.display_name||person.username||'U').slice(0,1).toUpperCase();await load();}
+  async function enter(person){user=person;if(user.must_change_password||user.rest_mode||(!person.is_owner&&person.page_access&&!person.page_access.includes('spreadsheet'))){user=null;location.replace('/internal#settings');return;}$('sheet-login').hidden=true;root.hidden=false;$('sheet-account').textContent=(person.display_name||person.username||'U').slice(0,1).toUpperCase();await load();}
   $('sheet-account').onclick=async()=>{if(!await save())return;await api('logout','POST',{});location.reload();};
   $('sheet-login-form').onsubmit=async e=>{e.preventDefault();const submit=e.target.querySelector('button[type=submit]');submit.disabled=true;try{const result=await api('login','POST',{username:$('sheet-username').value.trim(),password:$('sheet-password').value});$('sheet-password').value='';await enter(result.user);}catch(error){$('sheet-login-error').textContent=error.message;}finally{submit.disabled=false;}};
   window.addEventListener('beforeunload',e=>{if(drafts.size||grid.isEditing()){e.preventDefault();e.returnValue='';}});

@@ -40,6 +40,22 @@
     <p class="muted small" style="margin-top:25px">Need an account or a password reset? Contact your administrator.</p>
   </div></div>
 </section>
+<section id="required-password" class="login-form-wrap" style="min-height:100svh" hidden aria-labelledby="required-password-title">
+  <div class="login-card">
+    <img class="logo" src="/archet-logo-dark.png" alt="Archet Solutions">
+    <h1 id="required-password-title">Choose a new password</h1>
+    <p class="muted">Your administrator requires everyone to change their password before continuing.</p>
+    <p id="required-password-name" class="small"></p>
+    <form id="required-password-form">
+      <div class="field"><label for="required-current">Current password</label><input id="required-current" type="password" autocomplete="current-password" required maxlength="128"></div>
+      <div class="field"><label for="required-new">New password</label><input id="required-new" type="password" autocomplete="new-password" required minlength="8" maxlength="128"><span class="muted small">8?128 characters. Choose a different password.</span></div>
+      <div class="field"><label for="required-confirm">Confirm new password</label><input id="required-confirm" type="password" autocomplete="new-password" required minlength="8" maxlength="128"></div>
+      <p id="required-password-error" class="error" role="alert"></p>
+      <button class="primary" type="submit">Save new password</button>
+    </form>
+    <button id="required-password-logout" class="subtle logout" type="button">Sign out</button>
+  </div>
+</section>
 <div id="workspace" class="workspace" hidden>
   <button id="sidebar-backdrop" class="sidebar-backdrop" aria-label="Close navigation" hidden></button>
   <aside class="sidebar" id="workspace-sidebar" aria-label="Workspace sidebar">
@@ -236,6 +252,7 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const date = value => new Date(value).toLocaleDateString(undefined, {month:'short',day:'numeric',year:'numeric'});
 function notice(message, error = false) { $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = !message; }
 function signedOut(message = '') {
+  $('required-password').hidden = true; $('required-password-form').reset(); $('required-password-error').textContent = '';
   hideAccountPasswords();canRevealPasswords=false;
   window.accountRest?.hide();
   if (window.salesDashboard) window.salesDashboard.clear();
@@ -250,13 +267,22 @@ function signedOut(message = '') {
   $('workspace').hidden = true; $('boot').hidden = true; $('login').hidden = false; $('login-error').textContent = message;
   $('login-password').value = ''; $('login-username').focus();
 }
+function requirePasswordChange(user) {
+  if (currentUser?.id === user.id && !$('required-password').hidden) return;
+  signedOut(); currentUser = user; page = 'password-reset';
+  document.body.classList.remove('sales-mode','invoices-mode','workforce-mode');
+  $('login').hidden = true; $('workspace').inert = true;
+  $('required-password-name').textContent = 'Signed in as ' + (user.display_name || user.username);
+  $('required-password').hidden = false; $('required-current').focus();
+}
 async function api(path, method = 'GET', data) {
-  const restAllowed = ['me','login','logout'].includes(path);
+  const restAllowed = ['me','login','logout'].includes(path) || (currentUser?.must_change_password && path === 'password');
   if (currentUser?.rest_mode && !restAllowed) throw new Error('Your account is on rest.');
   let response;
   try { response = await fetch('/api/internal/' + path, {method, credentials:'same-origin', headers:{'Content-Type':'application/json','X-Archet-Request':'1'}, ...(data !== undefined ? {body:JSON.stringify(data)} : {})}); }
   catch { throw new Error('Unable to connect. Check your connection and try again.'); }
   const result = await response.json().catch(() => ({}));
+  if (result.code === 'password_change_required' && result.user) requirePasswordChange(result.user);
   if (result.code === 'account_rest' && result.user) window.accountRest.show(result.user);
   if (currentUser?.rest_mode && !restAllowed) throw new Error('Your account is on rest.');
   if (!response.ok) {
@@ -271,12 +297,14 @@ async function submit(form, errorId, action) {
   try { await action(); } catch (error) { $(errorId).textContent = error.message; } finally { button.disabled = false; }
 }
 function canOpen(name) {
-  if (!currentUser) return false;
+  if (!currentUser || currentUser.must_change_password) return false;
   if (name === 'users' && currentUser.role !== 'admin') return false;
   if (name === 'invoices') return window.invoiceDashboard.allowed();
   return (currentUser.page_access || ['sales','spreadsheet','quota','callingtree','workforce','overview','quotes','users','settings']).includes(name);
 }
 function enterWorkspace(user, freshLogin = false) {
+  if (user.must_change_password) { requirePasswordChange(user); return; }
+  $('required-password').hidden = true;
   if (user.rest_mode) { window.accountRest.show(user, freshLogin); return; }
   window.accountRest?.hide();
   currentUser = user; $('boot').hidden = true; $('login').hidden = true; $('workspace').hidden = false;
@@ -289,7 +317,7 @@ function enterWorkspace(user, freshLogin = false) {
   showPage(canOpen(initial)?initial:['sales','spreadsheet','quota','callingtree','workforce','overview','quotes','users','settings'].find(canOpen));
 }
 async function showPage(name) {
-  if (!currentUser || currentUser.rest_mode) return;
+  if (!currentUser || currentUser.rest_mode || currentUser.must_change_password) return;
   if (name === 'storehours' || name === 'storehoursreport') name='spreadsheet';
   if (!canOpen(name)) { notice('You do not have access to this page. Contact your administrator.',true); return; }
   if (name === 'spreadsheet') { location.assign('/spreadsheet'); return; }
@@ -400,6 +428,15 @@ $('user-form').onsubmit = event => { event.preventDefault(); submit(event.target
   $('user-dialog').close(); $('user-form').reset(); notice(editingUser ? 'Account updated. Previous sessions were revoked.' : 'Account created. Your team member can now sign in.'); await loadUsers();
 }); };
 $('quote-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'quote-error', async () => { await api('quotes/' + editingQuote.id, 'PATCH', {status:$('quote-status').value, notes:$('quote-notes').value}); $('quote-dialog').close(); await showPage(page); notice('Follow-up saved.'); }); };
+$('required-password-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'required-password-error', async () => {
+  if ($('required-new').value !== $('required-confirm').value) throw new Error('New passwords do not match.');
+  await api('password','POST',{current_password:$('required-current').value,new_password:$('required-new').value});
+  signedOut('Password updated. Sign in with your new password.');
+}); };
+$('required-password-logout').onclick = async () => {
+  try { await api('logout','POST',{}); signedOut(); }
+  catch (error) { $('required-password-error').textContent = error.message; }
+};
 $('password-form').onsubmit = event => { event.preventDefault(); submit(event.target, 'password-error', async () => {
   if ($('new-password').value !== $('confirm-password').value) throw new Error('The new passwords do not match.');
   await api('password','POST',{current_password:$('current-password').value,new_password:$('new-password').value}); signedOut('Password updated. Sign in with your new password.');

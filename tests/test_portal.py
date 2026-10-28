@@ -45,7 +45,7 @@ class FakeStore:
         if method == "POST":
             row = {"id": str(uuid4()), "created_at": datetime.now(timezone.utc).isoformat(), **deepcopy(data)}
             if table == "portal_users":
-                row = {"page_access": None, "active": True, "is_owner": False, "role": "member", "session_version": str(uuid4()), "rest_mode": False, "rest_version": str(uuid4()), **row}
+                row = {"must_change_password": False, "page_access": None, "active": True, "is_owner": False, "role": "member", "session_version": str(uuid4()), "rest_mode": False, "rest_version": str(uuid4()), **row}
                 row["username_key"] = row["username"].lower()
             if table == "quote_requests":
                 row = {"status": "new", "notes": "", "notification_status": "pending", **row}

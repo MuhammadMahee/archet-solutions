@@ -56,7 +56,8 @@
       const previous = currentUser.id;
       const result = await api('me');
       if (!currentUser || currentUser.id !== previous) return;
-      if (result.user.rest_mode) show(result.user);
+      if (result.user.must_change_password) requirePasswordChange(result.user);
+      else if (result.user.rest_mode) show(result.user);
       else if (currentUser.rest_mode) enterWorkspace(result.user);
     } catch (_) { /* API handles revoked sessions. Retry temporary connection failures. */ }
     finally { checking = false; }

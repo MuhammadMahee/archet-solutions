@@ -16,7 +16,7 @@ except ModuleNotFoundError:
 
 INTERNAL_HOST = os.getenv("INTERNAL_HOST", "internal.archetsolutions.com")
 USERNAME = re.compile(r"^[A-Za-z0-9_]{3,32}$")
-PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,rest_mode,rest_version,page_access"
+PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,rest_mode,rest_version,page_access,must_change_password"
 
 PAGE_OPTIONS = {'sales':'Sales Update','spreadsheet':'Opening / Closing Spreadsheet',
     'quota':'Quota Update','callingtree':'Calling Tree','workforce':'AI Workforce',
@@ -158,7 +158,12 @@ def require_user(admin=False, allow_rest=False):
                 raise PortalError("Please sign in again.", 401)
             g.portal_user = users[0]
             g.session_hash = digest(token)
-            if g.portal_user.get('rest_mode') and not allow_rest:
+            password_required = g.portal_user.get('must_change_password', False)
+            password_route = request.path == '/api/internal/password'
+            if password_required and request.path not in ('/api/internal/me', '/api/internal/password'):
+                return jsonify(status='error', code='password_change_required',
+                               message='Change your password before continuing.', user=user_view(g.portal_user)), 403
+            if g.portal_user.get('rest_mode') and not allow_rest and not (password_required and password_route):
                 return jsonify(status='error', code='account_rest', message='Your account is on rest.',
                                user=user_view(g.portal_user)), 403
             if admin and g.portal_user["role"] != "admin":
@@ -398,6 +403,8 @@ def register_portal(app):
         if not isinstance(current, str) or not 1 <= len(current) <= 128:
             raise PortalError("Current password is required.")
         password = password_field(payload, "new_password")
+        if g.portal_user.get('must_change_password') and password == current:
+            raise PortalError('Choose a new password different from your current password.')
         rate_limit("password", g.portal_user["id"], 10)
         with password_write(g.portal_user['id']) as remember:
             try:
@@ -414,6 +421,12 @@ def register_portal(app):
                 raise
             db("portal_users", "PATCH", {"session_version": str(uuid4())}, id="eq." + g.portal_user["id"])
             remember(password)
+        # Only clear a requirement observed by this request, after the password
+        # and vault transaction succeed. A reset imposed during a normal change
+        # must remain in effect.
+        if g.portal_user.get('must_change_password'):
+            db('portal_users', 'PATCH', {'must_change_password': False,
+                'session_version': str(uuid4())}, id='eq.' + g.portal_user['id'])
         response = jsonify(status="success", message="Password updated. Please sign in again.")
         response.delete_cookie(cookie_name(), path="/", secure=not local_request(), httponly=True, samesite="Strict")
         return response
