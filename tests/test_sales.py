@@ -74,7 +74,7 @@ def test_metric_gradients_handle_missing_and_equal_values():
 
 
 def test_excel_uses_the_same_metric_gradients_as_the_report():
-    rows = sales.aggregate([row(sid=str(n), total_boxes=n, accessory=n*n*5, qpay=4) for n in range(5)])
+    rows = sales.aggregate([row(source='arm2', sid=str(n), total_boxes=n, accessory=n*n*5, qpay=4) for n in range(5)])
     rows.append({**rows[-1], 'apo': None, 'qpay_conv': None})
     data = {'rows': rows, 'totals': rows[0], 'start': '2026-09-01', 'end': '2026-09-01',
             'coverage': {'complete': 6, 'expected': 6, 'retained': 0}, 'updated_at': None}
@@ -277,8 +277,8 @@ def test_invalid_ranges_are_rejected_before_database(client, query):
 
 
 @pytest.mark.parametrize('force', [False, True])
-def test_six_workers_actually_start_together(monkeypatch, force):
-    barrier = Barrier(6, timeout=5)
+def test_five_active_workers_actually_start_together(monkeypatch, force):
+    barrier = Barrier(5, timeout=5)
     calls = []
     class Result:
         def __init__(self, value): self.value = value
@@ -299,7 +299,7 @@ def test_six_workers_actually_start_together(monkeypatch, force):
     monkeypatch.setattr(sales, 'source_worker', worker)
     assert sales.run_batch(force_today=force)['status'] == 'complete'
     assert seeded == [{'force_today': force}]
-    assert set(calls) == set(sales.SOURCES)
+    assert set(calls) == set(sales.ACTIVE_SOURCES)
 
 
 @pytest.mark.parametrize('force', [False, True])
@@ -317,13 +317,13 @@ def test_busy_lock_does_not_start_downloads(monkeypatch, force):
 
 
 def test_xlsx_keeps_dealer_and_blocks_formula_injection():
-    rows = sales.aggregate([row(store='=HYPERLINK("https://example.com")', total_boxes=2, accessory=Decimal('40'),qpay=4)])
+    rows = sales.aggregate([row(source='arm2', store='=HYPERLINK("https://example.com")', total_boxes=2, accessory=Decimal('40'),qpay=4)])
     data = {'rows':rows,'totals':rows[0], 'start':'2026-09-01','end':'2026-09-01',
             'coverage':{'complete':6,'expected':6,'retained':0},'updated_at':None}
     book = load_workbook(sales.workbook_bytes(data))
     sheet = book.active
     assert sheet.cell(1,1).value == 'Dealer'
-    assert sheet.cell(2,1).value == 'AMQ'
+    assert sheet.cell(2,1).value == 'ARM'
     assert sheet.cell(2,3).data_type == 's'
     assert sheet.cell(2,10).value == 20
     assert sheet.cell(2,13).value == 50

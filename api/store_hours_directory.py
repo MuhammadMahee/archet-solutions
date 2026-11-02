@@ -11,6 +11,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 from api.calling_tree import active_roster
 from api.portal import PortalError
+from api.dealer_policy import active_dealer
 from api.store_schedules import scheduled_hours
 
 DEALER_ALIASES = {'CONNECT': 'Connect', 'CONNECT WIRELESS': 'Connect',
@@ -35,6 +36,8 @@ def roster_with_schedules(conn):
     for row in active_roster(conn):
         stores[row['dealer'], row['store_id']] = {**row, 'source_id': SOURCE_IDS.get(row['dealer'])}
     for row in conn.execute('select * from public.store_hours_directory order by dealer,market,store').fetchall():
+        if not active_dealer(row['dealer']):
+            continue
         key = row['dealer'], row['store_id']
         # Calling Tree names stay current; the workbook adds schedules and source mapping.
         stores[key] = {**row, **stores.get(key, {}), 'schedules': row['schedules'],
@@ -130,6 +133,8 @@ def map_schedule_rows(rows, roster):
     mapped, keys = [], set()
     for row in rows:
         dealer = DEALER_ALIASES.get(row['company'], row['company'].title())
+        if not active_dealer(dealer):
+            continue
         preferred = aliases.get((row['company'], row['market'], row['store']))
         matches = [s for s in roster if
                    (preferred and (s['dealer'], s['store_id']) == preferred) or

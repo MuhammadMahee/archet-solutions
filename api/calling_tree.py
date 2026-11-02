@@ -14,8 +14,10 @@ from openpyxl.utils.exceptions import InvalidFileException
 
 try:
     from api.portal import require_user, PortalError, body
+    from api.dealer_policy import active_dealer
 except ModuleNotFoundError:
     from portal import require_user, PortalError, body
+    from dealer_policy import active_dealer
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
 FIELDS = {'Dealer':'original_dealer','Store ID':'store_id','Market':'market','Store Name':'store',
@@ -88,7 +90,9 @@ def parse_workbook(data, worksheet=''):
             alias=re.sub(r'[^a-z0-9]','',mapped['original_dealer'].lower())
             dealer=ALIASES.get(alias)
             if not dealer:
-                raise PortalError(f'Row {idx}: unknown dealer. Use Connect, California, SRH, AMQ, ARM or ARBF.')
+                raise PortalError(f'Row {idx}: unknown dealer. Use Connect, California, SRH, ARM or ARBF.')
+            if not active_dealer(dealer):
+                continue
             mapped.update(dealer=dealer,store_id=mapped['store_id'].upper(),
                           market=mapped['market'].upper(),store=mapped['store'].upper(),row_number=idx)
             key=(dealer,mapped['store_id'])
@@ -98,7 +102,7 @@ def parse_workbook(data, worksheet=''):
             if len(result)>5000:
                 raise PortalError('Upload at most 5,000 stores.')
         if not result:
-            raise PortalError('The worksheet contains no stores.')
+            raise PortalError('The worksheet contains no active stores.')
         return sheet.title,result
     finally:
         book.close()
@@ -109,7 +113,7 @@ def active_roster(conn):
     records=conn.execute('''select s.*,v.filename,v.worksheet,v.activated_at from public.calling_tree_stores s
         join public.calling_tree_versions v on v.id=s.version_id where v.status='active'
         order by s.row_number''').fetchall()
-    return records
+    return [r for r in records if active_dealer(r['dealer'])]
 
 
 def source_catalog(conn):

@@ -36,7 +36,7 @@ def main():
                     status=other.evaluate('''async ({uid,rest}) => (await fetch('/api/internal/users/'+uid+'/rest',{method:'PATCH',headers:{'Content-Type':'application/json','X-Archet-Request':'1'},body:JSON.stringify({rest_mode:rest})})).status''',{'uid':fake.member['id'],'rest':rest})
                     assert status==403
                 other.close()
-                expect(member.locator('#sales-count')).to_have_text('72 STORES')
+                expect(member.locator('#sales-count')).to_have_text('60 STORES')
                 button.click();expect(button).to_have_text('Back to Work')
                 expect(member.locator('#account-rest')).to_be_visible(timeout=10000)
                 expect(member.locator('#rest-message')).to_have_text("Now it's time to have Tui wich Lund Member")

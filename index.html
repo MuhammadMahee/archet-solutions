@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="/assets/rest.css">
 <link rel="stylesheet" href="/assets/invoices.css">
 <link rel="stylesheet" href="/assets/workforce.css">
+<link rel="stylesheet" href="/assets/portal-design.css">
 </head>
 <body>
 <div id="boot" class="boot" role="status">Opening your workspace…</div>
@@ -25,7 +26,7 @@
 <section id="login" class="login" hidden>
   <div class="login-story">
     <img class="logo" src="/archet-logo-dark.png" alt="Archet Solutions">
-    <div><div class="eyebrow">The Archet workspace</div><h1>One team.<br>Every operation.</h1><p class="muted">Your place to manage inquiries, coordinate follow-ups, and keep the team connected.</p></div>
+    <div><div class="eyebrow">The Archet workspace</div><h1>One team.<br>Every operation.</h1><p class="muted">A clearer view of your business. Bring your stores, performance, and people into one connected workspace.</p></div>
     <div class="story-bottom">ARCHET SOLUTIONS &nbsp; / &nbsp; INTERNAL OPERATIONS</div>
   </div>
   <div class="login-form-wrap"><div class="login-card">
@@ -64,8 +65,8 @@
     <div class="workspace-label">WORKSPACE</div>
     <nav class="nav" aria-label="Workspace navigation">
       <button data-page="sales"><span class="nav-icon">▥</span>Sales Update</button>
-      <button data-page="spreadsheet"><span class="nav-icon">▦</span>Opening / Closing Spreadsheet</button>
-      <button data-page="compliance"><span class="nav-icon">?</span>Compliance Spreadsheet</button>
+      <button data-page="spreadsheet"><span class="nav-icon">▦</span>Opening &amp; closing</button>
+      <button data-page="compliance"><span class="nav-icon">?</span>Compliance</button>
       <button data-page="quota"><span class="nav-icon">◈</span>Quota Update</button>
       <button data-page="callingtree"><span class="nav-icon">▦</span>Calling Tree</button>
       <button data-page="workforce"><span class="nav-icon">◉</span>AI Workforce</button>
@@ -78,7 +79,7 @@
     <div class="sidebar-bottom"><div class="row"><div class="avatar" id="avatar"></div><div class="identity"><strong id="identity-name"></strong><span id="identity-role"></span></div></div><button id="logout" class="subtle logout">Sign out</button></div>
   </aside>
   <main class="main">
-    <header class="topbar"><div class="topbar-start"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Hide sidebar">☰</button><span>ARCHET &nbsp; / &nbsp; INTERNAL</span></div><span><i class="live-dot"></i>Team workspace</span></header>
+    <header class="topbar"><div class="topbar-start"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Hide sidebar">☰</button><span class="topbar-context">Workspace <span class="topbar-divider">/</span> <span id="workspace-page-label">Sales Update</span></span></div><div class="topbar-end"><time id="workspace-date"></time><span><i class="live-dot"></i>Team workspace</span></div></header>
     <div id="notice" class="notice" role="status" hidden></div>
     <section id="page-workforce" hidden>
       <header class="wf-hero"><div><div class="wf-eyebrow">PEOPLE + POSSIBILITIES</div><h1>AI Workforce<span>.</span></h1><p>Your team’s next pair of hands.</p></div><div class="wf-hero-actions"><button id="wf-directory" class="subtle">AI employees <span>↗</span></button><button id="wf-settings" class="subtle">Connection &amp; models</button></div></header>
@@ -145,6 +146,12 @@
     </section>
     <section id="page-sales" hidden>
       <div class="sales-hero"><div><div class="sales-eyebrow">STORE PERFORMANCE</div><h1>Sales Update</h1><p id="sales-period-label">Daily performance across your dealers</p></div><div class="sales-freshness"><span class="sales-status-dot"></span><div><small>LATEST REFRESH</small><strong id="sales-updated">Loading…</strong></div></div></div>
+      <div class="performance-strip" aria-label="Sales summary" aria-busy="true" id="sales-summary">
+        <article class="performance-card"><span class="metric-label">Total boxes</span><span class="metric-symbol" aria-hidden="true">↗</span><strong id="sales-stat-boxes">—</strong><small>Across selected stores</small></article>
+        <article class="performance-card"><span class="metric-label">Accessory sales</span><span class="metric-symbol" aria-hidden="true">$</span><strong id="sales-stat-accessory">—</strong><small>Selected reporting period</small></article>
+        <article class="performance-card"><span class="metric-label">Accessory per box</span><span class="metric-symbol" aria-hidden="true">◈</span><strong id="sales-stat-apo">—</strong><small>Weighted across your selection</small></article>
+        <article class="performance-card"><span class="metric-label">QPay conversion</span><span class="metric-symbol" aria-hidden="true">%</span><strong id="sales-stat-qpay">—</strong><small id="sales-stat-status">Waiting for saved sales</small></article>
+      </div>
       <div class="sales-filters">
         <label>Dealer<select id="sales-dealer"><option value="">All Dealers</option></select></label>
         <label>Market<select id="sales-market"><option value="">All Markets</option></select></label>
@@ -155,7 +162,7 @@
       </div>
       <div class="sales-toolbar"><span id="sales-coverage" role="status">Loading saved sales…</span><div><button type="button" id="sales-reload">↻ Reload</button><button type="button" id="sales-sync" hidden>Sync sources</button></div></div>
       <div id="sales-message" class="sales-message" role="status" hidden></div>
-      <div class="sales-panel"><div class="sales-panel-head"><div><small id="sales-count">0 STORES</small><h2>SALES UPDATE</h2></div><span id="sales-range-badge"></span></div><div class="sales-table-scroll"><table id="sales-table"><caption>Sales Update</caption><thead></thead><tbody></tbody><tfoot></tfoot></table></div><div id="sales-empty" class="sales-empty" hidden>No saved results for this selection.</div></div>
+      <div class="sales-panel"><div class="sales-panel-head"><div><small id="sales-count">0 STORES</small><h2>Store performance</h2></div><span id="sales-range-badge"></span></div><div class="sales-table-scroll"><table id="sales-table"><caption>Sales Update</caption><thead></thead><tbody></tbody><tfoot></tfoot></table></div><div id="sales-empty" class="sales-empty" hidden>No saved results for this selection.</div></div>
       <p class="sales-footnote">APO / QPay Conv: red (lowest) → yellow → green (highest) within the current selection. Equal values share a color; an all-equal column is red.<br>Only Calling Tree stores are shown. Stores absent from a completed source report show 0; unavailable data shows —. Central time · Scheduled every 20 minutes. <span id="sales-stale-note"></span></p>
     </section>
     <section id="page-quota" hidden>
@@ -328,6 +335,8 @@ async function showPage(name) {
   if(name!=='users')hideAccountPasswords();
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
+  const activeNav = document.querySelector('.nav [data-page="'+name+'"]');
+  $('workspace-page-label').textContent = activeNav?.lastChild.textContent.trim() || 'Workspace';
   document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
   document.body.classList.toggle('invoices-mode', name === 'invoices');
   document.body.classList.toggle('workforce-mode', name === 'workforce');

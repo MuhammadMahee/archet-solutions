@@ -27,17 +27,21 @@ try:
     from api.portal import require_user, PortalError
     from api.supabase_store import StoreError
     from api.calling_tree import active_roster, source_catalog
+    from api.dealer_policy import RETIRED_SOURCES
 except ModuleNotFoundError:
     from portal import require_user, PortalError
     from supabase_store import StoreError
     from calling_tree import active_roster, source_catalog
+    from dealer_policy import RETIRED_SOURCES
 
 REPORT_URL = 'https://myrtpos.com/newbdi/Store_Performance_lp.fwx'
 CENTRAL = ZoneInfo('America/Chicago')
 SOURCES = {'connect': 'Connect', 'california': 'California', 'srh': 'SRH',
            'arm1': 'AMQ', 'arm2': 'ARM', 'arbf': 'ARBF'}
+# Historical source IDs remain readable; only active accounts are synchronized.
+ACTIVE_SOURCES = {k: v for k, v in SOURCES.items() if k not in RETIRED_SOURCES}
 COLORS = {'Connect': '#095570', 'California': '#a92d49', 'SRH': '#a06118',
-          'AMQ': '#365cad', 'ARM': '#176b56', 'ARBF': '#7646a5'}
+          'ARM': '#176b56', 'ARBF': '#7646a5'}
 METRICS = ('new_activation', 'upgrade', 'reactivation', 'bts', 'hsi',
            'accessory', 'total_boxes', 'qpay')
 COLUMNS = [('dealer', 'Dealer'), ('market', 'Market'), ('store', 'Store'),
@@ -198,7 +202,7 @@ def seed_jobs(conn, current, *, force_today=False):
         with conn.cursor() as cur:
             cur.executemany('''insert into public.sales_imports(source_id, report_date)
                 select %s, d::date from generate_series(%s::date,%s::date,'1 day') d
-                on conflict do nothing''', [(s, current.replace(day=1), current) for s in SOURCES])
+                on conflict do nothing''', [(s, current.replace(day=1), current) for s in ACTIVE_SOURCES])
         conn.execute('''update public.sales_imports set status='pending', retry_at=now()
             where status='complete' and ((report_date=%s and loaded_at < now()-interval '18 minutes')
               or (report_date=%s and loaded_at < %s))''',
@@ -278,12 +282,12 @@ def run_batch(*, force_today=False):
             current = today()
             seed_jobs(conn, current, force_today=force_today)
             with ThreadPoolExecutor(max_workers=6) as pool:
-                futures = [pool.submit(source_worker, s, cookies.get(s, {}), current) for s in SOURCES]
+                futures = [pool.submit(source_worker, s, cookies.get(s, {}), current) for s in ACTIVE_SOURCES]
                 results = [future.result() for future in futures]
             counts = conn.execute('''select count(*) filter(where status<>'complete') as remaining,
                 count(*) filter(where status<>'complete' and retry_at<=now()) as due,
                 count(*) filter(where status='error') as failed
-                from public.sales_imports where report_date<=%s''', (current,)).fetchone()
+                from public.sales_imports where report_date<=%s and source_id = any(%s)''', (current, list(ACTIVE_SOURCES))).fetchone()
             return {'status': 'partial' if counts['remaining'] else 'complete', **counts, 'workers': results}
         finally:
             conn.execute('select pg_advisory_unlock(%s)', (LOCK_ID,))
@@ -384,7 +388,7 @@ def report_data(start, end, filters=None):
     dealer = filters.get('dealer', '')
     if dealer and dealer not in COLORS:
         raise PortalError('Unknown dealer.')
-    relevant = [i for i in imports if not dealer or SOURCES[i['source_id']] == dealer]
+    relevant = [i for i in imports if i['source_id'] in ACTIVE_SOURCES and (not dealer or SOURCES[i['source_id']] == dealer)]
     if dealer:
         rows = [r for r in rows if r['dealer'] == dealer]
     markets = sorted({r['market'] for r in rows})
@@ -395,7 +399,7 @@ def report_data(start, end, filters=None):
     if store_id:
         rows = [r for r in rows if r['dealer'] + ':' + r['store_id'] == store_id]
     total = ratios({k: sum((r[k] or 0) for r in rows) for k in METRICS})
-    expected = sum(1 for s in SOURCES if not dealer or SOURCES[s] == dealer) * ((end - start).days + 1)
+    expected = sum(1 for s in ACTIVE_SOURCES if not dealer or SOURCES[s] == dealer) * ((end - start).days + 1)
     complete = sum(i['status'] == 'complete' for i in relevant)
     times = [i['loaded_at'] for i in relevant if i['loaded_at']]
     return {'rows': rows, 'metric_fills': metric_fills(rows), 'totals': total, 'markets': markets, 'stores': stores,

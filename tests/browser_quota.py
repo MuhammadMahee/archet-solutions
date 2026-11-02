@@ -100,7 +100,7 @@ def main():
                 page.locator('#quota-dealer-trigger').click();page.locator('#quota-dealer-menu [role=option]').filter(has_text='California').click()
                 expect(page.locator('#quota-count')).to_have_text('3 STORES')
                 assert page.evaluate("getComputedStyle(document.body).getPropertyValue('--sales-accent')")!=connect_color
-                page.locator('nav [data-page=sales]').click();expect(page.locator('#sales-count')).to_have_text('72 STORES')
+                page.locator('nav [data-page=sales]').click();expect(page.locator('#sales-count')).to_have_text('60 STORES')
                 refresh.reset_mock()
                 refresh.side_effect=[
                     {'status':'partial','remaining':6,'due':6,'workers':[{'completed':24}]},

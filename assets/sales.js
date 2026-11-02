@@ -2,7 +2,7 @@
 (() => {
   const el = id => document.getElementById('sales-' + id);
   const columns = [['dealer','Dealer'],['market','Market'],['store','Store'],['new_activation','New activation'],['upgrade','Upgrade'],['reactivation','Reactivation'],['bts','BTS'],['hsi','HSI'],['accessory','Accessory'],['apo','APO'],['total_boxes','Total boxes'],['qpay','QPay'],['qpay_conv','QPay conv']];
-  const themes = {'': ['#095570','#f3f8fa','#083c51','#829aa5'],Connect:['#095570','#f3f8fa','#083c51','#829aa5'],California:['#a92d49','#faf0f2','#491c2c','#ecd8de'],SRH:['#a06118','#fbf5ea','#503718','#e8dcc9'],AMQ:['#365cad','#eef2fa','#20335b','#d6dfef'],ARM:['#176b56','#edf8f3','#104735','#cee7dc'],ARBF:['#7646a5','#f5effa','#3d2652','#e4d7ed']};
+  const themes = {'': ['#095570','#f3f8fa','#083c51','#829aa5'],Connect:['#095570','#f3f8fa','#083c51','#829aa5'],California:['#a92d49','#faf0f2','#491c2c','#ecd8de'],SRH:['#a06118','#fbf5ea','#503718','#e8dcc9'],ARM:['#176b56','#edf8f3','#104735','#cee7dc'],ARBF:['#7646a5','#f5effa','#3d2652','#e4d7ed']};
   let data = null, revision = 0, syncing = false, syncSequence = 0;
   const localToday = () => new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const dateLabel = day => new Date(day + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -33,7 +33,16 @@
     if (key === 'total_boxes') return 'metric-boxes';
     return '';
   }
+  function summary(result = null) {
+    const available = result?.rows.some(row => row.total_boxes !== null);
+    for (const [id, key] of [['boxes','total_boxes'],['accessory','accessory'],['apo','apo'],['qpay','qpay_conv']]) {
+      el('stat-' + id).textContent = available ? text(key, result.totals[key]) : '\u2014';
+    }
+    el('summary').setAttribute('aria-busy', 'false');
+    el('stat-status').textContent = !result ? 'Waiting for saved sales' : !available ? 'No sales data in this selection' : result.coverage.complete < result.coverage.expected || result.rows.some(row => row.incomplete || row.stale) || result.coverage.retained > 0 ? 'Based on partial saved data' : result.rows.length + ' stores in this selection';
+  }
   function render(result) {
+    summary(result);
     options('dealer',result.dealers.map(d => d.name),'All Dealers');
     options('market',result.markets,'All Markets'); options('store',result.stores,'All Stores');
     theme();
@@ -63,13 +72,14 @@
   }
   async function load() {
     const id = ++revision; theme(); message('');
+    summary(); el('summary').setAttribute('aria-busy', 'true');
     el('copy').disabled = true; el('excel').disabled = true;
     el('coverage').textContent = 'Loading saved sales…';
     try {
       const result = await api('sales?' + params());
       if (id !== revision || !currentUser) return;
       data = result; render(result);
-    } catch (error) { if (id===revision) { data=null; el('table').tBodies[0].replaceChildren(); el('table').tFoot.replaceChildren(); el('coverage').textContent='Unable to load this selection.'; message(error.message); } }
+    } catch (error) { if (id===revision) { data=null; summary(); el('table').tBodies[0].replaceChildren(); el('table').tFoot.replaceChildren(); el('coverage').textContent='Unable to load this selection.'; message(error.message); } }
   }
   function reportTitle(result, location=el('market').value || el('dealer').value || 'ALL DEALERS') {
     const period=result.start===result.end?dateLabel(result.start):dateLabel(result.start)+' – '+dateLabel(result.end);
@@ -108,6 +118,6 @@
     finally{if(id===syncSequence){syncing=false;el('sync').disabled=false;el('sync').textContent='Sync sources';}}
   };
   for(const id of ['start','end']){el(id).value=localToday();el(id).max=localToday();}
-  window.salesDashboard={load,clear(){revision++;syncSequence++;syncing=false;el('sync').disabled=false;el('sync').textContent='Sync sources';data=null;document.body.classList.remove('sales-mode');el('table').tBodies[0].replaceChildren();el('table').tFoot.replaceChildren();},snapshot};
+  window.salesDashboard={load,clear(){revision++;syncSequence++;syncing=false;el('sync').disabled=false;el('sync').textContent='Sync sources';data=null;summary();document.body.classList.remove('sales-mode');el('table').tBodies[0].replaceChildren();el('table').tFoot.replaceChildren();},snapshot};
   setInterval(()=>{if(currentUser && page==='sales' && !syncing && !document.hidden)load();},60000);
 })();

@@ -65,8 +65,7 @@ def test_seed_aliases_match_portal_ids_and_total_stores_stay_manual():
     parsed = directory.parse_schedule_workbook(workbook(company='ARM WIRELESS',store='GLENVIEW'))
     parsed[0]['market'] = 'CHICAGO'
     roster = [dict(dealer='AMQ', store_id='N1329B', market='CHICAGO', store='AMQ TRADING LLC', source_id='arm1')]
-    mapped = directory.map_schedule_rows(parsed, roster)[0]
-    assert mapped['store_id'] == 'N1329B' and mapped['source_id'] == 'arm1'
+    assert directory.map_schedule_rows(parsed, roster) == []
     total = directory.parse_schedule_workbook(workbook(company='ARBF',store='EULESS'))
     assert directory.map_schedule_rows(total, roster)[0]['source_id'] is None
 

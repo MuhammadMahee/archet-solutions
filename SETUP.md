@@ -1,5 +1,21 @@
 # Archet internal workspace setup
 
+## November 2026 portal refresh
+
+AMQ is retired from the internal portal. Existing database records are retained,
+but AMQ is excluded from active Calling Trees, sales and quota reports, filters,
+exports, opening/closing and compliance directories, and spreadsheet history.
+New Calling Tree and schedule uploads skip its aliases. The five active RT-POS
+accounts continue syncing; `arm1` no longer starts a worker or contributes to
+sync progress and coverage. Historical account mappings below document the
+original imports, not the active dealer list. No database migration is required.
+
+`assets/portal-design.css` supplies the refreshed workspace and login interface;
+`assets/sheet-design.css` styles the shared spreadsheet interface. Both use local
+fonts. Sales summary cards follow the report filters and flag partial saved data.
+Existing access controls, snapshots, workbook exports, and spreadsheet editing
+remain in place. Deploy through the existing Flask/Vercel workflow.
+
 ## AI Workforce
 
 The AI Workforce module is available at `/ai-workforce` or from the workspace

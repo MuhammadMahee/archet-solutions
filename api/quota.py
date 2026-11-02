@@ -259,6 +259,7 @@ def report_data():
     with sales.connect() as conn, conn.transaction():
         conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
         uploads = conn.execute('select * from public.quota_uploads order by goal_month desc,dealer').fetchall()
+        uploads = [u for u in uploads if u['dealer'] in sales.COLORS]
         month = month_value(request.args['month']) if request.args.get('month') else (uploads[0]['goal_month'] if uploads else current.replace(day=1))
         end = min(current, month.replace(day=calendar.monthrange(month.year, month.month)[1]))
         goals = conn.execute('''select q.*,s.market,s.store from public.quota_goals q
@@ -272,6 +273,7 @@ def report_data():
         imports = conn.execute('''select source_id,report_date,status,loaded_at from public.sales_imports
             where report_date between %s and %s''', (month, end)).fetchall()
         catalog = source_catalog(conn)
+    goals = [g for g in goals if g['dealer'] in sales.COLORS]
     actuals = sales.restrict_to_roster(sales.aggregate(raw), roster, catalog, imports, month, end)
     if dealer:
         goals = [g for g in goals if g['dealer'] == dealer]

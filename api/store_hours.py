@@ -27,10 +27,11 @@ import xlrd
 from api.calling_tree import active_roster, clean
 from api.sheet_types import compliance, sheet_table, report_columns, CHECK_FIELDS, CAMERA_OFFLINE, cell_colors
 from api.portal import PortalError, body, require_user
+from api.dealer_policy import RETIRED_DEALERS
 from api.store_schedules import scheduled_hours
 from api.store_hours_directory import (roster_with_schedules, hours_for_store, parse_schedule_workbook,
                                        map_schedule_rows, DEALER_LABELS, SOURCE_IDS)
-from api.sales import (SOURCES, COLORS, MAX_REPORT_BYTES, ReportError, connect,
+from api.sales import (SOURCES, ACTIVE_SOURCES, COLORS, MAX_REPORT_BYTES, ReportError, connect,
                        open_source, read_source, source_error, today)
 
 REPORT_URL = 'https://myrtpos.com/newbdi/TimePunches.fwx'
@@ -192,7 +193,7 @@ def seed_imports(conn, current, continuation=False):
     if continuation:
         return
     with conn.transaction():
-        for source in SOURCES:
+        for source in ACTIVE_SOURCES:
             punch = conn.execute('select max(report_date) as day from public.store_time_punches where source_id=%s', (source,)).fetchone()['day']
             complete = conn.execute("select max(report_date) as day from public.store_hours_imports where source_id=%s and status='complete'", (source,)).fetchone()['day']
             start = sync_start(punch, complete, current)
@@ -249,9 +250,9 @@ def run_sync(continuation=False):
         try:
             seed_imports(conn, today(), continuation)
             with ThreadPoolExecutor(max_workers=6) as pool:
-                workers = list(pool.map(lambda s: source_worker(s, cookies.get(s, {})), SOURCES))
+                workers = list(pool.map(lambda s: source_worker(s, cookies.get(s, {})), ACTIVE_SOURCES))
             counts = conn.execute("""select count(*) filter(where status='pending') as pending,
-                count(*) filter(where status='error') as failed from public.store_hours_imports""").fetchone()
+                count(*) filter(where status='error') as failed from public.store_hours_imports where source_id = any(%s)""", (list(ACTIVE_SOURCES),)).fetchone()
             return dict(status='partial' if counts['pending'] or counts['failed'] else 'complete',
                         remaining=counts['pending'] + counts['failed'], workers=workers, **counts)
         finally:
@@ -721,6 +722,8 @@ def preview_schedule_upload(payload, user_id):
     parsed = parse_schedule_workbook(raw)
     with connect() as conn:
         rows = map_schedule_rows(parsed, roster_with_schedules(conn))
+        if not rows:
+            raise PortalError('The workbook contains no active stores.')
         conn.execute("delete from public.store_hours_uploads where applied_at is null and uploaded_at<now()-interval '1 day'")
         preview = conn.execute('''insert into public.store_hours_uploads(filename,rows,uploaded_by)
             values(%s,%s,%s) returning id''', (PureWindowsPath(filename).name, Jsonb(rows), user_id)).fetchone()['id']
@@ -766,6 +769,8 @@ def version_history(start, end):
         before_data->'cell_overrides'->>'date' between %s and %s or
         after_data->'cell_overrides'->>'date' between %s and %s)"""]
     args = [start, end, start.isoformat(), end.isoformat(), start.isoformat(), end.isoformat()]
+    clauses.append('(dealer is null or dealer <> all(%s))')
+    args.append(list(RETIRED_DEALERS))
     for parameter, column in [('dealer', 'dealer'), ('market', 'market')]:
         value = request.args.get(parameter, '')
         if value:

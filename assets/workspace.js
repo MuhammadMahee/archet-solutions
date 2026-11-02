@@ -1,5 +1,28 @@
 'use strict';
 (() => {
+  const icons = {
+    sales:'M4 20V10h4v10M10 20V4h4v16M16 20v-8h4v8',
+    spreadsheet:'M4 4h16v16H4zM4 9h16M9 9v11',
+    compliance:'m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6',
+    quota:'M21 12a9 9 0 1 1-9-9M17 12a5 5 0 1 1-5-5M12 12l9-9M17 3h4v4',
+    callingtree:'M8 4h8v5H8zM3 16h6v5H3zM15 16h6v5h-6zM12 9v4M6 16v-3h12v3',
+    workforce:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z',
+    invoices:'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',
+    overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+    quotes:'M3 5h18v14H3zM3 5l9 8 9-8',
+    users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 4a4 4 0 0 1 0 7M22 21v-2a4 4 0 0 0-3-4',
+    settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2'
+  };
+  document.querySelectorAll('.nav [data-page]').forEach(button => {
+    const icon = button.querySelector('.nav-icon');
+    if (icon && icons[button.dataset.page]) {
+      icon.setAttribute('aria-hidden','true');
+      icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + icons[button.dataset.page] + '"/></svg>';
+    }
+  });
+  const date = document.getElementById('workspace-date');
+  date.textContent = new Intl.DateTimeFormat('en-US',{timeZone:'America/Chicago',weekday:'short',month:'short',day:'numeric'}).format(new Date());
+  date.dateTime = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const workspace = document.getElementById('workspace');
   const sidebar = document.getElementById('workspace-sidebar');
   const toggle = document.getElementById('sidebar-toggle');

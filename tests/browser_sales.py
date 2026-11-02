@@ -34,7 +34,7 @@ def fixture_report(start, end):
             'dealers':[{'name':d,'color':c} for d,c in sales.COLORS.items()],
             'markets':markets,'stores':stores,'start':start.isoformat(),'end':end.isoformat(),
             'today':sales.today().isoformat(),'updated_at':'2026-09-26T17:41:00+00:00',
-            'coverage':{'complete':6,'expected':6,'retained':0,'errors':[]}}
+            'coverage':{'complete':5,'expected':5,'retained':0,'errors':[]}}
 
 
 def main():
@@ -50,15 +50,19 @@ def main():
                 page.goto(origin+'/internal')
                 page.locator('#login-username').fill('Mahee');page.locator('#login-password').fill('TestPass123')
                 page.locator('#login-form button[type=submit]').click()
-                expect(page.locator('#sales-count')).to_have_text('72 STORES')
+                expect(page.locator('#sales-count')).to_have_text('60 STORES')
+                expect(page.locator('#sales-stat-boxes')).to_have_text('120')
+                assert page.locator('#sales-dealer option[value=AMQ]').count() == 0
+                assert page.evaluate("getComputedStyle(document.querySelector('.sidebar')).backgroundColor") == 'rgb(16, 31, 50)'
+                page.screenshot(path=str(ROOT/'test-results/portal-sales-overview.png'),full_page=True)
                 expect(page.locator('#sales-table th').first).to_have_text('Dealer')
-                assert page.locator('#sales-table tbody tr').first.bounding_box()['height'] <= 27
+                assert page.locator('#sales-table tbody tr').first.bounding_box()['height'] <= 48
                 before=page.locator('.main').bounding_box()['width']
                 page.locator('#sidebar-toggle').click()
                 expect(page.locator('#workspace-sidebar')).to_be_hidden()
                 assert page.locator('.main').bounding_box()['width'] > before + 150
                 page.reload()
-                expect(page.locator('#sales-count')).to_have_text('72 STORES')
+                expect(page.locator('#sales-count')).to_have_text('60 STORES')
                 expect(page.locator('#workspace-sidebar')).to_be_hidden()
                 page.locator('#sidebar-toggle').click()
                 expect(page.locator('#workspace-sidebar')).to_be_visible()
@@ -79,8 +83,8 @@ def main():
                     expect(page.locator('#sales-count')).to_have_text('12 STORES')
                     expect(page.locator('#sales-table tbody tr').first).to_contain_text(dealer.upper()+' STORE')
                     page.wait_for_timeout(300)
-                    backgrounds.append(page.evaluate('getComputedStyle(document.body).backgroundColor'))
-                assert len(set(backgrounds))==6
+                    backgrounds.append(page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--sales-accent')"))
+                assert len(set(backgrounds))==5
                 page.locator('#sales-dealer').select_option('California')
                 expect(page.locator('#sales-table tbody tr').first).to_contain_text('CALIFORNIA STORE')
                 snapshot_details=page.evaluate('''() => {
@@ -151,7 +155,7 @@ def main():
                 assert page.locator('#sales-table tbody tr').count()==0
                 assert not errors,errors
                 browser.close()
-                print('Sales browser checks passed: filters, 6 persistent themes, dates, XLSX, PNG clipboard without Dealer, mobile layout, logout cleanup.')
+                print('Sales browser checks passed: filters, 5 dealer accents, dates, XLSX, PNG clipboard without Dealer, mobile layout, logout cleanup.')
         finally:server.shutdown()
 
 
