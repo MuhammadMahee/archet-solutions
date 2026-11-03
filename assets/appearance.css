@@ -1,0 +1,94 @@
+/* Appearance changes colors only; layout and data formatting stay independent. */
+:root{--dealer-accent:#095570;--dealer-dark:#083c51;--dealer-tint:#f3f8fa}
+.theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;min-height:34px;padding:7px 11px;border:1px solid #dce3eb;border-radius:8px;background:#fff;color:#3b526b;font:500 11px Archet UI,system-ui,sans-serif;cursor:pointer;flex-shrink:0}
+.theme-toggle::before{content:'◐';font-size:16px;line-height:1}
+.topbar>.theme-toggle{margin-left:16px}.topbar-end{margin-left:auto}.login-card>.theme-toggle{margin-top:18px}#sheet-login-form>.theme-toggle{width:auto;background:transparent;color:#3b526b;margin-top:18px}.sheet-format-bar>.theme-toggle{margin-left:auto;font-family:Archet UI,system-ui,sans-serif}
+html[data-dealer]:not([data-dealer=""]) body.sales-mode{background:var(--dealer-tint)}
+html[data-dealer]:not([data-dealer=""]) .sales-mode .sidebar{background:var(--dealer-dark)}
+html[data-dealer]:not([data-dealer=""]) .sales-mode .nav button.active{background:var(--dealer-accent);color:#fff}
+html[data-dealer]:not([data-dealer=""]) .sales-mode .nav button.active::after{background:#fff}
+html[data-dealer]:not([data-dealer=""]) .sales-hero{background:linear-gradient(115deg,var(--dealer-dark),var(--dealer-accent));border-color:var(--dealer-accent)}
+html[data-dealer]:not([data-dealer=""]) .sales-eyebrow{color:var(--dealer-tint)}
+html[data-dealer]:not([data-dealer=""]) .performance-card:first-child{background:var(--dealer-tint);border-color:var(--dealer-accent)}
+html[data-dealer]:not([data-dealer=""]) .performance-card:first-child strong{color:var(--dealer-accent)}
+html[data-dealer]:not([data-dealer=""]) #page-sales #sales-copy,html[data-dealer]:not([data-dealer=""]) #page-sales #sales-apply,html[data-dealer]:not([data-dealer=""]) #page-quota button.quota-primary{background:var(--dealer-accent);border-color:var(--dealer-accent)}
+html[data-dealer]:not([data-dealer=""]) #sales-table th,html[data-dealer]:not([data-dealer=""]) #tree-table th,html[data-dealer]:not([data-dealer=""]) .quota-scroll th{background:var(--dealer-accent);color:#fff}
+html[data-dealer]:not([data-dealer=""]) #sales-table tfoot td,html[data-dealer]:not([data-dealer=""]) .quota-scroll tfoot td{background:var(--dealer-dark)}
+html[data-dealer]:not([data-dealer=""]) .sheet-header{background:linear-gradient(110deg,var(--dealer-dark),var(--dealer-accent))}
+html[data-dealer]:not([data-dealer=""]) .sheet-tab{border-color:var(--dealer-accent);color:var(--dealer-accent)}
+
+/* Dark workspace, including dialogs and native controls. */
+html[data-theme=dark]{color-scheme:dark;--bg:#0b1421;--panel:#142235;--border:#2d4056;--text:#e4edf7;--muted:#a0b3c8;--accent:#a9f1da;--error:#ffaaa5;--ui-shadow:0 4px 24px #0000001a}
+html[data-theme=dark] body,html[data-theme=dark] body.sales-mode{background:#0b1421;color:#e4edf7}
+html[data-theme=dark][data-dealer]:not([data-dealer=""]) body.sales-mode{background:color-mix(in srgb,var(--dealer-dark) 22%,#0b1421)}
+html[data-theme=dark] :is(button,input,select,textarea){color:#dce8f4;background-color:#142235;border-color:#34495f}
+html[data-theme=dark] :is(input,textarea)::placeholder{color:#8ea4ba}
+html[data-theme=dark] :is(.field label,.check,.details dt,.hint,.muted){color:#a0b3c8}
+html[data-theme=dark] .primary{background:#a9f1da;color:#143b36;border-color:#a9f1da}
+html[data-theme=dark] :is(.login,.login-form-wrap){background:#0b1421}
+html[data-theme=dark] .login-story{background:radial-gradient(ellipse at 85% 85%,#255f56,transparent 60%),#102439}
+html[data-theme=dark] :is(.login-card .eyebrow,.login-card a,.success){color:#a9f1da}
+html[data-theme=dark] .workspace .topbar{color:#a6b8ca;border-color:#2d4056}
+html[data-theme=dark] :is(.topbar-end time,.workspace .topbar span){color:#a6b8ca}
+html[data-theme=dark] .workspace .sidebar-toggle,html[data-theme=dark] .theme-toggle{background:#1b2e43;color:#dce8f4;border-color:#34495f}
+html[data-theme=dark] .workspace .nav button:not(.active){background:transparent}
+html[data-theme=dark] .workspace .nav button:not(.active):hover{background:#ffffff0c}
+html[data-theme=dark] :is(.workspace .card,.workspace .panel,.performance-card,.sales-filters,.sales-panel,.tree-upload,.tree-preview,.quota-upload,.quota-card,dialog){background:#142235;border-color:#2d4056;color:#e4edf7}
+html[data-theme=dark] :is(#page-sales,#page-callingtree,#page-quota){color:#e4edf7}
+html[data-theme=dark] :is(.performance-card strong,.sales-panel-head h2,.quota-card-head h2,#page-callingtree h2){color:#e4edf7}
+html[data-theme=dark] .performance-card:first-child{background:#15372f;border-color:#376b59}
+html[data-theme=dark] .performance-card:first-child strong{color:#a9f1da}
+html[data-theme=dark][data-dealer]:not([data-dealer=""]) .performance-card:first-child{background:var(--dealer-dark);border-color:var(--dealer-accent)}
+html[data-theme=dark][data-dealer]:not([data-dealer=""]) .performance-card:first-child strong{color:#fff}
+html[data-theme=dark] :is(.performance-card .metric-label,.performance-card small,.sales-toolbar,.sales-footnote,.sales-filters label,.sales-panel-head small,.quota-card-head small,.quota-help,.quota-upload p,#page-callingtree p,.tree-help,.empty){color:#a0b3c8}
+html[data-theme=dark] :is(.sales-panel-head,.quota-card-head,.panel-head){border-color:#2d4056}
+html[data-theme=dark] .sales-panel-head>span{background:#1a2d42;color:#bcd0e1;border-color:#34495f}
+html[data-theme=dark] :is(#page-sales button,#page-quota button,#page-callingtree button){background:#1b2e43;color:#dce8f4;border-color:#34495f}
+html[data-theme=dark] :is(#page-sales .picker-trigger,#page-callingtree .picker-trigger,#page-quota .picker-trigger,#page-quota input,#page-quota select,#page-callingtree input,#page-callingtree select){background:#102033;color:#dce8f4;border-color:#34495f}
+html[data-theme=dark] .picker-menu{background:#142235;color:#dce8f4;border-color:#34495f}
+html[data-theme=dark] .picker-menu .picker-search{background:#102033;color:#dce8f4;border-color:#34495f}
+html[data-theme=dark] .picker-search-wrap{border-color:#34495f}
+html[data-theme=dark] .picker-option[aria-selected=true]{background:#234c43;color:#cbf6e7}
+html[data-theme=dark] .picker-option:hover:not([aria-selected=true]){background:#253c53}
+html[data-theme=dark] .picker-empty{color:#a0b3c8}
+html[data-theme=dark] :is(.workspace th,#sales-table th,#tree-table th,.quota-scroll th){background:#1c3046;color:#b9cadd;border-color:#34495f}
+html[data-theme=dark] :is(.workspace td,#sales-table td,#tree-table td,.quota-scroll td){color:#dce8f4;border-color:#293d52}
+html[data-theme=dark] :is(#sales-table tbody tr:nth-child(even),#tree-table tbody tr:nth-child(even),.quota-scroll tbody tr:nth-child(even)){background:#182a3e}
+html[data-theme=dark] #sales-table tbody tr:hover{background:#22394f}
+html[data-theme=dark] #sales-table td:nth-child(3){color:#e4edf7}
+html[data-theme=dark] #sales-table td.metric-boxes{background:#234459;color:#dceff8}
+html[data-theme=dark] #sales-table tbody td[style*="background-color"]{color:#143047}
+html[data-theme=dark] :is(#sales-table tfoot td,.quota-scroll tfoot td){color:#fff}
+html[data-theme=dark] .sales-dealer-chip{background:#233d50;color:#d6eafa}
+html[data-theme=dark] .quota-growth{color:#102939;background:#e4edf7}
+html[data-theme=dark] :is(.sales-message,.notice,.message){color:#d0e5df;background:#1b3535;border-color:#3a5b58}
+html[data-theme=dark] :is(.badge.new,.tree-match.matched){color:#a9f1da;background:#234c43}
+html[data-theme=dark] .tree-match.unmatched{color:#ffe1a5;background:#514229}
+/* Keep the invoice document itself white, as it will appear in print. */
+html[data-theme=dark] .inv-sheet{color:#12324d;background:#fff}
+html[data-theme=dark] .inv-sheet :is(input,textarea){background:#fff;color:#193d59;border-color:#d3e2ee;color-scheme:light}
+html[data-theme=dark] .inv-sheet :is(td,th){color:#193d59}
+html[data-theme=dark] .inv-sheet th{background:#eaf4fb}
+
+/* Spreadsheet chrome and unformatted cells; saved fills/status colors stay exact. */
+html[data-theme=dark] :is(.sheet-format-bar,.sheet-formula-bar,.sheet-footer,#sheet-filters,#sheet-dialog,.sh-grid-dialog,#sheet-login-form,.sheet-menu-popup){background:#142235;color:#dce8f4;border-color:#34495f}
+html[data-theme=dark] :is(.sheet-format-bar button,.sheet-format-bar select,.sheet-format-bar input,#sheet-filters input,#sheet-filters select,#sheet-value,#sh-grid-address){background:#142235;color:#dce8f4;border-color:#34495f}
+html[data-theme=dark] :is(#sheet-login,#sheet-empty){background:#0b1421;color:#b5c7d9}
+html[data-theme=dark] :is(#sheet-login h1,#sheet-login p,#sheet-login-form>.theme-toggle,#sheet-dialog-content>p,.sheet-tab,#sheet-row-count,#sheet-selection-status,.sheet-column-label button,.sheet-menu-popup button){color:#c6d7e6}
+html[data-theme=dark] .sheet-tab{background:#1b3044}
+html[data-theme=dark] .sheet-grid-wrap.sh-table-wrap{background:repeating-linear-gradient(to bottom,#111f30 0,#111f30 23px,#293b50 23px,#293b50 24px)}
+html[data-theme=dark] #sh-table{background:#111f30;color:#dce8f4}
+html[data-theme=dark] #sh-table :is(th,.sh-column-letter){background:#1a2d42;color:#b4c9dc;border-color:#34495f}
+html[data-theme=dark] #sh-table td{border-color:#293b50}
+html[data-theme=dark] #sh-table td:not([style*="background-color"]):not(.sh-bad):not(.sh-good):not(.sh-wait):not(.sh-missing){background-color:#111f30;color:#dce8f4}
+html[data-theme=dark] #sh-table td[style*="background-color"]{color:#20384e}
+html[data-theme=dark] #sh-table .sh-cell-editor{background:#20364d;color:#e4edf7}
+html[data-theme=dark] :is(.sheet-menu-popup,.sheet-menu-popup button:hover){border-color:#34495f}
+html[data-theme=dark] #sheet-message{background:#1b3535;color:#c6eee1;border-color:#34495f}
+html[data-theme=dark] #sheet-message.is-error{background:#48232b;color:#ffcdc9}
+html[data-theme=dark] .sheet-format-bar kbd{background:#264738;color:#bff0db}
+html[data-theme=dark] .sheet-presence{background:#142235;border-color:#34495f}
+html[data-theme=dark] .sheet-presence-title{color:#a0b3c8}
+html[data-theme=dark] .sheet-person{color:color-mix(in srgb,var(--person-color) 55%,#fff)}
+@media(max-width:720px){.topbar>.theme-toggle{margin-left:auto;padding:7px 9px;font-size:10px}.sheet-format-bar>.theme-toggle{margin-left:0}}
+@media print{.theme-toggle{display:none!important}}

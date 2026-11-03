@@ -6,4 +6,10 @@ body{font-family:Archet UI,system-ui,sans-serif;background:#f4f6fa;color:#20384e
 .sheet-header .sh-actions button{color:#d5e5ef;background:#203a4f;border-color:#385367}.sheet-header .sheet-live-state{color:#a9f1da}
 @media(max-width:800px){.sheet-header{padding:10px 12px;gap:8px}.sheet-logo{width:48px;height:38px}.sheet-heading h1{font-size:15px}.sheet-format-bar{padding:7px 10px}.sheet-header #sheet-period-button{font-size:11px;padding:7px 10px}.sheet-header .sheet-primary{padding:8px 12px}.sheet-header .sheet-save-state{color:#adbdcc;font-size:10px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.sheet-header .sheet-logo{display:flex;align-items:center;justify-content:center;align-self:center;width:90px;height:60px;min-width:90px;padding:0;background:transparent;border-radius:0;line-height:0;overflow:hidden}
+.sheet-header .sheet-logo img{display:block;flex:0 1 auto;width:100%;height:100%;min-width:0;min-height:0;max-width:100%;max-height:100%;object-fit:contain;object-position:center}
+.sheet-header #sh-history{color:#d5e5ef;background:#203a4f;border-color:#385367}
+.sheet-format-bar>*{flex-shrink:0}
+@media(max-width:800px){.sheet-header .sheet-logo{width:54px;min-width:54px;height:40px}}
+@media(max-width:600px){.sheet-header{grid-template-columns:54px minmax(0,1fr) auto}.sheet-header #sheet-account{justify-self:end}}
 @media print{.sheet-header{background:white;color:#18384c}.sheet-heading h1{color:#18384c}}

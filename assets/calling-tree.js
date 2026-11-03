@@ -4,6 +4,7 @@
   let active=[],preview=null,version=null,sequence=0;
   const message=text=>{el('message').textContent=text;el('message').hidden=!text;};
   function draw(){
+    window.archetAppearance.dealer(el('dealer').value);
     const rows=preview?preview.rows:active;
     const selected=el('dealer').value,query=el('search').value.toLowerCase();
     const filtered=rows.filter(r=>(!selected||r.dealer===selected)&&(!query||[r.dealer,r.store_id,r.store,r.market,r.dm,r.address].join(' ').toLowerCase().includes(query)));

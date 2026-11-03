@@ -12,6 +12,7 @@
     el(id).dispatchEvent(new Event('picker-sync'));
   }
   function theme() {
+    window.archetAppearance.dealer(el('dealer').value);
     const color = colors[el('dealer').value] || colors.Connect;
     const channels = color.match(/[0-9a-f]{2}/gi).map(x => parseInt(x,16));
     const mix = (target,amount) => '#' + channels.map(c => Math.round(c + (target-c)*amount).toString(16).padStart(2,'0')).join('');

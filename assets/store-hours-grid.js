@@ -229,7 +229,12 @@ window.createStoreHoursGrid = function(api) {
     select(r,c,extend);
   }
   const quote=s=>/[\t\n\r"]/.test(s)?'"'+s.replaceAll('"','""')+'"':s;
-  function copyText(){const b=bounds(),lines=[];for(let r=b.top;r<=b.bottom;r++){const cells=[];for(let c=b.left;c<=b.right;c++){const v=value(r,c);cells.push(quote(v===null?'':fields.includes(columns[c][0])?String(v):api.text(columns[c][0],v)));}lines.push(cells.join('\t'));}return lines.join('\r\n');}
+  function copyText(withHeaders=selectionKind==='all'){
+    const b=bounds(),lines=[];
+    if(withHeaders)lines.push(columns.slice(b.left,b.right+1).map(([,label])=>quote(String(label))).join('\t'));
+    for(let r=b.top;r<=b.bottom;r++){const cells=[];for(let c=b.left;c<=b.right;c++){const v=value(r,c);cells.push(quote(v===null?'':fields.includes(columns[c][0])?String(v):api.text(columns[c][0],v)));}lines.push(cells.join('\t'));}
+    return lines.join('\r\n');
+  }
   function matrix(raw){
     if(raw.length>200000)throw new Error('Paste up to 100 rows on the current page.');
     const rows=[[]];let field='',quoted=false;
@@ -237,6 +242,9 @@ window.createStoreHoursGrid = function(api) {
       else if(!quoted&&(char==='\t'||char==='\n'||char==='\r')){rows.at(-1).push(field);field='';if(char!=='\t'){if(char==='\r'&&raw[i+1]==='\n')i++;rows.push([]);}}else field+=char;}
     if(quoted)throw new Error('The copied cells contain an unfinished quoted value.');rows.at(-1).push(field);
     if(rows.length>1&&rows.at(-1).length===1&&rows.at(-1)[0]==='')rows.pop();
+    // A whole-page copy includes headings for external applications. When pasted
+    // back into this grid, keep them out of editable data (also at 100 rows).
+    if(clipboardRange?.withHeaders&&clipboardRange.raw===raw)rows.shift();
     if(rows.length>100||rows.some(r=>r.length!==rows[0].length)||rows[0].length>width)throw new Error(`Paste a rectangular range of up to 100 rows and ${width} columns.`);return rows;
   }
   function paste(raw){
@@ -251,14 +259,14 @@ window.createStoreHoursGrid = function(api) {
       if(commit(changes,moving?'Move cells':'Paste')){anchor={r:b.top,c:b.left};active={r:b.top+nr-1,c:b.left+nc-1};if(moving)clearClipboard();paint(true);}
     }catch(e){notice('Nothing pasted. '+e.message,true);}
   }
-  function markClipboard(cut,raw,box=bounds(),items=selected()){
-    clipboardRange={cut,raw,bounds:{...box},items:items.map(x=>({...x}))};drawClipboard();
+  function markClipboard(cut,raw,box=bounds(),items=selected(),withHeaders=!cut&&selectionKind==='all'){
+    clipboardRange={cut,raw,withHeaders,bounds:{...box},items:items.map(x=>({...x}))};drawClipboard();
     if(cut&&!api.moveOnPaste){commit(items.map(x=>({...x,value:columns[x.c][0]==='date'?value(x.r,x.c):null,reset:columns[x.c][0]==='date'})),'Cut');clipboardRange={cut,raw,bounds:{...box},items:items.map(x=>({...x}))};drawClipboard();}
     notice(cut&&api.moveOnPaste?'Cut selected. Choose a destination and paste to move cells. Escape cancels.':'Selected cells '+(cut?'cut':'copied')+'. Escape clears the copy outline.');
   }
   async function clipboard(cut=false){
     if(!api.rows().length||!singleRange())return;if(cut&&selected().some(x=>!writable(x.c))){notice('Open the form to cut cells.',true);return;}
-    const version=generation,items=selected(),box={...bounds()},raw=copyText();try{await navigator.clipboard.writeText(raw);if(version===generation)markClipboard(cut,raw,box,items);}catch{notice('Clipboard access is unavailable. Focus the selected cells and press Ctrl+C or Ctrl+X.',true);}
+    const version=generation,items=selected(),box={...bounds()},withHeaders=!cut&&selectionKind==='all',raw=copyText(withHeaders);try{await navigator.clipboard.writeText(raw);if(version===generation)markClipboard(cut,raw,box,items,withHeaders);}catch{notice('Clipboard access is unavailable. Focus the selected cells and press Ctrl+C or Ctrl+X.',true);}
   }
   async function pasteClipboard(){const version=generation;try{const raw=await navigator.clipboard.readText();if(version===generation)paste(raw);}catch{notice('Focus an editable cell and press Ctrl+V to paste.',true);}}
   function flash(){
@@ -313,7 +321,7 @@ window.createStoreHoursGrid = function(api) {
   document.addEventListener('pointerup',()=>{dragging=false;});
   table.addEventListener('dblclick',e=>{if(e.target.closest('td[data-grid-row]'))beginEdit();});
   table.addEventListener('copy',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;const raw=copyText();e.clipboardData.setData('text/plain',raw);markClipboard(false,raw);});
-  table.addEventListener('cut',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;if(selected().some(x=>!writable(x.c))){notice('Open the form to cut cells.',true);return;}const raw=copyText();e.clipboardData.setData('text/plain',raw);markClipboard(true,raw);});
+  table.addEventListener('cut',e=>{if(editor||!api.rows().length)return;e.preventDefault();if(!singleRange())return;if(selected().some(x=>!writable(x.c))){notice('Open the form to cut cells.',true);return;}const raw=copyText(false);e.clipboardData.setData('text/plain',raw);markClipboard(true,raw);});
   table.addEventListener('paste',e=>{if(editor)return;e.preventDefault();paste(e.clipboardData.getData('text/plain'));});
   table.addEventListener('keydown',e=>{
     if(editor||e.target.closest('button')||!api.rows().length)return;const ctrl=e.ctrlKey||e.metaKey,k=e.key.toLowerCase();
