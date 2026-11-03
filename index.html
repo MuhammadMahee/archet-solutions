@@ -21,6 +21,7 @@
 <link rel="stylesheet" href="/assets/workforce.css">
 <link rel="stylesheet" href="/assets/portal-design.css">
 <link rel="stylesheet" href="/assets/appearance.css">
+<link rel="stylesheet" href="/assets/workforce-screen.css">
 </head>
 <body>
 <div id="boot" class="boot" role="status">Opening your workspace…</div>
@@ -84,12 +85,17 @@
     <header class="topbar"><div class="topbar-start"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="workspace-sidebar" aria-expanded="true" aria-label="Hide sidebar">☰</button><span class="topbar-context">Workspace <span class="topbar-divider">/</span> <span id="workspace-page-label">Sales Update</span></span></div><div class="topbar-end"><time id="workspace-date"></time><span><i class="live-dot"></i>Team workspace</span></div></header>
     <div id="notice" class="notice" role="status" hidden></div>
     <section id="page-workforce" hidden>
-      <header class="wf-hero"><div><div class="wf-eyebrow">PEOPLE + POSSIBILITIES</div><h1>AI Workforce<span>.</span></h1><p>Your team’s next pair of hands.</p></div><div class="wf-hero-actions"><button id="wf-directory" class="subtle">AI employees <span>↗</span></button><button id="wf-settings" class="subtle">Connection &amp; models</button></div></header>
+      <nav class="wf-rail" aria-label="Workforce tools">
+        <a class="wf-home" href="/internal" aria-label="Back to portal" title="Back to portal"><img src="/archet-logo.png" alt="Archet" width="1200" height="800"></a>
+        <span class="wf-mobile-brand">Workforce</span>
+        <div class="wf-hero-actions"><button id="wf-directory" class="subtle" title="AI employees" aria-label="AI employees">AI employees</button><button id="wf-settings" class="subtle" title="Connection &amp; models" aria-label="Connection &amp; models">Connection &amp; models</button></div>
+        <div class="wf-rail-end"><button id="wf-signout" title="Sign out" aria-label="Sign out">Sign out</button></div>
+      </nav>
       <div id="wf-demo" class="wf-banner" hidden>DEMO WORKSPACE · Sample accounts and sales only. Isolated test workspace.</div>
       <div id="wf-error" class="wf-banner wf-error" role="alert" hidden></div>
       <div class="wf-layout" id="wf-layout">
         <aside class="wf-inbox" aria-label="Conversations">
-          <div class="wf-inbox-head"><div><h2>Conversations</h2><span id="wf-chat-count">Your private workspace</span></div><button id="wf-new" class="wf-square" aria-label="New conversation">＋</button></div>
+          <div class="wf-inbox-head"><div><h1>Chats<span class="wf-product-name">Workforce</span></h1><span id="wf-chat-count">Your private workspace</span></div><button id="wf-new" class="wf-square" aria-label="New conversation">＋</button></div>
           <label class="wf-search"><span aria-hidden="true">⌕</span><input id="wf-search" type="search" placeholder="Search conversations" aria-label="Search conversations"></label>
           <div class="wf-list-label">YOUR CHATS <span>HUMAN + AI</span></div>
           <div id="wf-chats" class="wf-chats"></div>
@@ -102,7 +108,7 @@
             <div class="wf-chat-tools"><label><span aria-hidden="true">⌕</span><input id="wf-message-search" type="search" placeholder="Find in loaded messages" aria-label="Find in loaded messages"></label><span>AI messages are labeled</span></div>
             <div id="wf-log" class="wf-log" role="log" aria-label="Conversation messages" aria-live="polite"><button id="wf-older" class="subtle" hidden>Load earlier messages</button><div id="wf-messages"></div></div>
             <div id="wf-tasks" class="wf-tasks" aria-label="AI assignments"></div>
-            <form id="wf-composer" class="wf-composer"><label class="sr-only" for="wf-input">Message AI employees</label><textarea id="wf-input" rows="2" maxlength="4000" placeholder="Ask your team to look into something…" required></textarea><div class="wf-composer-bottom"><label class="wf-assign"><input id="wf-invoke" type="checkbox" checked> Auto-reply with Manager</label><span class="wf-enter-hint">Enter to send · Shift + Enter for a new line</span><button type="submit" class="primary" id="wf-send" aria-label="Send message">Send ↗</button></div></form>
+            <form id="wf-composer" class="wf-composer"><label class="sr-only" for="wf-input">Message AI employees</label><textarea id="wf-input" rows="1" maxlength="4000" placeholder="Type a message" required></textarea><div class="wf-composer-bottom"><label class="wf-assign"><input id="wf-invoke" type="checkbox" checked> Auto-reply with Manager</label><span class="wf-enter-hint">Enter to send · Shift + Enter for a new line</span><button type="submit" class="primary" id="wf-send" aria-label="Send message">Send ↗</button></div></form>
           </div>
         </div>
       </div>
@@ -332,6 +338,7 @@ async function showPage(name) {
   if (!canOpen(name)) { notice('You do not have access to this page. Contact your administrator.',true); return; }
   if (name === 'compliance') { location.assign('/compliance'); return; }
   if (name === 'spreadsheet') { location.assign('/spreadsheet'); return; }
+  if (name === 'workforce' && location.pathname !== '/ai-workforce') { location.assign('/ai-workforce'); return; }
   if (name === 'users' && currentUser?.role !== 'admin') return;
   if (name === 'invoices' && !window.invoiceDashboard.allowed()) return;
   if(name!=='users')hideAccountPasswords();

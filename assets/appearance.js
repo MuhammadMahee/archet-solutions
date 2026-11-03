@@ -29,7 +29,7 @@
   window.archetAppearance = {dealer};
   window.addEventListener('storage', event => { if (event.key === key) apply(event.newValue); });
   document.addEventListener('DOMContentLoaded', () => {
-    for (const selector of ['.topbar', '#login .login-card', '.sheet-format-bar', '#sheet-login-form']) {
+    for (const selector of ['.topbar', '#login .login-card', '.sheet-format-bar', '#sheet-login-form', '.wf-rail-end']) {
       const host = document.querySelector(selector);
       if (!host) continue;
       const button = document.createElement('button');

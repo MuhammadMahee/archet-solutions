@@ -41,6 +41,7 @@ window.createWorkforceControls = function(host) {
       archive:'<path d="M4 8v13h16V8M9 12h6"/><rect x="3" y="3" width="18" height="5" rx="1"/>',
       bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-9 12h6"/>',
       theme:'<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18Z"/>',
+      settings:'<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/>',
       link:'<path d="m10 13 4-4m-5 7-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 2 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 -1)"/>',
       edit:'<path d="m15 4 5 5M4 20l5-1L21 7a3.5 3.5 0 0 0-5-5L4 14Z"/>',
       image:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1"/><path d="m3 17 6-6 4 4 3-3 5 5"/>',
@@ -60,6 +61,11 @@ window.createWorkforceControls = function(host) {
     node.innerHTML=icon(rules.find(([pattern])=>pattern.test(label))?.[1])+'<span>'+esc(label)+'</span>';node.setAttribute('aria-label',label);
   }
   more.innerHTML=icon('more');
+  memoryButton.innerHTML=icon('list');memoryButton.title='AI memory';
+  el('directory').innerHTML=icon('person');
+  el('settings').innerHTML=icon('settings');
+  el('signout').innerHTML=icon('exit');
+  el('signout').onclick=()=>document.getElementById('logout').click();
   document.querySelectorAll('.wf-search>span,.wf-chat-tools label>span').forEach(node=>node.innerHTML=icon('search'));
   const attach=document.querySelector('.wf-image-button');attach.innerHTML=icon('image');attach.title='Attach screenshots';
   el('new').innerHTML=icon('edit');el('new').title='New conversation';
