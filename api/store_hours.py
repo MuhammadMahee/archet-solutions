@@ -42,10 +42,10 @@ COLUMNS = [('date', 'Date'), ('dealer_name', 'Dealer'), ('market', 'Market'), ('
            ('rt_clockin', 'RT Clockin'), ('opening_status', 'Opening Status'),
            ('closing_time', 'Closing Time'), ('camera_out', 'Camera Out View'),
            ('rt_clockout', 'RT Clockout'), ('closing_status', 'Closing Status'),
-           ('chargeback', 'Late Opening Chargeback')]
+           ('chargeback', 'Late Opening Chargeback'), ('remark', 'Remark')]
 TIME_FIELDS = ('opening_time', 'closing_time', 'camera_in', 'camera_out')
 OVERRIDE_FIELDS = {'date', 'dealer_name', 'market', 'store', 'employee', 'store_status', 'rt_clockin',
-                   'opening_status', 'rt_clockout', 'closing_status', 'chargeback', 'camera_in', 'camera_out'}
+                   'opening_status', 'rt_clockout', 'closing_status', 'chargeback', 'camera_in', 'camera_out', 'remark'}
 
 
 def validate_cell_overrides(value):
@@ -57,6 +57,10 @@ def validate_cell_overrides(value):
             if raw not in (None, '', 'Yes', 'No', '#N/A'):
                 raise PortalError('Compliance checks accept only Yes, No, or #N/A.')
             result[field] = raw or None
+        elif field == 'remark':
+            if not isinstance(raw, str) or len(raw) > 1000 or re.search(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', raw):
+                raise PortalError('Remarks accept text up to 1,000 characters.')
+            result[field] = raw
         elif field in ('camera_in', 'camera_out'):
             if raw != CAMERA_OFFLINE:
                 raise PortalError('Camera cells accept a time or Camera Offline.')
@@ -370,6 +374,8 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                 row['dealer_name'] = dealer
                 if compliance():
                     row.update({field: None for field in CHECK_FIELDS})
+                else:
+                    row['remark'] = ''
                 row['source_date'] = day.isoformat()
                 row['cell_overrides'] = overrides
                 row['custom_cells'] = review.get('custom_cells') or {}
@@ -511,7 +517,7 @@ def excel_report(data):
             cell.fill = PatternFill('solid', fgColor='203C66')
             cell.font = Font(name='Calibri',color='FFFFFF', bold=True)
             cell.alignment = Alignment(horizontal='center')
-    widths = [14, 20, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25]
+    widths = [14, 20, 20, 34, 30, 27, 17, 18, 18, 27, 17, 18, 18, 27, 25, 40]
     if compliance():
         widths = [14,20,20,34,30] + [22] * 7
     for n, width in enumerate(widths + [24] * (len(columns)-len(report_columns())), 1):

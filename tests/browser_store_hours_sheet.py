@@ -23,30 +23,40 @@ def check(page):
 
     assert page.locator('.sidebar').count()==0
     expect(page.locator('#sheet-app')).to_be_visible()
+    expect(page.locator('thead')).to_contain_text('Remark')
+    edit('P1','Manager notified; follow up tomorrow.')
+    save()
+    page.reload()
+    expect(cell('P1')).to_have_text('Manager notified; follow up tomorrow.')
+    cell('A1').click()
+    page.keyboard.press('Control+a')
+    page.keyboard.press('Control+c')
+    copied=page.evaluate('navigator.clipboard.readText()')
+    assert 'Remark' in copied.splitlines()[0] and 'Manager notified; follow up tomorrow.' in copied
     page.locator('#sheet-add-column').click()
     page.get_by_label('Column name',exact=True).fill('Review Notes')
     page.get_by_role('button',name='Save column',exact=True).click()
     expect(page.locator('thead')).to_contain_text('Review Notes')
-    edit('P1','Needs follow-up')
-    edit('P2','Checked')
-    go('P1')
+    edit('Q1','Needs follow-up')
+    edit('Q2','Checked')
+    go('Q1')
     page.keyboard.press('Control+b')
-    expect(cell('P1')).to_have_css('font-weight','700')
+    expect(cell('Q1')).to_have_css('font-weight','700')
     page.keyboard.press('Control+z')
-    expect(cell('P1')).to_have_css('font-weight','400')
+    expect(cell('Q1')).to_have_css('font-weight','400')
     page.keyboard.press('Control+y')
-    expect(cell('P1')).to_have_css('font-weight','700')
+    expect(cell('Q1')).to_have_css('font-weight','700')
     page.locator('#sheet-fill-color').fill('#fff0aa')
     page.locator('#sheet-fill-color').dispatch_event('change')
-    expect(cell('P1')).to_have_css('background-color','rgb(255, 240, 170)')
+    expect(cell('Q1')).to_have_css('background-color','rgb(255, 240, 170)')
     go('O1')
     page.locator('#sheet-number-format').select_option('currency')
     expect(cell('O1')).to_have_text('-$10.00')
     save()
     page.reload()
-    expect(cell('P1')).to_have_text('Needs follow-up')
-    expect(cell('P1')).to_have_css('font-weight','700')
-    expect(cell('P1')).to_have_css('background-color','rgb(255, 240, 170)')
+    expect(cell('Q1')).to_have_text('Needs follow-up')
+    expect(cell('Q1')).to_have_css('font-weight','700')
+    expect(cell('Q1')).to_have_css('background-color','rgb(255, 240, 170)')
     # Saved presentation and all custom columns are exported.
     page.get_by_role('button',name='File',exact=True).click()
     page.get_by_role('menuitem',name='Download Excel',exact=True).click()
@@ -55,9 +65,11 @@ def check(page):
     path=ROOT/'test-results/standalone-sheet.xlsx'
     download.value.save_as(str(path))
     book=load_workbook(path)
-    assert book.active['P2'].value=='Review Notes'
-    assert book.active['P3'].value=='Needs follow-up' and book.active['P3'].font.bold
-    assert book.active['P3'].fill.fgColor.rgb.endswith('FFF0AA') or book.active['P3'].fill.fgColor.rgb.endswith('fff0aa')
+    assert book.active['P2'].value=='Remark'
+    assert book.active['P3'].value=='Manager notified; follow up tomorrow.'
+    assert book.active['Q2'].value=='Review Notes'
+    assert book.active['Q3'].value=='Needs follow-up' and book.active['Q3'].font.bold
+    assert book.active['Q3'].fill.fgColor.rgb.endswith('FFF0AA') or book.active['Q3'].fill.fgColor.rgb.endswith('fff0aa')
     assert book.active['O3'].number_format=='$#,##0.00;[Red]-$#,##0.00'
 
     # Default headings expose filters and explicitly prevent deletion.
@@ -67,7 +79,7 @@ def check(page):
     page.get_by_role('button',name='Apply filter',exact=True).click()
     expect(page.locator('#sheet-row-count')).to_contain_text('1 row')
     expect(cell('E1')).to_have_text('CLOSING EMPLOYEE')
-    expect(cell('P1')).to_have_text('Checked')
+    expect(cell('Q1')).to_have_text('Checked')
     page.get_by_role('button',name='File',exact=True).click()
     page.get_by_role('menuitem',name='Download Excel',exact=True).click()
     with page.expect_download() as download:
@@ -81,10 +93,10 @@ def check(page):
     page.locator('#sheet-filter-toggle').click()
 
     # The value bar edits selected cells. Custom names are renameable and removable.
-    go('P2')
+    go('Q2')
     page.locator('#sheet-value').fill('Verified in camera')
     page.locator('#sheet-value').press('Enter')
-    expect(cell('P2')).to_have_text('Verified in camera')
+    expect(cell('Q2')).to_have_text('Verified in camera')
     save()
     page.get_by_role('button',name='Filter Review Notes column custom_1',exact=True).click()
     page.get_by_role('button',name='Rename column',exact=True).click()

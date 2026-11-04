@@ -97,12 +97,12 @@ def test_custom_cells_excel_values_and_formats_are_safe():
     rows[0]['cell_formats']={'custom_1':{'bold':True,'italic':True,'background':'#ffeeaa','color':'#123456','wrap':True,'align':'center'},'custom_2':{'number_format':'currency'}}
     result=sh.excel_report(dict(rows=rows,columns=sh.COLUMNS+[('custom_1','Notes'),('custom_2','Amount')],column_formats={},start='2026-10-20',end='2026-10-20',updated_at=None,coverage={'complete':0,'expected':1}))
     book=load_workbook(result)
-    text=book.active['P3'];amount=book.active['Q3']
+    text=book.active['Q3'];amount=book.active['R3']
     assert text.data_type=='s' and text.value.startswith('=HYPERLINK')
     assert text.font.bold and text.font.italic and text.alignment.wrap_text
     assert text.fill.fgColor.rgb=='00ffeeaa'
     assert amount.value==12.5 and amount.number_format=='$#,##0.00;[Red]-$#,##0.00'
-    assert book.active.auto_filter.ref=='A2:Q6'
+    assert book.active.auto_filter.ref=='A2:R6'
 
 
 @pytest.mark.parametrize('fmt',[

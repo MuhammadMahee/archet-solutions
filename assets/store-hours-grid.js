@@ -145,7 +145,7 @@ window.createStoreHoursGrid = function(api) {
   }
   function parseCell(r,c,raw){
     const field=columns[c][0],s=String(raw??'').trim();
-    if(field.startsWith('custom_')){const value=String(raw??'');if(value.length>1000||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value))throw new Error('Custom cells accept text up to 1,000 characters.');return value;}
+    if(field==='remark'||field.startsWith('custom_')){const value=String(raw??'');if(value.length>1000||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value))throw new Error('Text cells accept up to 1,000 characters.');return value;}
     if(api.choices?.[field]){if(!s)return null;const match=api.choices[field].find(v=>v.toLowerCase()===s.toLowerCase());if(!match)throw new Error('Choose Yes, No, or #N/A for compliance checks.');return match;}
     if(['camera_in','camera_out'].includes(field)){if(s.toLowerCase()==='camera offline')return 'Camera Offline';return parseTime(s);}
     if(timeColumns.includes(field)){if(/^No Clock (In|Out)$/i.test(s))return null;return parseTime(s.includes('T')?s.split('T')[1]:s);}

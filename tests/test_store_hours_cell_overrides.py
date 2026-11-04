@@ -11,6 +11,24 @@ from api.portal import PortalError
 DAY = date(2026, 10, 20)
 
 
+def test_remark_is_saved_text_and_survives_source_refresh():
+    store = dict(dealer='Connect', store_id='1', store='Store', market='HOUSTON')
+    note = 'Follow up with manager.\n' + 'x' * 300
+    overrides = sh.validate_cell_overrides({'remark': note})
+    review = dict(dealer='Connect', store_id='1', report_date=DAY, revision=1, cell_overrides=overrides)
+    row = sh.build_rows([store], [], [review], [], DAY, DAY)[0]
+    assert row['remark'] == note and row['source_values']['remark'] == ''
+    assert ('remark', 'Remark') in sh.COLUMNS
+    review['cell_overrides'] = {}
+    assert sh.build_rows([store], [], [review], [], DAY, DAY)[0]['remark'] == ''
+    for invalid in [None, 12, 'x' * 1001, 'bad\x00text']:
+        with pytest.raises(PortalError):
+            sh.validate_cell_overrides({'remark': invalid})
+    with index.app.test_request_context('/api/internal/compliance/sheet'):
+        with pytest.raises(PortalError):
+            sh.validate_cell_overrides({'remark': note})
+
+
 @pytest.mark.parametrize('value', [
     [], {'dealer': 'Changed'}, {'date': '2026-02-30'}, {'date': '2099-01-01'},
     {'date': None}, {'rt_clockin': '25:00'}, {'rt_clockout': '10:00+01:00'},
