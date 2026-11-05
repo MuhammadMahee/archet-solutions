@@ -212,7 +212,7 @@
     $('sheet-font-family').value=fmt.font_family||'Calibri';
     $('sheet-number-format').value=fmt.number_format||data?.column_formats?.[field]||'auto';$('sheet-font-size').value=fmt.font_size||10;$('sheet-align').value=fmt.align||'left';$('sheet-text-color').value=fmt.color||'#202124';$('sheet-fill-color').value=fmt.background||'#ffffff';
   }
-  grid=window.createStoreHoursGrid({root,table,columns,fields,choices:base.compliance?Object.fromEntries(base.checks.map(([key])=>[key,['Yes','No','#N/A']])):{},gutter:true,autosave:true,moveOnPaste:true,animateSelection:true,text:(k,v)=>formatted(k,v),key,message,rows:visible,editing:()=>true,busy:()=>loading,user:()=>user?.id||'',today:()=>data?.today||today,
+  grid=window.createStoreHoursGrid({root,table,columns,fields,choices:base.compliance?Object.fromEntries(base.checks.map(([key])=>[key,['Yes','No','#N/A']])):{},gutter:true,freezeColumns:base.compliance?0:5,autosave:true,moveOnPaste:true,animateSelection:true,text:(k,v)=>formatted(k,v),key,message,rows:visible,editing:()=>true,busy:()=>loading,user:()=>user?.id||'',today:()=>data?.today||today,
     manual:(r,c)=>{const row=visible()[r],field=columns[c][0];return fields.includes(field)||Object.hasOwn(field.startsWith('custom_')?row.custom_cells||{}:row.cell_overrides||{},field);},
     cellFormat:(r,c)=>({...visible()[r]?.cell_formats?.[columns[c][0]]}),onSelection:selectionChanged,
     apply(changes){const shown=rows.slice(page*100,(page+1)*100);for(const change of changes){const {r,c,value,reset,kind}=change,saved=shown[r],previous=current(saved),field=columns[c][0],row={...previous,cell_overrides:{...previous.cell_overrides},custom_cells:{...previous.custom_cells},cell_formats:{...previous.cell_formats}};

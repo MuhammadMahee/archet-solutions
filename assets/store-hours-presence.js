@@ -67,8 +67,9 @@ window.createStoreHoursPresence=function(api){
         const key=`${peer.client_id}:${index}`;keptRanges.add(key);let outline=rangeOutlines.get(key);
         if(!outline){outline=document.createElement('div');outline.className='sheet-peer-range';outline.dataset.clientId=peer.client_id;wrap.append(outline);rangeOutlines.set(key,outline);}
         const rect=first.getBoundingClientRect(),end=last.getBoundingClientRect();outline.style.setProperty('--person-color',colors.get(peer.user_id));
+        outline.style.zIndex=first.classList.contains('sh-frozen')?'5':'2';
         outline.dataset.peerRange=`${first.dataset.address}:${last.dataset.address}`;outline.setAttribute('aria-label',`${peer.name} selected ${outline.dataset.peerRange}`);
-        Object.assign(outline.style,{left:(rect.left-viewport.left+wrap.scrollLeft-wrap.clientLeft)+'px',top:(rect.top-viewport.top+wrap.scrollTop-wrap.clientTop)+'px',width:(end.right-rect.left)+'px',height:(end.bottom-rect.top)+'px'});
+        Object.assign(outline.style,{left:(rect.left-viewport.left+wrap.scrollLeft-wrap.clientLeft)+'px',top:(rect.top-viewport.top+wrap.scrollTop-wrap.clientTop)+'px',width:Math.max(0,Math.max(end.right,first.classList.contains('sh-frozen')&&!last.classList.contains('sh-frozen')?(table.querySelector('tbody .sh-frozen-edge')?.getBoundingClientRect().right||end.right):end.right)-rect.left)+'px',height:(end.bottom-rect.top)+'px'});
       }
       const r=shown.get(identity(peer.selection)),c=columns.findIndex(column=>column[0]===peer.selection.column),cell=r===undefined?null:table.tBodies[0]?.rows[r]?.cells[c+1];
       if(c<0||!cell)continue;
@@ -87,6 +88,7 @@ window.createStoreHoursPresence=function(api){
       outline.setAttribute('aria-label',`${caption} ${peer.editing?'editing':'viewing'} ${columns[c][1]}`);
       const rect=cell.getBoundingClientRect(),position=`${r}:${c}`,depth=occupants.get(position)||0;occupants.set(position,depth+1);
       const inset=(depth%4)*2;outline.style.setProperty('--person-color',colors.get(peer.user_id));
+      outline.style.zIndex=cell.classList.contains('sh-frozen')?'6':'3';
       Object.assign(outline.style,{left:(rect.left-viewport.left+wrap.scrollLeft-wrap.clientLeft+inset)+'px',top:(rect.top-viewport.top+wrap.scrollTop-wrap.clientTop+inset)+'px',width:Math.max(0,rect.width-inset*2)+'px',height:Math.max(0,rect.height-inset*2)+'px'});
       label.style.top=(depth*16)+'px';
     }

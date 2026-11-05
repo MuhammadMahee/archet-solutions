@@ -13,3 +13,12 @@ body{font-family:Archet UI,system-ui,sans-serif;background:#f4f6fa;color:#20384e
 @media(max-width:800px){.sheet-header .sheet-logo{width:54px;min-width:54px;height:40px}}
 @media(max-width:600px){.sheet-header{grid-template-columns:54px minmax(0,1fr) auto}.sheet-header #sheet-account{justify-self:end}}
 @media print{.sheet-header{background:white;color:#18384c}.sheet-heading h1{color:#18384c}}
+/* Opening & Closing keeps the identifying columns through Employee in view. */
+#sh-table[role=grid] tbody td[data-grid-row].sh-frozen{position:sticky;left:var(--sh-frozen-left);z-index:4;background-color:#fff}
+#sh-table[role=grid] tbody td[data-grid-row].sh-frozen.sh-cell-active{z-index:5}
+#sh-table.sh-freeze-active thead th{z-index:8}
+#sh-table.sh-freeze-active thead th.sh-frozen{left:var(--sh-frozen-left);z-index:9}
+#sh-table.sh-freeze-active thead th:first-child{z-index:10}
+#sh-table.sh-freeze-active tbody th{z-index:7}
+#sh-table .sh-frozen-edge{border-right:2px solid #8fa6a1;box-shadow:3px 0 5px #173e3320}
+@media print{#sh-table[role=grid] .sh-frozen{position:static!important;box-shadow:none}}

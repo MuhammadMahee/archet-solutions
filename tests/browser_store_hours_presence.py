@@ -63,7 +63,7 @@ def check(page):
     expect(ranges.nth(1)).to_have_attribute('data-peer-range','G3:G4')
     go(member,'E2');member.keyboard.press('Shift+Space')
     expect(ranges).to_have_count(1,timeout=15000)
-    expect(ranges).to_have_attribute('data-peer-range','A2:O2')
+    expect(ranges).to_have_attribute('data-peer-range','A2:P2')
     go(member,'E2');member.keyboard.press('Control+Space')
     expect(ranges).to_have_attribute('data-peer-range','E1:E7',timeout=15000)
     go(member,'E1:G3')

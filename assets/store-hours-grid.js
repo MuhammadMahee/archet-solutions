@@ -13,6 +13,25 @@ window.createStoreHoursGrid = function(api) {
   const cell=(r,c)=>table.tBodies[0]?.rows[r]?.cells[c+offset];
   const value=(r,c)=>api.rows()[r]?.[columns[c][0]]??null;
   const scrollWrap=table.parentElement,reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
+  let frozenWidth=0;
+  function freezeColumns(){
+    if(!api.freezeColumns||!table.tHead?.rows.length)return;
+    const heads=[...table.tHead.rows[0].cells],count=Math.min(api.freezeColumns+offset,heads.length),zoom=Number(table.style.zoom)||1;
+    const sizes=heads.slice(0,count).map(th=>th.getBoundingClientRect().width);
+    const total=sizes.reduce((a,b)=>a+b,0);
+    // Keep room for editable columns on small screens and at larger zoom levels.
+    const enabled=total>0&&scrollWrap.clientWidth>=total+180;
+    frozenWidth=enabled?total:0;
+    table.classList.toggle('sh-freeze-active',enabled);
+    for(const row of table.rows){let left=0;
+      for(let i=offset;i<count;i++){
+        if(i===offset)left=sizes.slice(0,offset).reduce((a,b)=>a+b,0);
+        const td=row.cells[i];if(!td)continue;
+        td.classList.toggle('sh-frozen',enabled);td.classList.toggle('sh-frozen-edge',enabled&&i===count-1);
+        td.style.setProperty('--sh-frozen-left',left/zoom+'px');left+=sizes[i];
+      }
+    }
+  }
   let horizontalScroll=null,scrollFrame=0;
   function stopScroll(){cancelAnimationFrame(scrollFrame);scrollFrame=0;horizontalScroll=null;}
   function scrollHorizontally(left){
@@ -31,7 +50,8 @@ window.createStoreHoursGrid = function(api) {
     scrollFrame=requestAnimationFrame(tick);
   }
   function revealColumn(target){
-    const viewport=scrollWrap.getBoundingClientRect(),rect=target.getBoundingClientRect(),gutter=offset?table.tHead.rows[0].cells[0].getBoundingClientRect().width:0;
+    if(target.classList.contains('sh-frozen')){stopScroll();return;}
+    const viewport=scrollWrap.getBoundingClientRect(),rect=target.getBoundingClientRect(),gutter=frozenWidth||(offset?table.tHead.rows[0].cells[0].getBoundingClientRect().width:0);
     const space=scrollWrap.clientWidth-gutter,padding=api.animateSelection?Math.max(0,Math.min(32,(space-rect.width)/2)):0;
     let left=scrollWrap.scrollLeft;
     if(rect.left<viewport.left+gutter||rect.width>scrollWrap.clientWidth-gutter)left+=rect.left-viewport.left-gutter;
@@ -46,20 +66,21 @@ window.createStoreHoursGrid = function(api) {
   reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches&&horizontalScroll){const left=horizontalScroll.left;stopScroll();scrollWrap.scrollLeft=left;}});
   const selectionOutline=document.createElement('div');selectionOutline.className='sh-selection-outline';selectionOutline.hidden=true;selectionOutline.setAttribute('aria-hidden','true');
   if(api.animateSelection){table.classList.add('sh-animated-selection');table.parentElement.append(selectionOutline);}
-  function drawSelection(){
+  function drawSelection(immediate=false){
     if(!api.animateSelection)return;
     const target=cell(active.r,active.c);
     if(!target||editor||!signature){selectionOutline.hidden=true;return;}
     const wrap=table.parentElement,rect=target.getBoundingClientRect(),viewport=wrap.getBoundingClientRect(),initial=selectionOutline.hidden;
-    if(initial)selectionOutline.style.transition='none';
+    selectionOutline.style.zIndex=target.classList.contains('sh-frozen')?'6':'3';
+    if(initial||immediate)selectionOutline.style.transition='none';
     Object.assign(selectionOutline.style,{transform:`translate3d(${rect.left-viewport.left+wrap.scrollLeft-wrap.clientLeft}px,${rect.top-viewport.top+wrap.scrollTop-wrap.clientTop}px,0)`,width:rect.width+'px',height:rect.height+'px'});
     selectionOutline.hidden=false;
-    if(initial){selectionOutline.getBoundingClientRect();selectionOutline.style.transition='';}
+    if(initial||immediate){selectionOutline.getBoundingClientRect();selectionOutline.style.transition='';}
   }
   const clipOutline=document.createElement('div');clipOutline.className='sh-clipboard-outline';clipOutline.hidden=true;clipOutline.setAttribute('aria-hidden','true');table.parentElement.append(clipOutline);
   function clearClipboard(){clipboardRange=null;clipOutline.hidden=true;}
   function drawClipboard(){
-    if(!clipboardRange){clipOutline.hidden=true;return;}const b=clipboardRange.bounds,first=cell(b.top,b.left),last=cell(b.bottom,b.right);if(!first||!last){clearClipboard();return;}const wrap=table.parentElement,a=first.getBoundingClientRect(),z=last.getBoundingClientRect(),w=wrap.getBoundingClientRect();Object.assign(clipOutline.style,{left:(a.left-w.left+wrap.scrollLeft-wrap.clientLeft)+'px',top:(a.top-w.top+wrap.scrollTop-wrap.clientTop)+'px',width:(z.right-a.left)+'px',height:(z.bottom-a.top)+'px'});clipOutline.dataset.operation=clipboardRange.cut?'cut':'copy';clipOutline.hidden=false;
+    if(!clipboardRange){clipOutline.hidden=true;return;}const b=clipboardRange.bounds,first=cell(b.top,b.left),last=cell(b.bottom,b.right);if(!first||!last){clearClipboard();return;}const wrap=table.parentElement,a=first.getBoundingClientRect(),z=last.getBoundingClientRect(),w=wrap.getBoundingClientRect();Object.assign(clipOutline.style,{left:(a.left-w.left+wrap.scrollLeft-wrap.clientLeft)+'px',top:(a.top-w.top+wrap.scrollTop-wrap.clientTop)+'px',width:Math.max(0,(first.classList.contains('sh-frozen')&&!last.classList.contains('sh-frozen')?Math.max(z.right,w.left+frozenWidth):z.right)-a.left)+'px',height:(z.bottom-a.top)+'px'});clipOutline.style.zIndex=first.classList.contains('sh-frozen')?'6':'3';clipOutline.dataset.operation=clipboardRange.cut?'cut':'copy';clipOutline.hidden=false;
   }
   const bounds=()=>({top:Math.min(anchor.r,active.r),bottom:Math.max(anchor.r,active.r),left:Math.min(anchor.c,active.c),right:Math.max(anchor.c,active.c)});
   const ranges=()=>[...new Map([...extraRanges,bounds()].map(b=>[JSON.stringify(b),{...b}])).values()];
@@ -132,7 +153,7 @@ window.createStoreHoursGrid = function(api) {
       }
     });
     try{welcome.hidden=!rows.length||localStorage.getItem(seenKey())==='seen';}catch{welcome.hidden=!rows.length;}
-    painted=new Map();paintedActive=null;active=clamp(active);anchor=clamp(anchor);paint();
+    freezeColumns();painted=new Map();paintedActive=null;active=clamp(active);anchor=clamp(anchor);paint();
   }
   function parseTime(raw){
     const s=String(raw??'').trim();if(['','-','—'].includes(s))return null;
@@ -336,7 +357,8 @@ window.createStoreHoursGrid = function(api) {
     if(e.key==='F2'){e.preventDefault();beginEdit();return;}
     if(e.key.length===1&&!ctrl&&!e.altKey){e.preventDefault();beginEdit(e.key);}
   });
-  const layoutChanged=()=>{if(horizontalScroll){const target=cell(active.r,active.c);if(target)revealColumn(target);else stopScroll();}drawClipboard();drawSelection();};
+  const layoutChanged=()=>{freezeColumns();if(horizontalScroll){const target=cell(active.r,active.c);if(target)revealColumn(target);else stopScroll();}drawClipboard();drawSelection();};
+  if(api.freezeColumns)scrollWrap.addEventListener('scroll',()=>{drawClipboard();drawSelection(true);},{passive:true});
   window.addEventListener('resize',layoutChanged);
   if(api.animateSelection){const observer=new ResizeObserver(layoutChanged);observer.observe(table);observer.observe(table.parentElement);}
   return {refresh,reset,resetHistory,borders,layout:layoutChanged,selectCell:(r,c)=>select(r,c),restoreCell:(r,c)=>select(r,c,false,false,false),isSelecting:()=>dragging,isEditing:()=>!!editor,finishEditing:()=>!editor||finishEditor?.(),command,selection:()=>({active:{...active},cells:selected(),ranges:ranges(),kind:structuralSelection()}),setValue:(value,position=active)=>commit([{...position,value}],'Edit'),format:delta=>commit(selected().map(x=>({...x,kind:'format',value:delta===null?{}:{...api.cellFormat(x.r,x.c),...delta}})),'Format'),focus:()=>{if(root.getClientRects().length)paint(true);}};
