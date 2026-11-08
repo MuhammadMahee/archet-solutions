@@ -286,6 +286,12 @@ def dark_logo():
     return send_from_directory(BASE_DIR, "archet-logo-dark.png")
 
 
+@app.get("/apple-touch-icon.png")
+@app.get("/apple-touch-icon-precomposed.png")
+def apple_touch_icon():
+    return send_from_directory(BASE_DIR, "apple-touch-icon.png", mimetype="image/png")
+
+
 # ---------------------------------------------------------------------------
 # Route: Lead capture endpoint for the B2B quote form.
 # ---------------------------------------------------------------------------
