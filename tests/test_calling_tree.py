@@ -48,6 +48,21 @@ def test_same_store_id_in_different_dealers_is_not_merged():
     assert [r['dealer'] for r in rows] == ['Connect','ARM']
 
 
+def test_directory_only_stores_preserve_internal_ids_and_dealer_labels():
+    sid='WB-abcdef0123456789abcdef01'
+    _,rows=calling_tree.parse_workbook(workbook([
+        ['ARBF Wireless',sid.upper(),'TOTAL','Example Total Store'],
+        ['MAGIC','WB-abcdef0123456789abcdef02','Dallas','Example Magic Store']]))
+    assert rows[0]['store_id']==sid
+    assert rows[0]['dealer']=='ARBF'
+    assert rows[0]['original_dealer']=='ARBF Wireless'
+    assert rows[1]['dealer']=='MAGIC'
+    day=date(2026,11,1)
+    result=sales.restrict_to_roster([],rows,{},[],day,day)
+    assert len(result)==2
+    assert all(r['unmatched'] and r['total_boxes'] is None for r in result)
+
+
 def test_legacy_arm_names_map_to_new_dealers():
     _,rows=calling_tree.parse_workbook(workbook([['ARM1','S1','Reno','One'],['ARM2','S2','Reno','Two']]))
     assert [r['dealer'] for r in rows] == ['ARM']

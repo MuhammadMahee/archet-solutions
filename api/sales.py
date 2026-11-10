@@ -41,7 +41,7 @@ SOURCES = {'connect': 'Connect', 'california': 'California', 'srh': 'SRH',
 # Historical source IDs remain readable; only active accounts are synchronized.
 ACTIVE_SOURCES = {k: v for k, v in SOURCES.items() if k not in RETIRED_SOURCES}
 COLORS = {'Connect': '#095570', 'California': '#a92d49', 'SRH': '#a06118',
-          'ARM': '#176b56', 'ARBF': '#7646a5'}
+          'ARM': '#176b56', 'ARBF': '#7646a5', 'MAGIC': '#7646a5'}
 METRICS = ('new_activation', 'upgrade', 'reactivation', 'bts', 'hsi',
            'accessory', 'total_boxes', 'qpay')
 COLUMNS = [('dealer', 'Dealer'), ('market', 'Market'), ('store', 'Store'),

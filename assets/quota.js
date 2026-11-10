@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const el = id => document.getElementById('quota-' + id);
-  const colors = {Connect:'#095570',California:'#a92d49',SRH:'#a06118',ARM:'#176b56',ARBF:'#7646a5'};
+  const colors = {Connect:'#095570',California:'#a92d49',SRH:'#a06118',ARM:'#176b56',ARBF:'#7646a5',MAGIC:'#7646a5'};
   const dealers = Object.keys(colors);
   let data = null, sequence = 0, previewSequence = 0, pending = null, syncing = false, syncSequence = 0;
   const message = text => { el('message').textContent = text; el('message').hidden = !text; };

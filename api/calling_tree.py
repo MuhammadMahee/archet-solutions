@@ -27,7 +27,8 @@ REQUIRED = {'Dealer','Store ID','Market','Store Name'}
 ALIASES = {'connect':'Connect','california':'California','spdica':'California',
            'srh':'SRH','supreme':'SRH','amq':'AMQ','arm':'ARM',
            'arm1':'AMQ','arm2':'ARM','armwireless':'ARM','dfwireless':'AMQ',
-           'arbf':'ARBF','arbfwirelessmetro':'ARBF'}
+           'arbf':'ARBF','arbfwirelessmetro':'ARBF','arbfwireless':'ARBF',
+           'magic':'MAGIC'}
 DEALERS = {'connect':'Connect','california':'California','srh':'SRH','arm1':'AMQ','arm2':'ARM','arbf':'ARBF'}
 
 
@@ -90,10 +91,14 @@ def parse_workbook(data, worksheet=''):
             alias=re.sub(r'[^a-z0-9]','',mapped['original_dealer'].lower())
             dealer=ALIASES.get(alias)
             if not dealer:
-                raise PortalError(f'Row {idx}: unknown dealer. Use Connect, California, SRH, ARM or ARBF.')
+                raise PortalError(f'Row {idx}: unknown dealer. Use Connect, California, SRH, ARM, ARBF or MAGIC.')
             if not active_dealer(dealer):
                 continue
-            mapped.update(dealer=dealer,store_id=mapped['store_id'].upper(),
+            # Existing directory IDs are case-sensitive and are not RT-POS IDs.
+            store_id=mapped['store_id']
+            store_id=('WB-'+store_id[3:].lower() if re.fullmatch(r'WB-[a-f0-9]{24}',store_id,re.I)
+                      else store_id.upper())
+            mapped.update(dealer=dealer,store_id=store_id,
                           market=mapped['market'].upper(),store=mapped['store'].upper(),row_number=idx)
             key=(dealer,mapped['store_id'])
             if key in seen:
