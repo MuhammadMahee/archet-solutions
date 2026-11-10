@@ -157,6 +157,7 @@
     table.tHead.replaceChildren(header);table.tBodies[0].replaceChildren();page=Math.min(page,Math.max(0,Math.ceil(rows.length/100)-1));
     for(const [i,row] of visible().entries()){
       const tr=document.createElement('tr'),number=document.createElement('th');number.scope='row';number.textContent=page*100+i+1;number.dataset.sheetRow=i;tr.append(number);
+      if(row.source_warning){number.textContent+=' ⚠';number.title=row.source_warning;number.setAttribute('aria-label','Row '+(page*100+i+1)+': '+row.source_warning);tr.title=row.source_warning;}
       for(const [field] of columns){const td=document.createElement('td'),fmt=row.cell_formats?.[field]||{};td.textContent=formatted(field,row[field],fmt);td.dataset.column=field;const tone=base.tone(field,row[field]);if(tone)td.classList.add('sh-'+tone);if(Object.hasOwn(row.cell_overrides||{},field))td.classList.add('sh-cell-corrected');cellStyle(td,fmt);const colors=base.colors(field,row[field]);if(colors){td.style.color=colors[0];td.style.backgroundColor=colors[1];}tr.append(td);}table.tBodies[0].append(tr);
     }
     $('sheet-empty').hidden=!!rows.length;$('sheet-row-count').textContent=`${rows.length.toLocaleString()} row${rows.length===1?'':'s'}${Object.keys(filterRules).length?' · '+Object.keys(filterRules).length+' column filters':''}`;
@@ -373,7 +374,27 @@
     const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download=`${base.compliance?'compliance':'opening-closing'}-sheet-${from}-${to}.xlsx`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return true;
   }
   async function copySnapshot(){if(!data)return;if(!await save())return;try{const canvas=base.render({...data,rows:rows.map(current)},{dealer:$('sheet-dealer').value,market:$('sheet-market').value}),blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);message('Snapshot copied.');}catch(e){message(e.message||'Could not copy the snapshot.',true);}}
-  async function sync(){if(!await save())return;loading=true;dirty();try{let result,continuation=false;do{message('Syncing source time punches…');result=await api('store-hours/refresh','POST',continuation?{continue:true}:{});continuation=true;}while(result.status!=='busy'&&result.pending&&result.workers?.some(w=>w.completed));loading=false;await load();message(result.remaining?'Some source days could not be fetched. Saved data was kept.':'Source sync completed. Your saved corrections and formats are preserved.',!!result.remaining);}catch(e){message(e.message,true);}finally{loading=false;dirty();}}
+  async function sync(){
+    if(!await save())return;
+    loading=true;dirty();
+    try{
+      let result,continuation=false,warnings=0;const failures=new Map();
+      do{
+        message('Syncing source time punches…');
+        result=await api('store-hours/refresh','POST',continuation?{continue:true}:{});
+        warnings+=result.warnings||0;
+        for(const worker of result.workers||[])if(worker.error)failures.set(worker.source,worker.error);
+        continuation=true;
+      }while(result.status!=='busy'&&result.pending&&result.workers?.some(w=>w.completed));
+      loading=false;await load();
+      if(result.status==='busy'){message('Another source sync is running. Reload after it finishes.');return;}
+      const names={connect:'Connect',california:'California',srh:'SRH',arm2:'ARM',arbf:'ARBF'};
+      const reasons={cookies_expired:'login expired',missing_cookies:'login needs configuration',source_timeout:'request timed out',invalid_report_or_expired_cookies:'invalid export or expired login'};
+      const details=[...failures].map(([source,reason])=>(names[source]||source)+': '+(reasons[reason]||reason)).join('; ');
+      const warning=warnings?' '+warnings+' source punch'+(warnings===1?' has':'es have')+' a clock-out before clock-in. Original times are preserved; flagged rows need review in RT-POS.':'';
+      message((result.remaining?result.remaining+' source days could not be fetched'+(details?' ('+details+')':'')+'. Saved data was kept. Use Sync RT-POS sources to retry.':'Source sync completed. Your saved corrections and formats are preserved.')+warning,!!result.remaining||warnings>0);
+    }catch(e){message(e.message,true);}finally{loading=false;dirty();}
+  }
   function closeMenu(){popup?.remove();popup=null;document.querySelectorAll('#sheet-menu button').forEach(b=>b.setAttribute('aria-expanded','false'));}
   async function changePassword(){
     if(!await save())return;

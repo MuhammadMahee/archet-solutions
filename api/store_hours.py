@@ -20,6 +20,7 @@ from psycopg.types.json import Jsonb
 
 from flask import g, jsonify, request, send_file
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 import xlrd
@@ -37,6 +38,7 @@ from api.sales import (SOURCES, ACTIVE_SOURCES, COLORS, MAX_REPORT_BYTES, Report
 
 REPORT_URL = 'https://myrtpos.com/newbdi/TimePunches.fwx'
 LOCK_ID = 731043260927
+PUNCH_ORDER_WARNING = 'RT-POS clock-out is earlier than clock-in. Original source times are preserved; verify this punch in RT-POS.'
 COLUMNS = [('date', 'Date'), ('dealer_name', 'Dealer'), ('market', 'Market'), ('store', 'Store'),
            ('employee', 'Employee'), ('store_status', 'Opening Status'),
            ('opening_time', 'Opening Time'), ('camera_in', 'Camera In View'),
@@ -158,8 +160,9 @@ def read_report(data):
             # A missing date cannot advance the import watermark or be assigned to a day.
             raise ReportError('missing_clockin_date')
         clock_out = parse_datetime(cell('clockouttime'))
-        if clock_out and clock_out < clock_in:
-            raise ReportError('invalid_clockout_date')
+        # A parseable source time can still be inconsistent. Keep both values for
+        # review instead of rejecting every store/day in the export. Only camera
+        # observations determine compliance and chargebacks.
         sid, store = clean(cell('custno')).upper(), store_name(clean(cell('company')).upper())
         if not sid and not store:
             raise ReportError('missing_store_identity')
@@ -234,7 +237,8 @@ def source_worker(source, cookies):
             opener = open_source(cookies, deadline=deadline, report_url=REPORT_URL)
             rows = fetch_report(opener, job, end, deadline)
             save_punches(conn, source, job, end, rows)
-            return {'source': source, 'completed': (end-job).days+1, 'rows': len(rows)}
+            warnings = sum(bool(r['clock_out'] and r['clock_out'] < r['clock_in']) for r in rows)
+            return {'source': source, 'completed': (end-job).days+1, 'rows': len(rows), 'warnings': warnings}
         except (ReportError, OSError) as exc:
             code = source_error(exc)
             conn.execute("""update public.store_hours_imports set status='error',error_code=%s
@@ -259,7 +263,8 @@ def run_sync(continuation=False):
             counts = conn.execute("""select count(*) filter(where status='pending') as pending,
                 count(*) filter(where status='error') as failed from public.store_hours_imports where source_id = any(%s)""", (list(ACTIVE_SOURCES),)).fetchone()
             return dict(status='partial' if counts['pending'] or counts['failed'] else 'complete',
-                        remaining=counts['pending'] + counts['failed'], workers=workers, **counts)
+                        remaining=counts['pending'] + counts['failed'], workers=workers,
+                        warnings=sum(w.get('warnings',0) for w in workers), **counts)
         finally:
             conn.execute('select pg_advisory_unlock(%s)', (LOCK_ID,))
 
@@ -373,6 +378,8 @@ def build_rows(roster, punches, reviews, imports, start, end, manual_employees=(
                            scheduled_closing_time=iso_time(schedule.get('closing_time')),
                            **{k: iso_time(review.get(k) if review.get(k) is not None else schedule.get(k)) for k in TIME_FIELDS})
                 row['dealer_name'] = dealer
+                row['source_warning'] = PUNCH_ORDER_WARNING if any(
+                    r['clock_out'] and r['clock_out'] < r['clock_in'] for r in shifts) else ''
                 if compliance():
                     row.update({field: None for field in CHECK_FIELDS})
                 else:
@@ -500,6 +507,8 @@ def excel_report(data):
         sheet.append([row.get(key) if key == 'chargeback' and row.get(key) is not None else display_value(key, row.get(key)) for key, _ in columns])
         for col, (key, _) in enumerate(columns, 1):
             cell = sheet.cell(sheet.max_row, col)
+            if row.get('source_warning') and key in ('employee','rt_clockin','rt_clockout'):
+                cell.comment = Comment(row['source_warning'], 'RT-POS source review')
             if isinstance(cell.value, str):
                 cell.data_type = 's'  # Imported names are never executable Excel formulas.
             if key == 'chargeback' and isinstance(cell.value, (int, float)):

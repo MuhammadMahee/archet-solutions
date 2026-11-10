@@ -49,6 +49,39 @@ def test_valid_empty_export():
     assert sh.read_report(report_csv([])) == []
 
 
+def test_inconsistent_source_times_are_preserved_and_flagged_without_blocking_other_rows():
+    punches=sh.read_report(report_csv([
+        ['DALLAS','1','STORE','u','First','Person','10/20/2026 22:10:00','10/20/2026 20:08:00'],
+        ['DALLAS','1','STORE','v','Second','Person','10/20/2026 10:00:00','10/20/2026 20:00:00']]))
+    assert len(punches)==2
+    assert punches[0]['clock_in']==datetime(2026,10,20,22,10)
+    assert punches[0]['clock_out']==datetime(2026,10,20,20,8)
+    for row in punches:row['source_id']='srh'
+    roster=[dict(dealer='SRH',store_id='1',store='STORE',market='DALLAS')]
+    rows=sh.build_rows(roster,punches,[],[],DAY,DAY)
+    first=next(r for r in rows if r['employee']=='First Person')
+    second=next(r for r in rows if r['employee']=='Second Person')
+    assert first['source_warning']==sh.PUNCH_ORDER_WARNING and not second['source_warning']
+    assert first['rt_clockin'].endswith('22:10:00') and first['rt_clockout'].endswith('20:08:00')
+    assert first['chargeback'] is None
+    book=load_workbook(sh.excel_report(dict(rows=rows,start=DAY.isoformat(),end=DAY.isoformat(),updated_at=None,coverage={'complete':1,'expected':1})))
+    assert any(cell.comment and sh.PUNCH_ORDER_WARNING in cell.comment.text for row in book.active for cell in row)
+
+
+def test_worker_saves_valid_export_and_reports_source_time_warning(monkeypatch):
+    records=[dict(clock_in=datetime(2026,10,20,22,10),clock_out=datetime(2026,10,20,20,8))]
+    conn=SimpleNamespace(execute=lambda *args:SimpleNamespace(fetchone=lambda:{'day':DAY}))
+    monkeypatch.setattr(sh,'connect',lambda:nullcontext(conn))
+    monkeypatch.setattr(sh,'today',lambda:DAY)
+    monkeypatch.setattr(sh,'open_source',lambda *args,**kwargs:object())
+    monkeypatch.setattr(sh,'fetch_report',lambda *args:records)
+    saved=[]
+    monkeypatch.setattr(sh,'save_punches',lambda *args:saved.append(args))
+    result=sh.source_worker('srh',{})
+    assert result=={'source':'srh','completed':1,'rows':1,'warnings':1}
+    assert saved[0][1:]==('srh',DAY,DAY,records)
+
+
 @pytest.mark.parametrize('market,camera,charge', [
     ('HOUSTON', '10:04:59', 0), ('HOUSTON', '10:05:00', -10),
     ('RENO', '10:04:59', 0), ('RENO', '10:05:00', -10),
