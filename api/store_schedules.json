@@ -202,12 +202,12 @@
       "portal_dealer": null,
       "portal_store_id": null,
       "weekday": {
-        "opening_time": "10:00:00",
-        "closing_time": "19:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "20:00:00"
       },
       "saturday": {
-        "opening_time": "10:00:00",
-        "closing_time": "18:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "19:00:00"
       },
       "sunday": {
         "opening_time": "11:00:00",
@@ -222,12 +222,12 @@
       "portal_dealer": null,
       "portal_store_id": null,
       "weekday": {
-        "opening_time": "10:00:00",
-        "closing_time": "19:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "20:00:00"
       },
       "saturday": {
-        "opening_time": "10:00:00",
-        "closing_time": "18:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "19:00:00"
       },
       "sunday": {
         "opening_time": "11:00:00",
@@ -242,12 +242,12 @@
       "portal_dealer": null,
       "portal_store_id": null,
       "weekday": {
-        "opening_time": "10:00:00",
-        "closing_time": "19:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "20:00:00"
       },
       "saturday": {
-        "opening_time": "10:00:00",
-        "closing_time": "18:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "19:00:00"
       },
       "sunday": {
         "opening_time": "11:00:00",
@@ -262,12 +262,12 @@
       "portal_dealer": null,
       "portal_store_id": null,
       "weekday": {
-        "opening_time": "10:00:00",
-        "closing_time": "19:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "20:00:00"
       },
       "saturday": {
-        "opening_time": "10:00:00",
-        "closing_time": "18:00:00"
+        "opening_time": "10:30:00",
+        "closing_time": "19:00:00"
       },
       "sunday": {
         "opening_time": "11:00:00",
