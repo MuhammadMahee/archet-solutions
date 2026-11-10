@@ -1,17 +1,86 @@
 from datetime import date, datetime, time
 from io import BytesIO
 from contextlib import nullcontext
+from types import SimpleNamespace
 
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 import pytest
 
 from api import store_hours as sh
+from api import index
 from api import store_hours_directory as directory
 from api.portal import PortalError
 from test_portal import store, client, login, write
 
 
 DAY = date(2026, 10, 20)
+
+
+def schedule_row(dealer, sid, name):
+    return dict(dealer=dealer,store_id=sid,store=name,market='OLD MARKET',company=dealer,source_id=None,
+                schedules={period:{'opening_time':'10:00:00','closing_time':'20:00:00'}
+                           for period in ('weekday','saturday','sunday')})
+
+
+def test_roster_uses_only_calling_tree_with_renamed_store_schedules(monkeypatch):
+    tree=[dict(dealer='MAGIC',store_id='WB-a',store='MAGIC1',market='DALLAS'),
+          dict(dealer='California',store_id='WB-b',store='THE FIX',market='UTAH'),
+          dict(dealer='California',store_id='WB-c',store='THE FIX',market='UTAH')]
+    old=[schedule_row('Smoke Magic','WB-a','MAGIC 1'),schedule_row('The Fix','WB-b','HARRISVILLE'),
+         schedule_row('The Fix','WB-c','LAYTON'),schedule_row('Other','WB-extra','EXCLUDED')]
+    monkeypatch.setattr(directory,'active_roster',lambda conn:tree)
+    conn=SimpleNamespace(execute=lambda *args:SimpleNamespace(fetchall=lambda:old))
+    rows=directory.roster_with_schedules(conn)
+    assert {(r['dealer'],r['store_id']) for r in rows}=={(r['dealer'],r['store_id']) for r in tree}
+    assert len(rows)==3  # Same-name Calling Tree stores remain separate locations.
+    assert next(r for r in rows if r['store_id']=='WB-a')['store']=='MAGIC1'
+    assert {r['market'] for r in rows}=={'DALLAS','UTAH'}
+    assert all(directory.hours_for_store(r,DAY)['opening_time']==time(10) for r in rows)
+    assert all(r['source_id'] is None for r in rows)
+    tree.clear()
+    assert directory.roster_with_schedules(conn)==[]
+
+
+def test_schedule_matching_prefers_exact_dealer_and_rejects_ambiguous_ids(monkeypatch):
+    tree=[dict(dealer='MAGIC',store_id=sid,store=sid,market='DALLAS') for sid in ('WB-a','WB-b','ordinary')]
+    exact=schedule_row('MAGIC','WB-a','CURRENT');exact['schedules']['weekday']['opening_time']='09:00:00'
+    old=[exact,schedule_row('Old','WB-a','OLD'),schedule_row('Old','WB-b','FIRST'),
+         schedule_row('Other','WB-b','SECOND'),schedule_row('Other','ordinary','OTHER DEALER')]
+    monkeypatch.setattr(directory,'active_roster',lambda conn:tree)
+    conn=SimpleNamespace(execute=lambda *args:SimpleNamespace(fetchall=lambda:old))
+    rows={r['store_id']:r for r in directory.roster_with_schedules(conn)}
+    assert directory.hours_for_store(rows['WB-a'],DAY)['opening_time']==time(9)
+    assert 'schedules' not in rows['WB-b'] and 'schedules' not in rows['ordinary']
+
+
+@pytest.mark.parametrize('path',['store-hours','compliance'])
+def test_both_reports_filters_and_exports_exclude_legacy_store_duplicates(monkeypatch,path):
+    tree=[dict(dealer='MAGIC',store_id='WB-a',store='MAGIC1',market='DALLAS'),
+          dict(dealer='California',store_id='WB-b',store='THE FIX - HARRISVILLE',market='UTAH')]
+    old=[schedule_row('Smoke Magic','WB-a','MAGIC 1'),schedule_row('The Fix','WB-b','HARRISVILLE'),
+         schedule_row('Other','WB-extra','EXCLUDED')]
+    manual=[dict(dealer='MAGIC',store_id='WB-a',report_date=DAY,employee=name,employee_key=sh.employee_key(name))
+            for name in ('Alice','Bob')]
+    manual.append(dict(dealer='Smoke Magic',store_id='WB-a',report_date=DAY,employee='Old row',employee_key='person:old'))
+    reviews=[dict(dealer='MAGIC',store_id='WB-a',report_date=DAY,employee_key='person:alice',revision=3,camera_in=time(10))]
+    class DB:
+        def execute(self,sql,args=None):
+            rows=old if 'public.store_hours_directory' in sql else manual if '_manual_employees' in sql else reviews if '_employee_reviews' in sql else []
+            return SimpleNamespace(fetchall=lambda:rows,fetchone=lambda:{'day':DAY})
+    monkeypatch.setattr(directory,'active_roster',lambda conn:tree)
+    monkeypatch.setattr(sh,'connect',lambda:nullcontext(DB()))
+    with index.app.test_request_context('/api/internal/'+path+'/sheet/export'):
+        data=sh.report_data(DAY,DAY)
+        assert {(r['dealer'],r['store_id']) for r in data['rows']}=={('MAGIC','WB-a'),('California','WB-b')}
+        assert len(data['rows'])==3  # Keep legitimate employee rows.
+        assert next(r for r in data['rows'] if r['employee']=='Alice')['revision']==3
+        assert len(data['directory'])==len(data['stores'])==2
+        assert {d['id'] for d in data['dealers']}=={'MAGIC','California'}
+        assert data['markets']==['DALLAS','UTAH']
+        book=load_workbook(sh.excel_report(data))
+        values={cell.value for row in book.active for cell in row if isinstance(cell.value,str)}
+        assert 'MAGIC1' in values and 'THE FIX - HARRISVILLE' in values
+        assert not {'MAGIC 1','HARRISVILLE','EXCLUDED','Smoke Magic','The Fix'}&values
 
 
 def workbook(company='CONNECT WIRELESS', store='NEW STORE', opening=time(10), edit=None):

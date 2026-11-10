@@ -33,16 +33,28 @@ def normalized(value):
 
 
 def roster_with_schedules(conn):
-    stores = {}
-    for row in active_roster(conn):
-        stores[row['dealer'], row['store_id']] = {**row, 'source_id': SOURCE_IDS.get(row['dealer'])}
+    roster = active_roster(conn)
+    schedules, internal_ids = {}, {}
     for row in conn.execute('select * from public.store_hours_directory order by dealer,market,store').fetchall():
         if not active_dealer(row['dealer']):
             continue
+        schedules[row['dealer'], row['store_id']] = row
+        if row['store_id'].startswith('WB-'):
+            internal_ids.setdefault(row['store_id'], []).append(row)
+    stores = {}
+    for row in roster:
         key = row['dealer'], row['store_id']
-        # Calling Tree names stay current; the workbook adds schedules and source mapping.
-        stores[key] = {**row, **stores.get(key, {}), 'schedules': row['schedules'],
-                       'source_id': row['source_id'], 'company': row['company']}
+        schedule = schedules.get(key)
+        # Workbook IDs survive dealer renames (Smoke Magic -> MAGIC, The Fix -> California).
+        # Never match ordinary RT-POS IDs across dealers or guess between ambiguous records.
+        previous = internal_ids.get(row['store_id'], [])
+        if schedule is None and len(previous) == 1:
+            schedule = previous[0]
+        entry = {**row, 'source_id': SOURCE_IDS.get(row['dealer'])}
+        if schedule is not None:
+            entry.update(schedules=schedule['schedules'], source_id=schedule['source_id'], company=schedule['company'])
+        # Only Calling Tree creates entries. Schedule-only stores remain archived in storage.
+        stores[key] = entry
     return sorted(({**s, 'store': store_name(s['store'])} for s in stores.values()), key=lambda s: (s['dealer'], s['market'], s['store']))
 
 
