@@ -48,6 +48,15 @@ def test_same_store_id_in_different_dealers_is_not_merged():
     assert [r['dealer'] for r in rows] == ['Connect','ARM']
 
 
+def test_euless_alias_keeps_original_store_identity():
+    sid='WB-4cf8ebe635f5c58dabb8aa0b'
+    for name in ('EULESS','109 MARTHA ST SUITE 227','MARTHA'):
+        _,rows=calling_tree.parse_workbook(workbook([['ARBF',sid,'TOTAL',name]]))
+        assert len(rows)==1 and rows[0]['store']=='EULESS' and rows[0]['store_id']==sid
+    with pytest.raises(PortalError,match='duplicate'):
+        calling_tree.parse_workbook(workbook([['ARBF',sid,'TOTAL','EULESS'],['ARBF',sid,'TOTAL','109 MARTHA ST SUITE 227']]))
+
+
 def test_directory_only_stores_preserve_internal_ids_and_dealer_labels():
     sid='WB-abcdef0123456789abcdef01'
     _,rows=calling_tree.parse_workbook(workbook([

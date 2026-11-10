@@ -163,9 +163,7 @@ def map_schedule_rows(rows, roster):
         else:
             # Include carrier to distinguish ARBF Total from ARBF Metro.
             identity = [dealer, row['carrier'], row['market'], row['store']]
-            # Preserve the existing internal ID when importing this renamed store into an empty directory.
-            if row['store'] == '109 MARTHA ST SUITE 227':
-                identity[-1] = 'EULESS'
+            # Names are canonicalized above, so either EULESS alias produces the original ID.
             sid = 'WB-' + sha256(json.dumps(identity).encode()).hexdigest()[:24]
             source = None
         if (dealer, sid) in keys:

@@ -97,7 +97,7 @@ def case_db(monkeypatch,store):
     conn.execute("""insert into pg_temp.calling_tree_stores values
         (1,'Connect','C1','EXAMPLE STORE','DALLAS',1),
         (1,'Connect','C2','SECOND STORE','DALLAS',2),
-        (1,'ARBF','A1','109 MARTHA ST SUITE 227','TOTAL',3)""")
+        (1,'ARBF','A1','EULESS','TOTAL',3)""")
 
     class Cursor:
         def __enter__(self):self.raw=conn.cursor();return self
@@ -138,7 +138,7 @@ def test_calling_tree_locations_are_validated_saved_and_editable_by_admin_only(c
     assert write(owner,'cases/'+cid,{'revision':2,'dealer':'ARBF','store_id':'C1'},'PATCH').status_code==400
     assert write(owner,'cases/'+cid,{'revision':2,'dealer':'ARBF','store_id':'A1'},'PATCH').status_code==200
     edited=owner.get('/api/internal/cases/'+cid).json
-    assert edited['case']['store_name']=='109 MARTHA ST SUITE 227' and edited['case']['status']=='pending'
+    assert edited['case']['store_name']=='EULESS' and edited['case']['status']=='pending'
     assert edited['edits'][0]['changed_fields']==['dealer','store_id','store_name']
     # Retired selections and legacy cases can still receive recipient/content edits.
     case_db.execute("delete from public.calling_tree_stores where store_id='A1'")
@@ -199,6 +199,19 @@ def test_store_rename_and_page_access_migration_preserves_records(store,case_db)
     assert set(rows[store.member['id']]['page_access'])=={'sales','cases','inbox'}
     assert set(rows[store.admin['id']]['page_access'])=={'cases','inbox','case-report'}
     assert rows[store.owner['id']]['page_access'] is None
+    cid=case_db.execute('''insert into public.violation_cases(submitted_by,sender_name,request_id,
+        violation_date,employee_ntid,employee_name,case_type,subject,body,dealer,store_id,store_name)
+        values(%s,'Member',%s,%s,'N1','Example','Theft','Example','Details','ARBF','A1','109 MARTHA ST SUITE 227') returning id''',
+        (store.member['id'],str(uuid4()),cases.today())).fetchone()['id']
+    restore=(Path(__file__).parents[1]/'supabase/migrations/034_restore_euless_store_name.sql').read_text()
+    case_db.execute(restore)
+    assert case_db.execute('select store_id,store from public.store_hours_directory').fetchall()==[{'store_id':'A1','store':'EULESS'}]
+    assert case_db.execute("select store_id,store from public.calling_tree_stores where store_id='A1'").fetchall()==[{'store_id':'A1','store':'EULESS'}]
+    for table in ('store_time_punches','sales_performance'):
+        assert case_db.execute(f'select store from public.{table}').fetchall()==[{'store':'EULESS'}]
+    for table in ('store_hours_employee_reviews','compliance_employee_reviews'):
+        assert case_db.execute(f'select * from public.{table}').fetchall()==[{'cell_overrides':{'store':'EULESS','employee':'Original'},'revision':6}]
+    assert case_db.execute('select store_id,store_name,revision from public.violation_cases where id=%s',(cid,)).fetchone()=={'store_id':'A1','store_name':'EULESS','revision':2}
 
 
 def test_send_inbox_privacy_attachments_and_retry(client,store,case_db):

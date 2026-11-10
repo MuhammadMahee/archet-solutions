@@ -46,10 +46,12 @@ Migration `032_case_locations.sql` stores each case's dealer, internal store ID,
 and store name. Store options filter by dealer; the API validates the pair against
 Calling Tree and derives the name itself. Admins can change the selection; senders
 remain limited to To/CC. Existing cases retain an unspecified location until edited.
-Migration `033_store_name_and_case_page_access.sql` renames EULESS to
-109 MARTHA ST SUITE 227 in the shared directory and current records, preserving IDs,
-schedules, and reviews. Imports normalize the old name and history renders the
-current label without rewriting immutable audit records.
+Migration `034_restore_euless_store_name.sql` sets the canonical name back to
+EULESS in Calling Tree, the shared directory, source records, case locations,
+and spreadsheet corrections. Both MARTHA and 109 MARTHA ST SUITE 227 are accepted
+as old store-name aliases and normalized to EULESS during imports and history
+display. The original internal store ID stays unchanged, preventing a second
+store entry when either name is imported. Immutable audit snapshots remain intact.
 
 Migration `030_violation_cases.sql` creates the private message, recipient,
 picture, and review tables. The production build applies it automatically.

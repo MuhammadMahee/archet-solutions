@@ -805,7 +805,7 @@ def version_history(start, end):
         args.extend(parts)
     search = request.args.get('search', '').strip()
     if search:
-        clauses.append("strpos(lower(concat_ws(' ',employee,case when upper(btrim(store))='EULESS' then '109 MARTHA ST SUITE 227' else store end,dealer,market,actor_name,"
+        clauses.append("strpos(lower(concat_ws(' ',employee,case when upper(btrim(store)) in ('109 MARTHA ST SUITE 227','MARTHA') then 'EULESS' else store end,dealer,market,actor_name,"
                        "before_data->'punches',after_data->'punches',"
                        "before_data->'cell_overrides',after_data->'cell_overrides',before_data->'custom_cells',after_data->'custom_cells')),lower(%s))>0")
         args.append(search)

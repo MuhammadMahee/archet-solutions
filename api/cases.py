@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 from api.portal import PortalError, body, require_user, text_field, valid_id
 from api.sales import connect, today
 from api.calling_tree import active_roster
+from api.store_names import store_labels
 
 CASE_TYPES = ('Payment Fraud', 'Fraud Transaction (Non Up)', 'Rejections',
               'Suspicious Activity', 'Theft', 'Refund (All customer)',
@@ -24,7 +25,7 @@ PAGE_SIZE = 50
 
 def serial(row):
     return {k: v.isoformat() if isinstance(v, (date, datetime)) else str(v) if isinstance(v, UUID) else v
-            for k, v in row.items()}
+            for k, v in store_labels(row).items()}
 
 
 def page_offset():

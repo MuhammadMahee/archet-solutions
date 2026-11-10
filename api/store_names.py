@@ -2,8 +2,8 @@
 
 
 def store_name(value):
-    if isinstance(value, str) and value.strip().upper() == 'EULESS':
-        return '109 MARTHA ST SUITE 227'
+    if isinstance(value, str) and ' '.join(value.upper().split()) in ('EULESS', '109 MARTHA ST SUITE 227', 'MARTHA'):
+        return 'EULESS'
     return value
 
 
