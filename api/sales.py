@@ -15,6 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, build_opener, HTTPCookieProcessor, HTTPRedirectHandler
 from zoneinfo import ZoneInfo
+from api.store_names import store_name
 
 from flask import jsonify, request, send_file
 import psycopg
@@ -178,7 +179,7 @@ def read_xls(data):
     rows, seen = [], set()
     for idx in range(1, sheet.nrows):
         cell = lambda name: sheet.cell_value(idx, headers[name])
-        store, sid = str(cell('company')).strip().upper(), str(cell('custno')).strip().upper()
+        store, sid = store_name(str(cell('company')).strip().upper()), str(cell('custno')).strip().upper()
         if not store or store == 'TOTAL':
             continue
         if not sid or sid in seen:

@@ -29,6 +29,7 @@ from api.sheet_types import compliance, sheet_table, report_columns, CHECK_FIELD
 from api.portal import PortalError, body, require_user
 from api.dealer_policy import RETIRED_DEALERS
 from api.store_schedules import scheduled_hours
+from api.store_names import store_name, store_labels
 from api.store_hours_directory import (roster_with_schedules, hours_for_store, parse_schedule_workbook,
                                        map_schedule_rows, DEALER_LABELS, SOURCE_IDS)
 from api.sales import (SOURCES, ACTIVE_SOURCES, COLORS, MAX_REPORT_BYTES, ReportError, connect,
@@ -98,7 +99,7 @@ def validate_cell_overrides(value):
         else:
             if not isinstance(raw, str) or len(raw) > 160 or any(ord(c) < 32 for c in raw):
                 raise PortalError('Use plain text up to 160 characters in name, market, store, and status cells.')
-            result[field] = raw.strip()
+            result[field] = store_name(raw.strip()) if field == 'store' else raw.strip()
     return result
 
 
@@ -159,7 +160,7 @@ def read_report(data):
         clock_out = parse_datetime(cell('clockouttime'))
         if clock_out and clock_out < clock_in:
             raise ReportError('invalid_clockout_date')
-        sid, store = clean(cell('custno')).upper(), clean(cell('company')).upper()
+        sid, store = clean(cell('custno')).upper(), store_name(clean(cell('company')).upper())
         if not sid and not store:
             raise ReportError('missing_store_identity')
         employee = ' '.join(filter(None, (clean(cell('name')), clean(cell('lastname'))))) or '-'
@@ -795,7 +796,7 @@ def version_history(start, end):
         args.extend(parts)
     search = request.args.get('search', '').strip()
     if search:
-        clauses.append("strpos(lower(concat_ws(' ',employee,store,dealer,market,actor_name,"
+        clauses.append("strpos(lower(concat_ws(' ',employee,case when upper(btrim(store))='EULESS' then '109 MARTHA ST SUITE 227' else store end,dealer,market,actor_name,"
                        "before_data->'punches',after_data->'punches',"
                        "before_data->'cell_overrides',after_data->'cell_overrides',before_data->'custom_cells',after_data->'custom_cells')),lower(%s))>0")
         args.append(search)
@@ -808,6 +809,7 @@ def version_history(start, end):
         tracking = conn.execute(f'select min(recorded_at) as started from {sheet_table("versions")}').fetchone()['started']
     result = []
     for row in rows[:50]:
+        row = store_labels(row)
         result.append({**row, 'id': str(row['id']), 'transaction_id': str(row['transaction_id']),
                        'recorded_at': row['recorded_at'].isoformat(),
                        'report_date': row['report_date'].isoformat() if row['report_date'] else None})

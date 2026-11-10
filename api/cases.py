@@ -13,6 +13,7 @@ from psycopg.types.json import Jsonb
 
 from api.portal import PortalError, body, require_user, text_field, valid_id
 from api.sales import connect, today
+from api.calling_tree import active_roster
 
 CASE_TYPES = ('Payment Fraud', 'Fraud Transaction (Non Up)', 'Rejections',
               'Suspicious Activity', 'Theft', 'Refund (All customer)',
@@ -120,6 +121,20 @@ def current_sender(row):
     return str(row.get('sender_id') or row['submitted_by'])
 
 
+def case_location(conn, payload, previous=None):
+    dealer = text_field(payload, 'dealer', 160, required=previous is None)
+    sid = text_field(payload, 'store_id', 160, required=previous is None)
+    if previous is not None:
+        dealer = dealer if 'dealer' in payload else previous['dealer']
+        sid = sid if 'store_id' in payload else previous['store_id']
+        if (dealer, sid) == (previous['dealer'], previous['store_id']):
+            return {key: previous[key] for key in ('dealer', 'store_id', 'store_name')}
+    store = next((s for s in active_roster(conn) if (s['dealer'], s['store_id']) == (dealer, sid)), None)
+    if not store:
+        raise PortalError('Choose a store belonging to the selected dealer in Calling Tree.')
+    return {'dealer': dealer, 'store_id': sid, 'store_name': store['store']}
+
+
 def can_edit(row):
     return g.portal_user['role']=='admin' or current_sender(row)==str(g.portal_user['id'])
 
@@ -142,14 +157,18 @@ def register_cases(app):
         with connect() as conn:
             rows = conn.execute('''select id,username,display_name from public.portal_users
                 where active=true order by display_name,username''').fetchall()
-        return jsonify(users=[serial(r) for r in rows], case_types=CASE_TYPES)
+            locations = [{'dealer': s['dealer'], 'store_id': s['store_id'], 'store_name': s['store'],
+                          'market': s['market']} for s in active_roster(conn)]
+        return jsonify(users=[serial(r) for r in rows], case_types=CASE_TYPES, stores=locations)
 
     @app.post('/api/internal/cases')
     @require_user()
     def send_case():
-        draft = validate_draft(body())
+        payload = body()
+        draft = validate_draft(payload)
         uid = g.portal_user['id']
         with connect() as conn, conn.transaction():
+            draft.update(case_location(conn, payload))
             # One transaction delivers the case, pictures, and all To/CC notifications.
             recipient_users = conn.execute('''select id,display_name,username from public.portal_users
                 where active=true and id=any(%s::uuid[]) for share''',
@@ -157,7 +176,7 @@ def register_cases(app):
             names = {str(r['id']): r['display_name'] or r['username'] for r in recipient_users}
             if len(names) != len(draft['recipients']):
                 raise PortalError('A selected recipient is unavailable. Refresh the recipient list.')
-            fields = ('request_id', 'violation_date', 'employee_ntid', 'employee_name', 'case_type', 'subject', 'body')
+            fields = ('request_id', 'violation_date', 'employee_ntid', 'employee_name', 'case_type', 'subject', 'body', 'dealer', 'store_id', 'store_name')
             row = conn.execute(f'''insert into public.violation_cases(submitted_by,sender_name,{','.join(fields)})
                 values({','.join(['%s'] * (len(fields)+2))}) on conflict(submitted_by,request_id) do nothing returning id''',
                 (uid, g.portal_user['display_name'] or g.portal_user['username'], *(draft[k] for k in fields))).fetchone()
@@ -197,7 +216,7 @@ def register_cases(app):
             where.append('c.status=%s'); args.append(status)
         clause = ' and '.join(where) or 'true'
         with connect() as conn:
-            rows = conn.execute(f'''select c.id,coalesce(c.sender_id,c.submitted_by) as sender_id,c.sender_name,c.subject,c.violation_date,c.employee_ntid,
+            rows = conn.execute(f'''select c.id,c.dealer,c.store_id,c.store_name,coalesce(c.sender_id,c.submitted_by) as sender_id,c.sender_name,c.subject,c.violation_date,c.employee_ntid,
                 c.employee_name,c.case_type,c.status,c.submitted_at,c.revision,
                 (r.user_id is not null and r.read_at is null) as unread,
                 (select count(*) from public.case_attachments a where a.case_id=c.id) as attachment_count
@@ -273,10 +292,11 @@ def register_cases(app):
     def edit_case(case_id):
         payload=body()
         admin=g.portal_user['role']=='admin'
-        content_fields=('violation_date','employee_ntid','employee_name','case_type','subject','body')
+        content_fields=('violation_date','employee_ntid','employee_name','case_type','subject','body','dealer','store_id','store_name')
         allowed={'revision','to','cc'}
         if admin:
             allowed.update((*content_fields,'custom_type','sender_id','attachments','remove_attachments'))
+            allowed.remove('store_name')  # The name comes only from Calling Tree.
         if set(payload)-allowed:
             raise PortalError('Admins can edit case details. Senders may edit only To and CC.',403)
         revision=payload.get('revision')
@@ -299,6 +319,7 @@ def register_cases(app):
                 merged[kind]=payload.get(kind,[str(r['user_id']) for r in previous_recipients if r['kind']==kind])
             merged['request_id']=str(row['request_id'])
             draft=validate_draft(merged)
+            draft.update(case_location(conn, payload, row))
             recipient_ids=[uid for uid,kind in draft['recipients']]
             existing_ids={str(r['user_id']) for r in previous_recipients}
             recipient_users=conn.execute('''select id,display_name,username,active from public.portal_users

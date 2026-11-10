@@ -7,6 +7,7 @@ from pathlib import PureWindowsPath
 import re
 from uuid import UUID
 from zipfile import ZipFile, BadZipFile
+from api.store_names import store_name
 
 from flask import request, jsonify, g
 from openpyxl import load_workbook
@@ -99,7 +100,7 @@ def parse_workbook(data, worksheet=''):
             store_id=('WB-'+store_id[3:].lower() if re.fullmatch(r'WB-[a-f0-9]{24}',store_id,re.I)
                       else store_id.upper())
             mapped.update(dealer=dealer,store_id=store_id,
-                          market=mapped['market'].upper(),store=mapped['store'].upper(),row_number=idx)
+                          market=mapped['market'].upper(),store=store_name(mapped['store'].upper()),row_number=idx)
             key=(dealer,mapped['store_id'])
             if key in seen:
                 raise PortalError(f'Row {idx}: duplicate Store ID within the same dealer.')
@@ -118,7 +119,7 @@ def active_roster(conn):
     records=conn.execute('''select s.*,v.filename,v.worksheet,v.activated_at from public.calling_tree_stores s
         join public.calling_tree_versions v on v.id=s.version_id where v.status='active'
         order by s.row_number''').fetchall()
-    return [r for r in records if active_dealer(r['dealer'])]
+    return [{**r, 'store': store_name(r['store'])} for r in records if active_dealer(r['dealer'])]
 
 
 def source_catalog(conn):

@@ -13,6 +13,7 @@ from api.calling_tree import active_roster
 from api.portal import PortalError
 from api.dealer_policy import active_dealer
 from api.store_schedules import scheduled_hours
+from api.store_names import store_name
 
 DEALER_ALIASES = {'CONNECT': 'Connect', 'CONNECT WIRELESS': 'Connect',
                   'SUPREME': 'SRH', 'SRH': 'SRH', 'ARM WIRELESS': 'AMQ',
@@ -42,7 +43,7 @@ def roster_with_schedules(conn):
         # Calling Tree names stay current; the workbook adds schedules and source mapping.
         stores[key] = {**row, **stores.get(key, {}), 'schedules': row['schedules'],
                        'source_id': row['source_id'], 'company': row['company']}
-    return sorted(stores.values(), key=lambda s: (s['dealer'], s['market'], s['store']))
+    return sorted(({**s, 'store': store_name(s['store'])} for s in stores.values()), key=lambda s: (s['dealer'], s['market'], s['store']))
 
 
 def hours_for_store(store, day):
@@ -102,6 +103,7 @@ def parse_schedule_workbook(data):
                 if any(c.data_type in ('f', 'e') for c in cells):
                     raise PortalError(f'{name} row {n}: replace formulas and errors with plain values.')
                 identity = tuple(normalized(v) for v in values[:4])
+                identity = (*identity[:3], store_name(identity[3]))
                 if not all(identity) or any(len(v) > 160 for v in identity):
                     raise PortalError(f'{name} row {n}: Carrier, Company Name, Market and Store are required (up to 160 characters).')
                 if identity in seen:
@@ -132,13 +134,14 @@ def map_schedule_rows(rows, roster):
                (s['portal_dealer'], s['portal_store_id']) for s in seed if s['portal_store_id']}
     mapped, keys = [], set()
     for row in rows:
+        row = {**row, 'store': store_name(row['store'])}
         dealer = DEALER_ALIASES.get(row['company'], row['company'].title())
         if not active_dealer(dealer):
             continue
         preferred = aliases.get((row['company'], row['market'], row['store']))
         matches = [s for s in roster if
                    (preferred and (s['dealer'], s['store_id']) == preferred) or
-                   (s['dealer'] == dealer and normalized(s['market']) == row['market'] and normalized(s['store']) == row['store'])]
+                   (s['dealer'] == dealer and normalized(s['market']) == row['market'] and store_name(normalized(s['store'])) == row['store'])]
         if len(matches) > 1:
             raise PortalError(f"{row['store']}: ambiguous store match. Use the exact company, market and store names.")
         if matches:
@@ -148,6 +151,9 @@ def map_schedule_rows(rows, roster):
         else:
             # Include carrier to distinguish ARBF Total from ARBF Metro.
             identity = [dealer, row['carrier'], row['market'], row['store']]
+            # Preserve the existing internal ID when importing this renamed store into an empty directory.
+            if row['store'] == '109 MARTHA ST SUITE 227':
+                identity[-1] = 'EULESS'
             sid = 'WB-' + sha256(json.dumps(identity).encode()).hexdigest()[:24]
             source = None
         if (dealer, sid) in keys:

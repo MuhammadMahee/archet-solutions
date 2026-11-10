@@ -2,13 +2,16 @@
 
 ## Violation cases and Inbox
 
-Calling Tree, Drop cases (`#cases`), and Inbox (`#inbox`) are available to every
-active portal user, including accounts with a restricted page list. Calling Tree
+Calling Tree is available to every active portal user, including accounts with a
+restricted page list. Drop cases (`#cases`), Inbox (`#inbox`), and the admin-only
+Case report (`#case-report`) have separate Page Access controls. Existing users
+keep their case permissions when migration 033 makes those grants configurable. Calling Tree
 uploads remain administrator-only. Its columns follow the original Excel order;
 internal `WB-` IDs and the RT-POS matching column are hidden in the directory.
 
 Drop cases sends private portal messages to selected To and CC users. Drafts
-include the violation date, employee NTID/name, case type (including Custom),
+include Dealer and Store Name from the active Calling Tree, the violation date,
+employee NTID/name, case type (including Custom),
 subject, body, and up to five JPG/PNG/WebP pictures totaling 2 MB. Pictures are
 validated and re-encoded, stored privately, and served only to the sender,
 recipients, and admins. Sending stores the case and all Inbox notifications in
@@ -17,7 +20,8 @@ appear as an unread Inbox badge, refreshed every 30 seconds while the tab is
 visible. Existing quote inquiries remain accessible from Inbox under their
 existing page grants. This workflow delivers internal notifications, not SMTP mail.
 
-Admins can review all cases as Approved or Not Approved and open `#case-report`.
+Admins with case page access can review cases as Approved or Not Approved;
+the Case report grant controls access to `#case-report`.
 The report uses an inclusive **violation date** range, ranks submitters across all
 approval statuses, and lists Date, User, Employee NTID, Employee Name, and Case Type.
 Reviews retain an audit trail and reject stale concurrent decisions.
@@ -34,6 +38,15 @@ Admins and the current sender can delete a case after confirming. Deleted cases
 are excluded from history, Inbox, unread counts, reports, and picture access.
 The record is retained privately with the deleting user and timestamp for audit.
 Migration `031_case_editing.sql` adds these editing and deletion records.
+
+Migration `032_case_locations.sql` stores each case's dealer, internal store ID,
+and store name. Store options filter by dealer; the API validates the pair against
+Calling Tree and derives the name itself. Admins can change the selection; senders
+remain limited to To/CC. Existing cases retain an unspecified location until edited.
+Migration `033_store_name_and_case_page_access.sql` renames EULESS to
+109 MARTHA ST SUITE 227 in the shared directory and current records, preserving IDs,
+schedules, and reviews. Imports normalize the old name and history renders the
+current label without rewriting immutable audit records.
 
 Migration `030_violation_cases.sql` creates the private message, recipient,
 picture, and review tables. The production build applies it automatically.

@@ -269,6 +269,8 @@
     <div class="case-compose-grid">
       <label>Date of violation<input id="case-date" type="date" required></label>
       <label>Case type<select id="case-type" required></select></label>
+      <label>Dealer<select id="case-dealer" required></select></label>
+      <label>Store Name<select id="case-store" required disabled></select></label>
       <label id="case-custom-label" class="case-full" hidden>Custom case type<input id="case-custom" maxlength="150"></label>
       <label>Employee NTID<input id="case-ntid" maxlength="80" required autocomplete="off"></label>
       <label>Employee name<input id="case-employee" maxlength="150" required autocomplete="off"></label>
@@ -288,6 +290,8 @@
     <fieldset id="case-edit-fields" class="case-edit-fields">
       <div class="case-compose-grid">
         <label class="case-full">Sender<select id="case-edit-sender" required></select></label>
+        <label>Dealer<select id="case-edit-dealer"></select></label>
+        <label>Store Name<select id="case-edit-store" disabled></select></label>
         <label>Date of violation<input id="case-edit-date" type="date" required></label>
         <label>Case type<select id="case-edit-type" required></select></label>
         <label id="case-edit-custom-label" class="case-full" hidden>Custom case type<input id="case-edit-custom" maxlength="150"></label>
@@ -310,7 +314,7 @@
   <form id="user-form">
     <div id="new-user-fields"><div class="field"><label for="user-display-name">Full name</label><input id="user-display-name" maxlength="100" autocomplete="off"></div><div class="field"><label for="user-username">Username</label><input id="user-username" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="off"></div><p class="hint">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p></div>
     <div class="field"><label for="user-role">Role</label><select id="user-role"><option value="member">Member - assigned pages</option><option value="admin">Admin - assigned pages and account management</option></select></div>
-    <fieldset id="user-page-access"><legend>Page access</legend><p class="hint">Choose the pages this person can open. Calling Tree, Drop cases, Inbox, and Settings are available to everyone. Case report is available to admins. Invoices remain available only to Mahee.</p><div id="user-page-options"></div></fieldset>
+    <fieldset id="user-page-access"><legend>Page access</legend><p class="hint">Choose the pages this person can open. Calling Tree and Settings are available to everyone. Drop cases and Inbox can be assigned separately. Case report requires the Admin role. Invoices are available only to Mahee.</p><div id="user-page-options"></div></fieldset>
     <div class="field" id="user-active-field" hidden><label for="user-active">Account access</label><select id="user-active"><option value="true">Active</option><option value="false">Disabled</option></select></div>
     <div class="field"><label id="user-password-label" for="user-password">Initial password</label><input id="user-password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div>
     <p id="user-hint" class="hint">Share the username and password privately with your team member.</p>
@@ -381,10 +385,10 @@ async function submit(form, errorId, action) {
 function canOpen(name) {
   if (!currentUser || currentUser.must_change_password) return false;
   if (name === 'users' && currentUser.role !== 'admin') return false;
-  if (name === 'case-report') return currentUser.role === 'admin';
-  if (['callingtree','cases','inbox'].includes(name)) return true;
+  if (name === 'case-report' && currentUser.role !== 'admin') return false;
+  if (name === 'callingtree') return true;
   if (name === 'invoices') return window.invoiceDashboard.allowed();
-  return (currentUser.page_access || ['sales','spreadsheet','compliance','quota','callingtree','workforce','overview','quotes','users','settings']).includes(name);
+  return (currentUser.page_access || ['sales','spreadsheet','compliance','quota','callingtree','workforce','overview','quotes','users','cases','inbox','case-report','settings']).includes(name);
 }
 function enterWorkspace(user, freshLogin = false) {
   if (user.must_change_password) { requirePasswordChange(user); return; }
@@ -471,8 +475,10 @@ function renderPageAccess(user) {
   updateAccountRole();
 }
 function updateAccountRole() {
-  const accounts=$('user-page-options').querySelector('[value="users"]');
-  if(accounts){accounts.disabled=$('user-role').value!=='admin'||!assignablePages.includes('users');if(accounts.disabled)accounts.checked=false;}
+  for(const key of ['users','case-report']) {
+    const option=$('user-page-options').querySelector('[value="'+key+'"]');
+    if(option){option.disabled=$('user-role').value!=='admin'||!assignablePages.includes(key);if(option.disabled)option.checked=false;}
+  }
 }
 $('user-role').onchange=updateAccountRole;
 function quoteDialog(quote) {

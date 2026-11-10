@@ -19,6 +19,7 @@ from test_portal import client, store, login, write
 
 def payload(to=None, cc=None, **changes):
     return dict(request_id=str(uuid4()), violation_date=cases.today().isoformat(),
+                dealer='Connect', store_id='C1',
                 employee_ntid='ntid-100', employee_name='Example Employee',
                 case_type='Payment Fraud', subject='Review invoice', body='Evidence for review.',
                 to=to or [str(uuid4())], cc=cc or [], attachments=[], **changes)
@@ -88,6 +89,15 @@ def case_db(monkeypatch,store):
     editing=(Path(__file__).parents[1]/'supabase/migrations/031_case_editing.sql').read_text()
     ddl=editing.split('alter table public.case_edits enable row level security;')[0]
     conn.execute(ddl.replace('create table public.','create temp table pg_temp.').replace('public.','pg_temp.'),prepare=False)
+    locations=(Path(__file__).parents[1]/'supabase/migrations/032_case_locations.sql').read_text()
+    conn.execute(locations.replace('public.','pg_temp.'),prepare=False)
+    conn.execute('create temp table calling_tree_versions(id integer primary key,status text,filename text,worksheet text,activated_at timestamptz)')
+    conn.execute("insert into pg_temp.calling_tree_versions values(1,'active','Test.xlsx','Stores',now())")
+    conn.execute('create temp table calling_tree_stores(version_id integer,dealer text,store_id text,store text,market text,row_number integer)')
+    conn.execute("""insert into pg_temp.calling_tree_stores values
+        (1,'Connect','C1','EXAMPLE STORE','DALLAS',1),
+        (1,'Connect','C2','SECOND STORE','DALLAS',2),
+        (1,'ARBF','A1','109 MARTHA ST SUITE 227','TOTAL',3)""")
 
     class Cursor:
         def __enter__(self):self.raw=conn.cursor();return self
@@ -108,6 +118,87 @@ def case_db(monkeypatch,store):
 
 def signed_in(name):
     result=index.app.test_client();assert login(result,name).status_code==200;return result
+
+
+def test_calling_tree_locations_are_validated_saved_and_editable_by_admin_only(client,store,case_db):
+    login(client,'Member')
+    options=client.get('/api/internal/cases/recipients').json['stores']
+    assert {(s['dealer'],s['store_id']) for s in options}=={('Connect','C1'),('Connect','C2'),('ARBF','A1')}
+    for location in ({},{'dealer':'Connect'},{'dealer':'ARBF','store_id':'C1'},{'dealer':'Unknown','store_id':'C1'}):
+        draft=payload([store.owner['id']]);draft.pop('dealer');draft.pop('store_id');draft.update(location)
+        assert write(client,'cases',draft).status_code==400
+    draft=payload([store.owner['id']]);draft['store_name']='Forged name'
+    cid=write(client,'cases',draft).json['id']
+    saved=client.get('/api/internal/cases/'+cid).json['case']
+    assert (saved['dealer'],saved['store_id'],saved['store_name'])==('Connect','C1','EXAMPLE STORE')
+    assert client.get('/api/internal/cases').json['cases'][0]['store_name']=='EXAMPLE STORE'
+    assert write(client,'cases/'+cid,{'revision':1,'dealer':'ARBF','store_id':'A1'},'PATCH').status_code==403
+    owner=signed_in('Mahee')
+    assert write(owner,'cases/'+cid+'/review',{'revision':1,'status':'approved'},'PATCH').status_code==200
+    assert write(owner,'cases/'+cid,{'revision':2,'dealer':'ARBF','store_id':'C1'},'PATCH').status_code==400
+    assert write(owner,'cases/'+cid,{'revision':2,'dealer':'ARBF','store_id':'A1'},'PATCH').status_code==200
+    edited=owner.get('/api/internal/cases/'+cid).json
+    assert edited['case']['store_name']=='109 MARTHA ST SUITE 227' and edited['case']['status']=='pending'
+    assert edited['edits'][0]['changed_fields']==['dealer','store_id','store_name']
+    # Retired selections and legacy cases can still receive recipient/content edits.
+    case_db.execute("delete from public.calling_tree_stores where store_id='A1'")
+    assert write(owner,'cases/'+cid,{'revision':3,'subject':'Updated'},'PATCH').status_code==200
+    case_db.execute("update public.violation_cases set dealer='',store_id='',store_name='' where id=%s",(cid,))
+    assert write(client,'cases/'+cid,{'revision':4,'cc':[store.admin['id']]},'PATCH').status_code==200
+
+
+def test_case_page_grants_are_independent_and_enforced(client,store,case_db):
+    login(client)
+    cid=write(client,'cases',payload([store.member['id']])).json['id']
+    store.db('portal_users','PATCH',{'page_access':['inbox']},id='eq.'+store.member['id'])
+    member=signed_in('Member')
+    assert member.get('/api/internal/cases?folder=inbox').status_code==200
+    assert member.get('/api/internal/cases/'+cid).status_code==200
+    assert member.get('/api/internal/cases/unread').status_code==200
+    assert member.get('/api/internal/cases').status_code==403
+    assert write(member,'cases',payload([store.owner['id']])).status_code==403
+    store.db('portal_users','PATCH',{'page_access':['cases']},id='eq.'+store.member['id'])
+    member=signed_in('Member')
+    assert member.get('/api/internal/cases').status_code==200
+    assert member.get('/api/internal/cases?folder=inbox').status_code==403
+    assert member.get('/api/internal/cases/unread').status_code==403
+    store.db('portal_users','PATCH',{'page_access':['case-report']},id='eq.'+store.admin['id'])
+    admin=signed_in('OtherAdmin');day=cases.today().isoformat()
+    assert admin.get('/api/internal/cases/report?start='+day+'&end='+day).status_code==200
+    assert admin.get('/api/internal/cases/'+cid).status_code==200
+    assert admin.get('/api/internal/cases').status_code==403
+    store.db('portal_users','PATCH',{'page_access':['cases','inbox']},id='eq.'+store.admin['id'])
+    admin=signed_in('OtherAdmin')
+    assert admin.get('/api/internal/cases/report?start='+day+'&end='+day).status_code==403
+
+
+def test_store_rename_and_page_access_migration_preserves_records(store,case_db):
+    # Every table is session-local; exercise the complete production data migration.
+    case_db.execute("alter table public.portal_users add column role text default 'member', add column page_access text[]")
+    case_db.execute("alter table public.portal_users add constraint portal_page_access_valid check(page_access is null or cardinality(page_access)<=9)")
+    case_db.execute("update public.portal_users set page_access=array['sales'] where id=%s",(store.member['id'],))
+    case_db.execute("update public.portal_users set role='admin',page_access=array[]::text[] where id=%s",(store.admin['id'],))
+    case_db.execute("update public.calling_tree_stores set store='EULESS' where store_id='A1'")
+    case_db.execute('create temp table public.store_hours_directory(store_id text,store text,updated_at timestamptz)')
+    case_db.execute("insert into public.store_hours_directory values('A1','EULESS',now())")
+    for table in ('store_time_punches','sales_performance'):
+        case_db.execute(f'create temp table public.{table}(store text)')
+        case_db.execute(f"insert into public.{table} values('EULESS')")
+    for table in ('store_hours_employee_reviews','compliance_employee_reviews'):
+        case_db.execute(f'create temp table public.{table}(cell_overrides jsonb,revision integer)')
+        case_db.execute(f'''insert into public.{table} values('{{"store":"EULESS","employee":"Original"}}',4)''')
+    migration=(Path(__file__).parents[1]/'supabase/migrations/033_store_name_and_case_page_access.sql').read_text()
+    case_db.execute(migration)
+    assert case_db.execute('select store_id,store from public.store_hours_directory').fetchone()=={'store_id':'A1','store':'109 MARTHA ST SUITE 227'}
+    for table in ('store_time_punches','sales_performance'):
+        assert case_db.execute(f'select store from public.{table}').fetchone()['store']=='109 MARTHA ST SUITE 227'
+    for table in ('store_hours_employee_reviews','compliance_employee_reviews'):
+        row=case_db.execute(f'select * from public.{table}').fetchone()
+        assert row['cell_overrides']=={'store':'109 MARTHA ST SUITE 227','employee':'Original'} and row['revision']==5
+    rows={str(r['id']):r for r in case_db.execute('select id,page_access from public.portal_users').fetchall()}
+    assert set(rows[store.member['id']]['page_access'])=={'sales','cases','inbox'}
+    assert set(rows[store.admin['id']]['page_access'])=={'cases','inbox','case-report'}
+    assert rows[store.owner['id']]['page_access'] is None
 
 
 def test_send_inbox_privacy_attachments_and_retry(client,store,case_db):
@@ -166,7 +257,7 @@ def test_atomic_delivery_review_conflicts_and_report(client,store,case_db):
 
 
 def test_disabled_recipient_pagination_and_restricted_pages(client,store,case_db):
-    store.db('portal_users','PATCH',{'page_access':[]},id='eq.'+store.member['id'])
+    store.db('portal_users','PATCH',{'page_access':['cases','inbox']},id='eq.'+store.member['id'])
     login(client,'Member')
     pages=client.get('/api/internal/me').json['user']['page_access']
     assert {'callingtree','cases','inbox'}<=set(pages)
@@ -197,6 +288,7 @@ def test_sender_edits_only_recipients_and_recipient_access_is_revoked(client,sto
     assert write(other,'cases/'+cid,{'revision':1,'to':[store.owner['id']]},'PATCH').status_code==403
     assert write(other,'cases/'+cid,{'revision':1},'DELETE').status_code==403
     for key,value in [('sender_id',store.owner['id']),('submitted_by',store.owner['id']),('subject','Changed'),
+                      ('dealer','ARBF'),('store_id','A1'),('store_name','Forged'),
                       ('body','Changed'),('employee_name','Changed'),('case_type','Theft'),('attachments',[]),
                       ('remove_attachments',[]),('status','approved')]:
         assert write(client,'cases/'+cid,{'revision':1,key:value},'PATCH').status_code==403

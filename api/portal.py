@@ -20,24 +20,24 @@ PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,r
 
 PAGE_OPTIONS = {'sales':'Sales Update','spreadsheet':'Opening / Closing Spreadsheet','compliance':'Compliance Spreadsheet',
     'quota':'Quota Update','callingtree':'Calling Tree','workforce':'AI Workforce',
-    'overview':'Overview','quotes':'Inbox inquiries','users':'Accounts'}
+    'overview':'Overview','quotes':'Inbox inquiries','users':'Accounts',
+    'cases':'Drop cases','inbox':'Inbox (cases)','case-report':'Case report (Admins)'}
 
 
 def allowed_pages(user):
     if user.get('is_owner'):
-        return list(PAGE_OPTIONS)+['cases','inbox','case-report','invoices','settings']
+        return list(PAGE_OPTIONS)+['invoices','settings']
     selected=user.get('page_access')
     pages=[key for key in PAGE_OPTIONS if selected is None or key in selected or key=='callingtree']
-    return ([key for key in pages if key!='users' or user['role']=='admin']+
-            ['cases','inbox']+(['case-report'] if user['role']=='admin' else [])+['settings'])
+    return [key for key in pages if key not in ('users','case-report') or user['role']=='admin']+['settings']
 
 
 def page_access_field(payload, role):
     selected=payload.get('page_access')
     if not isinstance(selected,list) or len(selected)>len(PAGE_OPTIONS) or any(not isinstance(key,str) or key not in PAGE_OPTIONS for key in selected) or len(set(selected))!=len(selected):
         raise PortalError('Choose valid page access.')
-    if role!='admin' and 'users' in selected:
-        raise PortalError('Accounts access requires the Admin role.')
+    if role!='admin' and set(selected)&{'users','case-report'}:
+        raise PortalError('Accounts and Case report access require the Admin role.')
     if set(selected)-set(allowed_pages(g.portal_user)):
         raise PortalError('You can only grant pages available to your own account.',403)
     return [key for key in PAGE_OPTIONS if key in selected]
@@ -48,6 +48,15 @@ def check_page_access(user):
     page={'compliance':'compliance','store-hours':'spreadsheet','sales':'sales','quota':'quota','calling-tree':'callingtree',
           'workforce':'workforce','invoices':'invoices','users':'users','quotes':'quotes','cases':'cases'}.get(path)
     permitted=allowed_pages(user)
+    if page=='cases':
+        suffix=request.path.removeprefix('/api/internal/cases').strip('/')
+        if suffix=='report':
+            page='case-report'
+        elif suffix=='unread' or (not suffix and request.method=='GET' and request.args.get('folder')=='inbox'):
+            page='inbox'
+        elif suffix and set(permitted)&{'cases','inbox','case-report'}:
+            # Shared detail/edit routes still enforce case-level sender/recipient permissions.
+            return
     # Overview reads the same inquiry summary; follow-up edits still need Quote inbox.
     if page=='quotes' and request.method=='GET' and 'overview' in permitted:
         return
@@ -296,7 +305,7 @@ def register_portal(app):
         role = payload.get("role", "member")
         if role not in ("admin", "member"):
             raise PortalError("Invalid role.")
-        selected=payload.get("page_access",[key for key in PAGE_OPTIONS if key in allowed_pages(g.portal_user) and (key!="users" or role=="admin")])
+        selected=payload.get("page_access",[key for key in PAGE_OPTIONS if key in allowed_pages(g.portal_user) and (key not in ('users','case-report') or role=="admin")])
         page_access=page_access_field({"page_access":selected},role)
         if db("portal_users", username_key="eq." + username.lower(), limit=1):
             raise PortalError("That username already exists.", 409)

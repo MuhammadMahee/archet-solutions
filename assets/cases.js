@@ -8,6 +8,7 @@
   const badge = status => '<span class="case-status case-status-' + esc(status) + '">' + esc(statusText(status)) + '</span>';
   let epoch=0, listSequence=0, reportSequence=0, detailSequence=0, timer=null, draftId=null, sending=false;
   let directory=[], selected={to:[],cc:[]}, pictures=[], detail=null;
+  let locations=[], editLocations=[];
   let editing=null, editUsers=[], editSelected={to:[],cc:[]}, editPictures=[], removedPictures=new Set(), savingEdit=false, editSequence=0;
   const offsets={cases:0,inbox:0,'case-report':0}, more={};
   const admin=()=>currentUser?.role==='admin';
@@ -21,7 +22,7 @@
   }
   async function unread() {
     const version=epoch;
-    if(!currentUser||currentUser.rest_mode||currentUser.must_change_password)return;
+    if(!currentUser||currentUser.rest_mode||currentUser.must_change_password||!canOpen('inbox'))return;
     try {
       const result=await api('cases/unread');
       if(version!==epoch||!currentUser)return;
@@ -47,7 +48,7 @@
     const rows=result.cases;
     more[name]=result.has_more;
     if(!rows.length)target.innerHTML='<div class="case-empty"><span aria-hidden="true">✉</span><h3>'+(inbox?'Your inbox is clear':'No cases here yet')+'</h3><p>'+(inbox?'Cases sent to you or copied to you will appear here.':'Select + Drop cases to draft your first case, or adjust the status filter.')+'</p></div>';
-    else target.innerHTML='<div class="table-wrap"><table class="case-list-table"><thead><tr><th>Case / employee</th><th>From</th><th>Violation date</th><th>Case type</th><th>Status</th>'+'<th>Actions</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr class="'+(r.unread?'case-is-unread':'')+'"><td><button class="case-subject-button" data-case-open="'+r.id+'">'+(r.unread?'<span class="case-dot" aria-label="Unread"></span>':'')+esc(r.subject)+'</button><small>'+esc(r.employee_name)+' · '+esc(r.employee_ntid)+(r.attachment_count?' · '+r.attachment_count+' picture'+(r.attachment_count===1?'':'s'):'')+'</small></td><td>'+esc(r.sender_name)+'</td><td>'+esc(dateText(r.violation_date))+'</td><td>'+esc(r.case_type)+'</td><td>'+badge(r.status)+'</td>'+'<td>'+actionButtons(r)+'</td>'+'</tr>').join('')+'</tbody></table></div>';
+    else target.innerHTML='<div class="table-wrap"><table class="case-list-table"><thead><tr><th>Case / employee</th><th>From</th><th>Violation date</th><th>Case type</th><th>Status</th>'+'<th>Actions</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr class="'+(r.unread?'case-is-unread':'')+'"><td><button class="case-subject-button" data-case-open="'+r.id+'">'+(r.unread?'<span class="case-dot" aria-label="Unread"></span>':'')+esc(r.subject)+'</button><small>'+esc(r.employee_name)+' · '+esc(r.employee_ntid)+(r.attachment_count?' · '+r.attachment_count+' picture'+(r.attachment_count===1?'':'s'):'')+'</small>'+(r.store_name?'<small>'+esc(r.dealer)+' / '+esc(r.store_name)+'</small>':'')+'</td><td>'+esc(r.sender_name)+'</td><td>'+esc(dateText(r.violation_date))+'</td><td>'+esc(r.case_type)+'</td><td>'+badge(r.status)+'</td>'+'<td>'+actionButtons(r)+'</td>'+'</tr>').join('')+'</tbody></table></div>';
     pager(name,inbox?'inbox-':'');
   }
   async function loadReport() {
@@ -65,6 +66,7 @@
     more['case-report']=result.has_more;pager('case-report','report-');
   }
   async function load(name) {
+    document.querySelectorAll('[data-case-compose]').forEach(button=>button.hidden=!canOpen('cases'));
     if(name==='case-report')await loadReport();else await loadList(name);
     await unread();
   }
@@ -83,13 +85,33 @@
     recipientOptions();
   };
   el('type').onchange=()=>{const custom=el('type').value==='Custom';el('custom-label').hidden=!custom;el('custom').required=custom;};
+  function storeOptions(prefix, rows, selectedStore='') {
+    const dealer=el(prefix+'dealer').value;
+    const matches=rows.filter(s=>s.dealer===dealer);
+    el(prefix+'store').replaceChildren(new Option('Select a store…',''),...matches.map(s=>{
+      const duplicate=matches.filter(other=>other.store_name===s.store_name).length>1;
+      return new Option(s.store_name+(duplicate&&s.market?' — '+s.market:''),s.store_id);
+    }));
+    el(prefix+'store').disabled=!dealer;
+    el(prefix+'store').value=selectedStore;
+    if(prefix)el(prefix+'store').required=!!dealer;
+  }
+  function locationOptions(prefix, rows, dealer='', sid='') {
+    el(prefix+'dealer').replaceChildren(new Option(prefix?'Not specified (existing case)':'Select a dealer…',''),
+      ...[...new Set(rows.map(s=>s.dealer))].sort().map(name=>new Option(name,name)));
+    el(prefix+'dealer').value=dealer;
+    storeOptions(prefix,rows,sid);
+  }
+  el('dealer').onchange=()=>storeOptions('',locations);
+  el('edit-dealer').onchange=()=>storeOptions('edit-',editLocations);
   async function compose() {
-    if(sending)return;
+    if(sending||!canOpen('cases'))return;
     const version=epoch;
     try {
       const result=await api('cases/recipients');
       if(version!==epoch||!currentUser)return;
-      directory=result.users;
+      directory=result.users;locations=result.stores;
+      const previousDealer=draftId?el('dealer').value:'',previousStore=draftId?el('store').value:'';
       if(!draftId){
         el('compose-form').reset();selected={to:[],cc:[]};pictures=[];
         draftId=crypto.randomUUID();
@@ -97,6 +119,7 @@
         el('type').replaceChildren(new Option('Select a case type…',''),...result.case_types.map(t=>new Option(t,t)));
         el('custom-label').hidden=true;el('custom').required=false;drawPictures();
       }
+      locationOptions('',locations,previousDealer,previousStore);
       recipientOptions();el('compose-error').textContent='';el('compose-dialog').showModal();
     }catch(err){error(err);}
   }
@@ -116,7 +139,7 @@
     sending=true;el('send').disabled=true;el('send').textContent='Sending…';el('compose-error').textContent='';
     const version=epoch;
     try {
-      const payload={request_id:draftId,violation_date:el('date').value,case_type:el('type').value,custom_type:el('custom').value,employee_ntid:el('ntid').value,employee_name:el('employee').value,subject:el('subject').value,body:el('body').value,to:[...selected.to],cc:[...selected.cc],attachments:await Promise.all(pictures.map(encode))};
+      const payload={request_id:draftId,dealer:el('dealer').value,store_id:el('store').value,violation_date:el('date').value,case_type:el('type').value,custom_type:el('custom').value,employee_ntid:el('ntid').value,employee_name:el('employee').value,subject:el('subject').value,body:el('body').value,to:[...selected.to],cc:[...selected.cc],attachments:await Promise.all(pictures.map(encode))};
       if(version!==epoch||!currentUser)return;
       const result=await api('cases','POST',payload);
       if(version!==epoch||!currentUser)return;
@@ -135,10 +158,10 @@
       detail=data.case;
       el('detail-subject').textContent=detail.subject;el('detail-error').textContent='';
       const recipients=kind=>data.recipients.filter(r=>r.kind===kind).map(r=>r.recipient_name).join(', ')||'—';
-      const fields=[['From',detail.sender_name],['To',recipients('to')],['CC',recipients('cc')],['Sent',new Date(detail.submitted_at).toLocaleString()],['Violation date',dateText(detail.violation_date)],['Employee',detail.employee_name+' · '+detail.employee_ntid],['Case type',detail.case_type]];
+      const fields=[['From',detail.sender_name],['To',recipients('to')],['CC',recipients('cc')],['Sent',new Date(detail.submitted_at).toLocaleString()],['Violation date',dateText(detail.violation_date)],['Employee',detail.employee_name+' · '+detail.employee_ntid],['Case type',detail.case_type],['Dealer',detail.dealer||'Not specified'],['Store Name',detail.store_name||'Not specified']];
       el('detail-content').innerHTML='<div class="case-detail-status">'+badge(detail.status)+'</div><dl class="case-details">'+fields.map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl><div class="case-message-body">'+esc(detail.body)+'</div>'+(data.attachments.length?'<h3>Pictures</h3><div class="case-photos">'+data.attachments.map(a=>{const url='/api/internal/cases/'+id+'/attachments/'+a.id;return '<a href="'+url+'?download=1"><img loading="lazy" src="'+url+'" alt="'+esc(a.filename)+'"><span>'+esc(a.filename)+'</span></a>';}).join('')+'</div>':'')+actionButtons(detail)+(data.reviews.length?'<div class="case-review-history"><h3>Review history</h3>'+data.reviews.map(r=>'<p>'+esc(r.reviewer)+' · '+esc(statusText(r.status))+' · '+esc(new Date(r.reviewed_at).toLocaleString())+'</p>').join('')+'</div>':'');
       if(data.edits?.length) {
-        const labels={to:'To',cc:'CC',sender:'Sender',pictures:'Pictures',violation_date:'Violation date',employee_ntid:'Employee NTID',employee_name:'Employee name',case_type:'Case type',subject:'Subject',body:'Body'};
+        const labels={dealer:'Dealer',store_id:'Store',store_name:'Store Name',to:'To',cc:'CC',sender:'Sender',pictures:'Pictures',violation_date:'Violation date',employee_ntid:'Employee NTID',employee_name:'Employee name',case_type:'Case type',subject:'Subject',body:'Body'};
         el('detail-content').insertAdjacentHTML('beforeend','<div class="case-review-history"><h3>Edit history</h3>'+data.edits.map(e=>'<p>'+esc(e.editor)+' · '+esc(e.changed_fields.map(k=>labels[k]||k).join(', '))+' · '+esc(new Date(e.edited_at).toLocaleString())+'</p>').join('')+'</div>');
       }
       if(!el('detail-dialog').open)el('detail-dialog').showModal();
@@ -189,6 +212,11 @@
       editRecipients();
       if(admin()) {
         const row=data.case;
+        editLocations=[...options.stores];
+        if(row.dealer&&!editLocations.some(s=>s.dealer===row.dealer&&s.store_id===row.store_id))
+          editLocations.push({dealer:row.dealer,store_id:row.store_id,store_name:row.store_name+' (previous selection)',market:''});
+        locationOptions('edit-',editLocations,row.dealer,row.store_id);
+        el('edit-dealer').required=!!row.dealer;
         el('edit-sender').replaceChildren(...editUsers.filter(u=>!u.retainedOnly).map(u=>new Option((u.display_name||u.username)+' ('+u.username+')',u.id)));
         if(![...el('edit-sender').options].some(o=>o.value===row.sender_id))el('edit-sender').add(new Option(row.sender_name+' (current sender)',row.sender_id));
         el('edit-sender').value=row.sender_id;
@@ -216,7 +244,7 @@
     const version=epoch,id=editing.case.id;
     try {
       const payload={revision:editing.case.revision,to:[...editSelected.to],cc:[...editSelected.cc]};
-      if(admin())Object.assign(payload,{sender_id:el('edit-sender').value,violation_date:el('edit-date').value,case_type:el('edit-type').value,custom_type:el('edit-custom').value,employee_ntid:el('edit-ntid').value,employee_name:el('edit-employee').value,subject:el('edit-subject').value,body:el('edit-body').value,remove_attachments:[...removedPictures],attachments:await Promise.all(editPictures.map(encode))});
+      if(admin())Object.assign(payload,{sender_id:el('edit-sender').value,dealer:el('edit-dealer').value,store_id:el('edit-store').value,violation_date:el('edit-date').value,case_type:el('edit-type').value,custom_type:el('edit-custom').value,employee_ntid:el('edit-ntid').value,employee_name:el('edit-employee').value,subject:el('edit-subject').value,body:el('edit-body').value,remove_attachments:[...removedPictures],attachments:await Promise.all(editPictures.map(encode))});
       if(version!==epoch||!currentUser)return;
       const result=await api('cases/'+id,'PATCH',payload);
       if(version!==epoch||!currentUser)return;
@@ -264,7 +292,8 @@
     editSequence++;editing=null;editUsers=[];editSelected={to:[],cc:[]};editPictures=[];removedPictures=new Set();savingEdit=false;
     el('edit-form').reset();el('edit-fields').disabled=false;el('edit-error').textContent='';el('edit-save').disabled=false;
     ['edit-to','edit-cc','edit-to-chips','edit-cc-chips','edit-sender','edit-picture-list'].forEach(name=>el(name).replaceChildren());el('edit-dialog').close();
-    draftId=null;detail=null;directory=[];selected={to:[],cc:[]};pictures=[];sending=false;
+    draftId=null;detail=null;directory=[];locations=[];editLocations=[];selected={to:[],cc:[]};pictures=[];sending=false;
+    ['dealer','store','edit-dealer','edit-store'].forEach(name=>el(name).replaceChildren());
     Object.keys(offsets).forEach(key=>offsets[key]=0);
     ['history','inbox','report-summary','ranking','report-table','detail-content','detail-subject','to-chips','cc-chips','draft-pictures'].forEach(name=>el(name).replaceChildren());
     el('compose-form').reset();el('report-filter').reset();el('compose-error').textContent='';el('detail-error').textContent='';
