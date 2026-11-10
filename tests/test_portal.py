@@ -220,7 +220,8 @@ def test_rest_blocks_existing_sessions_and_restores_without_login(client, store)
         assert write(member, route, {}).json['code'] == 'account_rest'
     assert write(member, 'users/' + store.admin['id'] + '/rest', {'rest_mode':False}, 'PATCH').status_code == 403
     assert write(client, path, {'rest_mode':False}, 'PATCH').status_code == 200
-    assert member.get('/api/internal/quotes').status_code == 200
+    assert member.get('/api/internal/me').status_code == 200
+    assert member.get('/api/internal/quotes').status_code == 403
     next_rest = write(client, path, {'rest_mode':True}, 'PATCH').json['user']
     assert next_rest['rest_version'] != version
     assert login(member, 'Member').json['user']['rest_mode']
@@ -295,11 +296,11 @@ def test_quote_survives_email_failure_and_is_editable(client, store, monkeypatch
     assert response.status_code == 200
     row = store.tables["quote_requests"][0]
     assert row["notification_status"] == "failed"
-    login(client, "Member")
+    login(client, "Mahee")
     assert client.get("/api/internal/quotes").json["quotes"][0]["company"] == "Test Co"
     response = write(client, "quotes/" + row["id"], {"status": "contacted", "notes": "Called today"}, "PATCH")
     assert response.status_code == 200
-    assert row["notes"] == "Called today" and row["updated_by"] == store.member["id"]
+    assert row["notes"] == "Called today" and row["updated_by"] == store.owner["id"]
 
 
 def test_no_success_when_quote_storage_fails(client, store):

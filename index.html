@@ -247,7 +247,7 @@
     </section>
     <section id="page-users" hidden>
       <div class="page-head row between"><div><h1>Team accounts</h1><p class="muted">Create logins and manage workspace access.</p></div><button id="add-user" class="primary">+ Create account</button></div>
-      <div class="panel" id="user-list"></div><p class="muted small" style="margin-top:18px">Admins manage accounts. Members can view inquiries and update follow-ups. The owner account is permanent.</p>
+      <div class="panel" id="user-list"></div><p class="muted small" style="margin-top:18px">Admins manage accounts. Quote inquiries and follow-ups are private to Mahee. The owner account is permanent.</p>
     </section>
     <section id="page-settings" hidden>
       <div class="page-head"><h1>Account settings</h1><p class="muted">Keep your login up to date.</p></div>
@@ -314,7 +314,7 @@
   <form id="user-form">
     <div id="new-user-fields"><div class="field"><label for="user-display-name">Full name</label><input id="user-display-name" maxlength="100" autocomplete="off"></div><div class="field"><label for="user-username">Username</label><input id="user-username" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="off"></div><p class="hint">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p></div>
     <div class="field"><label for="user-role">Role</label><select id="user-role"><option value="member">Member - assigned pages</option><option value="admin">Admin - assigned pages and account management</option></select></div>
-    <fieldset id="user-page-access"><legend>Page access</legend><p class="hint">Choose the pages this person can open. Calling Tree and Settings are available to everyone. Drop cases and Inbox can be assigned separately. Case report requires the Admin role. Invoices are available only to Mahee.</p><div id="user-page-options"></div></fieldset>
+    <fieldset id="user-page-access"><legend>Page access</legend><p class="hint">Choose the pages this person can open. Calling Tree and Settings are available to everyone. Drop cases and Inbox can be assigned separately. Case report requires the Admin role. Quote inquiries, Overview, and Invoices are available only to Mahee.</p><div id="user-page-options"></div></fieldset>
     <div class="field" id="user-active-field" hidden><label for="user-active">Account access</label><select id="user-active"><option value="true">Active</option><option value="false">Disabled</option></select></div>
     <div class="field"><label id="user-password-label" for="user-password">Initial password</label><input id="user-password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div>
     <p id="user-hint" class="hint">Share the username and password privately with your team member.</p>
@@ -349,6 +349,7 @@ function signedOut(message = '') {
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   currentUser = null; accountPageOptions={}; assignablePages=[]; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
   ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
+  ['stat-total','stat-new','stat-contacted'].forEach(id => $(id).textContent='—');
   ['password-form','user-form','quote-form'].forEach(id => $(id).reset());
   $('workspace').hidden = true; $('boot').hidden = true; $('login').hidden = false; $('login-error').textContent = message;
   $('login-password').value = ''; $('login-username').focus();
@@ -384,6 +385,7 @@ async function submit(form, errorId, action) {
 }
 function canOpen(name) {
   if (!currentUser || currentUser.must_change_password) return false;
+  if (['overview','quotes'].includes(name) && !(currentUser.is_owner && currentUser.username.toLowerCase()==='mahee')) return false;
   if (name === 'users' && currentUser.role !== 'admin') return false;
   if (name === 'case-report' && currentUser.role !== 'admin') return false;
   if (name === 'callingtree') return true;

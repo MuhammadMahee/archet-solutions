@@ -48,21 +48,21 @@ def test_restricted_admin_cannot_bypass_with_write_api(client,store,path,method)
 def test_grants_persist_and_changes_revoke_sessions(client,store):
     login(client)
     created=write(client,'users',{'username':'Scoped','display_name':'Scoped User','role':'member',
-        'password':'TestPass123','page_access':['quotes','spreadsheet']})
+        'password':'TestPass123','page_access':['cases','spreadsheet']})
     assert created.status_code==201
     uid=created.json['user']['id']
     other=index.app.test_client();assert login(other,'Scoped').status_code==200
-    assert other.get('/api/internal/quotes').status_code==200
+    assert other.get('/api/internal/quotes').status_code==403
     assert other.get('/api/internal/sales').status_code==403
-    assert write(client,'users/'+uid,{'page_access':['overview']},'PATCH').status_code==200
+    assert write(client,'users/'+uid,{'page_access':['inbox']},'PATCH').status_code==200
     assert other.get('/api/internal/me').status_code==401
     login(other,'Scoped')
-    assert other.get('/api/internal/me').json['user']['page_access']==['callingtree','overview','settings']
-    assert other.get('/api/internal/quotes').status_code==200
+    assert other.get('/api/internal/me').json['user']['page_access']==['callingtree','inbox','settings']
+    assert other.get('/api/internal/quotes').status_code==403
     assert write(other,'quotes/'+store.member['id'],{'status':'new'},'PATCH').status_code==403
 
 
-@pytest.mark.parametrize('pages',[None,'all',['bogus'],['settings'],['quotes','quotes'],[{}],['invoices']])
+@pytest.mark.parametrize('pages',[None,'all',['bogus'],['settings'],['quotes','quotes'],[{}],['invoices'],['quotes'],['overview']])
 def test_invalid_page_grants_rejected(client,store,pages):
     login(client)
     assert write(client,'users/'+store.member['id'],{'page_access':pages},'PATCH').status_code==400
@@ -77,11 +77,11 @@ def test_owner_always_retains_access_and_members_cannot_get_accounts(client,stor
 
 
 def test_restricted_admin_cannot_grant_more_access_or_reset_broader_account(client,store):
-    restrict(store,store.admin,['users','quotes']);login(client,'OtherAdmin')
+    restrict(store,store.admin,['users','cases']);login(client,'OtherAdmin')
     assert write(client,'users',{'username':'NewUser','display_name':'New','role':'admin',
         'password':'TestPass123','page_access':['users','sales']}).status_code==403
     assert write(client,'users/'+store.member['id'],{'password':'AnotherPass123'},'PATCH').status_code==403
-    restrict(store,store.member,['quotes'])
+    restrict(store,store.member,['cases'])
     assert write(client,'users/'+store.member['id'],{'page_access':[]},'PATCH').status_code==200
 
 
@@ -99,3 +99,32 @@ def test_new_pages_are_assignable_and_report_is_admin_only(client,store):
     assert write(client,'users/'+store.member['id'],{'page_access':['cases','inbox']},'PATCH').status_code==200
     assert write(client,'users/'+store.member['id'],{'page_access':['case-report']},'PATCH').status_code==400
     assert write(client,'users/'+store.admin['id'],{'page_access':['case-report']},'PATCH').status_code==200
+
+
+@pytest.mark.parametrize('username',['Member','OtherAdmin'])
+@pytest.mark.parametrize('pages',[None,['overview'],['quotes'],['overview','quotes','inbox','cases']])
+def test_only_mahee_can_read_or_update_quotes_even_with_legacy_grants(client,store,monkeypatch,username,pages):
+    target=store.member if username=='Member' else store.admin
+    restrict(store,target,pages)
+    store.db('portal_users','PATCH',{'display_name':'Mahee'},id='eq.'+target['id'])
+    login(client,username)
+    def no_quote_reads(table,*args,**kwargs):
+        assert table!='quote_requests','Unauthorized request reached private quote storage'
+        return store.db(table,*args,**kwargs)
+    monkeypatch.setattr(portal,'db',no_quote_reads)
+    granted=client.get('/api/internal/me').json['user']['page_access']
+    assert not {'quotes','overview'}&set(granted)
+    assert client.get('/api/internal/quotes').status_code==403
+    assert client.get('/api/internal/quotes?offset=50').status_code==403
+    assert write(client,'quotes/'+store.owner['id'],{'status':'contacted','notes':'Unauthorized'},'PATCH').status_code==403
+    if pages is None or 'inbox' in pages:
+        assert {'inbox','cases'}<=set(granted)
+
+
+def test_quote_pages_cannot_be_assigned_and_mahee_keeps_access(client,store):
+    restrict(store,store.owner,[]);login(client)
+    assert {'quotes','overview'}<=set(client.get('/api/internal/me').json['user']['page_access'])
+    assert client.get('/api/internal/quotes').status_code==200
+    assert not {'quotes','overview'}&set(client.get('/api/internal/users').json['page_options'])
+    for key in ('quotes','overview'):
+        assert write(client,'users/'+store.admin['id'],{'page_access':[key]},'PATCH').status_code==400

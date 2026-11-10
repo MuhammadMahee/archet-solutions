@@ -20,13 +20,17 @@ PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,r
 
 PAGE_OPTIONS = {'sales':'Sales Update','spreadsheet':'Opening / Closing Spreadsheet','compliance':'Compliance Spreadsheet',
     'quota':'Quota Update','callingtree':'Calling Tree','workforce':'AI Workforce',
-    'overview':'Overview','quotes':'Inbox inquiries','users':'Accounts',
+    'users':'Accounts',
     'cases':'Drop cases','inbox':'Inbox (cases)','case-report':'Case report (Admins)'}
+
+
+def can_access_quotes(user):
+    return bool(user.get('is_owner') and user.get('username', '').casefold() == 'mahee')
 
 
 def allowed_pages(user):
     if user.get('is_owner'):
-        return list(PAGE_OPTIONS)+['invoices','settings']
+        return list(PAGE_OPTIONS)+(['overview','quotes'] if can_access_quotes(user) else [])+['invoices','settings']
     selected=user.get('page_access')
     pages=[key for key in PAGE_OPTIONS if selected is None or key in selected or key=='callingtree']
     return [key for key in pages if key not in ('users','case-report') or user['role']=='admin']+['settings']
@@ -57,9 +61,8 @@ def check_page_access(user):
         elif suffix and set(permitted)&{'cases','inbox','case-report'}:
             # Shared detail/edit routes still enforce case-level sender/recipient permissions.
             return
-    # Overview reads the same inquiry summary; follow-up edits still need Quote inbox.
-    if page=='quotes' and request.method=='GET' and 'overview' in permitted:
-        return
+    if page=='quotes' and not can_access_quotes(user):
+        raise PortalError('Quote inquiries are available only to Mahee.',403)
     if page and page not in permitted:
         raise PortalError('You do not have access to this page. Contact your administrator.',403)
 

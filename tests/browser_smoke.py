@@ -3,6 +3,7 @@
 Run: python tests/browser_smoke.py (requires Playwright and Chromium).
 """
 from pathlib import Path
+import logging
 import sys
 from threading import Thread
 from unittest.mock import patch
@@ -18,6 +19,7 @@ from browser_sales import fixture_report
 
 
 def main():
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
     fake = FakeStore()
     fake.db("quote_requests", "POST", {**QUOTE, "received_at": "2026-09-25T12:00:00+00:00",
         "phone": "555-0100", "stores": "3", "message": '<script>alert("unsafe")</script>'})
@@ -31,7 +33,12 @@ def main():
         try:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch()
-                owner_context = browser.new_context(viewport={"width": 1440, "height": 1000})
+                def context(**kwargs):
+                    result=browser.new_context(**kwargs)
+                    result.route('**/api/internal/cases/unread',lambda route:route.fulfill(json={'count':0}))
+                    result.route('**/api/internal/calling-tree',lambda route:route.fulfill(json={'rows':[],'active':None}))
+                    return result
+                owner_context = context(viewport={"width": 1440, "height": 1000})
                 page = owner_context.new_page()
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
@@ -58,7 +65,7 @@ def main():
                 page.locator("#user-username").fill("Team_User")
                 page.locator("#user-password").fill("TeamPass123")
                 for checkbox in page.locator('#user-page-options input:not(:disabled)').all():
-                    if checkbox.input_value() not in ('overview','quotes'):checkbox.uncheck()
+                    checkbox.uncheck()
                 page.get_by_role("button", name="Save account").click()
                 expect(page.locator("#user-list")).to_contain_text("Team_User")
                 created=page.get_by_role('row').filter(has_text='Team_User')
@@ -69,14 +76,17 @@ def main():
                 legacy=page.get_by_role('row').filter(has_text='OtherAdmin')
                 legacy.locator('[data-reveal-password]').click()
                 expect(legacy.locator('[data-password-value]')).to_have_text('Unavailable until reset')
-                other_context=browser.new_context();other=other_context.new_page()
+                other_context=context();other=other_context.new_page()
                 other.goto(origin+'/internal#users');other.locator('#login-username').fill('OtherAdmin');other.locator('#login-password').fill('TestPass123');other.get_by_role('button',name='Sign in to workspace').click()
                 expect(other.locator('#user-list')).to_contain_text('Team_User')
                 expect(other.locator('[data-reveal-password]')).to_have_count(0)
                 expect(other.locator('#user-list th').filter(has_text='Password')).to_have_count(0)
+                expect(other.locator('.nav [data-page="overview"]')).to_be_hidden()
+                expect(other.locator('[data-page="quotes"]')).to_be_hidden()
+                assert other.request.get(origin+'/api/internal/quotes').status==403
                 other_context.close()
                 page.screenshot(path=str(artifacts / "accounts-desktop.png"), full_page=True)
-                member_context = browser.new_context(viewport={"width": 390, "height": 844})
+                member_context = context(viewport={"width": 390, "height": 844})
                 member = member_context.new_page()
                 member.on("pageerror", lambda error: errors.append(str(error)))
                 member.goto(origin + "/internal")
@@ -87,10 +97,12 @@ def main():
                 member.get_by_role("button", name="Sign in to workspace").click()
                 expect(member.locator("#greeting")).to_have_text("Welcome back, Team.")
                 member.locator('#sidebar-toggle').click()
-                member.locator('[data-page="overview"]').click()
+                expect(member.locator('[data-page="overview"]')).to_be_hidden()
+                expect(member.locator('[data-page="quotes"]')).to_be_hidden()
                 expect(member.locator("#users-nav")).to_be_hidden()
                 assert member.request.get(origin + "/api/internal/users").status == 403
-                expect(member.locator("#stat-total")).to_have_text("1")
+                expect(member.locator("#stat-total")).to_have_text("\u2014")
+                assert member.request.get(origin+"/api/internal/quotes").status==403
                 expect(member.locator('.nav [data-page="sales"]')).to_be_hidden()
                 expect(member.locator('[data-page="spreadsheet"]')).to_be_hidden()
                 assert member.request.get(origin + '/api/internal/store-hours/sheet').status==403
@@ -99,11 +111,13 @@ def main():
                 expect(member).to_have_url(origin+'/internal#settings')
                 expect(member.locator('#page-settings')).to_be_visible()
                 member.goto(origin+'/internal#overview');member.reload()
-                expect(member.locator('#stat-total')).to_have_text('1')
+                expect(member.locator('#page-overview')).to_be_hidden()
+                expect(member.locator('#page-callingtree')).to_be_visible()
+                assert member.locator('#recent-quotes').inner_text()==''
                 assert member.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 member.screenshot(path=str(artifacts / "workspace-mobile.png"), full_page=True)
                 page.get_by_role("row").filter(has_text="Team_User").get_by_role("button", name="Manage").click()
-                expect(page.locator('#user-page-options input[value="quotes"]')).to_be_checked()
+                expect(page.locator('#user-page-options input[value="quotes"],#user-page-options input[value="overview"]')).to_have_count(0)
                 expect(page.locator('#user-page-options input[value="sales"]')).not_to_be_checked()
                 page.locator("#user-active").select_option("false")
                 page.get_by_role("button", name="Save account").click()

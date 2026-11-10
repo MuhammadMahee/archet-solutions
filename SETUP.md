@@ -17,8 +17,11 @@ validated and re-encoded, stored privately, and served only to the sender,
 recipients, and admins. Sending stores the case and all Inbox notifications in
 one transaction; retrying the same draft does not send a duplicate. Notifications
 appear as an unread Inbox badge, refreshed every 30 seconds while the tab is
-visible. Existing quote inquiries remain accessible from Inbox under their
-existing page grants. This workflow delivers internal notifications, not SMTP mail.
+visible. Website quote inquiries and their Overview summaries are private to
+Mahee's permanent owner account, including read access and follow-up edits.
+Other admins and members cannot access them through navigation, Page Access,
+legacy grants, or direct API requests. Case Inbox permissions remain independent.
+This workflow delivers internal notifications, not SMTP mail.
 
 Admins with case page access can review cases as Approved or Not Approved;
 the Case report grant controls access to `#case-report`.
