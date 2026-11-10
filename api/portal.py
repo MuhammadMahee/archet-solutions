@@ -20,15 +20,16 @@ PUBLIC_USER_FIELDS = "id,username,display_name,role,active,is_owner,created_at,r
 
 PAGE_OPTIONS = {'sales':'Sales Update','spreadsheet':'Opening / Closing Spreadsheet','compliance':'Compliance Spreadsheet',
     'quota':'Quota Update','callingtree':'Calling Tree','workforce':'AI Workforce',
-    'overview':'Overview','quotes':'Quote inbox','users':'Accounts'}
+    'overview':'Overview','quotes':'Inbox inquiries','users':'Accounts'}
 
 
 def allowed_pages(user):
     if user.get('is_owner'):
-        return list(PAGE_OPTIONS)+['invoices','settings']
+        return list(PAGE_OPTIONS)+['cases','inbox','case-report','invoices','settings']
     selected=user.get('page_access')
-    pages=[key for key in PAGE_OPTIONS if selected is None or key in selected]
-    return [key for key in pages if key!='users' or user['role']=='admin']+['settings']
+    pages=[key for key in PAGE_OPTIONS if selected is None or key in selected or key=='callingtree']
+    return ([key for key in pages if key!='users' or user['role']=='admin']+
+            ['cases','inbox']+(['case-report'] if user['role']=='admin' else [])+['settings'])
 
 
 def page_access_field(payload, role):
@@ -45,7 +46,7 @@ def page_access_field(payload, role):
 def check_page_access(user):
     path=request.path.removeprefix('/api/internal/').split('/')[0]
     page={'compliance':'compliance','store-hours':'spreadsheet','sales':'sales','quota':'quota','calling-tree':'callingtree',
-          'workforce':'workforce','invoices':'invoices','users':'users','quotes':'quotes'}.get(path)
+          'workforce':'workforce','invoices':'invoices','users':'users','quotes':'quotes','cases':'cases'}.get(path)
     permitted=allowed_pages(user)
     # Overview reads the same inquiry summary; follow-up edits still need Quote inbox.
     if page=='quotes' and request.method=='GET' and 'overview' in permitted:
@@ -189,7 +190,7 @@ def register_portal(app):
 
     @app.before_request
     def guard_portal():
-        limit=3*1024*1024 if request.path in ('/api/internal/calling-tree/preview','/api/internal/quota/upload','/api/internal/store-hours/schedules/preview','/api/internal/compliance/schedules/preview') else 32*1024
+        limit=3*1024*1024 if request.path in ('/api/internal/cases','/api/internal/calling-tree/preview','/api/internal/quota/upload','/api/internal/store-hours/schedules/preview','/api/internal/compliance/schedules/preview') else 32*1024
         if request.path.startswith('/api/internal/invoices/'):
             limit = 512 * 1024
         if request.path in ('/api/internal/store-hours/review','/api/internal/store-hours/sheet/presence','/api/internal/compliance/review','/api/internal/compliance/sheet/presence'):

@@ -1,5 +1,35 @@
 # Archet internal workspace setup
 
+## Violation cases and Inbox
+
+Calling Tree, Drop cases (`#cases`), and Inbox (`#inbox`) are available to every
+active portal user, including accounts with a restricted page list. Calling Tree
+uploads remain administrator-only. Its columns follow the original Excel order;
+internal `WB-` IDs and the RT-POS matching column are hidden in the directory.
+
+Drop cases sends private portal messages to selected To and CC users. Drafts
+include the violation date, employee NTID/name, case type (including Custom),
+subject, body, and up to five JPG/PNG/WebP pictures totaling 2 MB. Pictures are
+validated and re-encoded, stored privately, and served only to the sender,
+recipients, and admins. Sending stores the case and all Inbox notifications in
+one transaction; retrying the same draft does not send a duplicate. Notifications
+appear as an unread Inbox badge, refreshed every 30 seconds while the tab is
+visible. Existing quote inquiries remain accessible from Inbox under their
+existing page grants. This workflow delivers internal notifications, not SMTP mail.
+
+Admins can review all cases as Approved or Not Approved and open `#case-report`.
+The report uses an inclusive **violation date** range, ranks submitters across all
+approval statuses, and lists Date, User, Employee NTID, Employee Name, and Case Type.
+Reviews retain an audit trail and reject stale concurrent decisions.
+
+Migration `030_violation_cases.sql` creates the private message, recipient,
+picture, and review tables. The production build applies it automatically.
+Run `python -m pytest -q tests` for repository tests. Opt-in SQL case tests use
+session-local temporary tables only: set `CASE_TEST_DB=1` and run
+`python -m pytest -q tests/test_cases.py`. `python tests/browser_cases.py` exercises
+the complete UI with synthetic users and those temporary tables. Neither test
+creates messages or sends notifications to production users.
+
 ## November 2026 portal refresh
 
 AMQ is retired from the internal portal. Existing database records are retained,

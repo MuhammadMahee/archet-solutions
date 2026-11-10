@@ -204,6 +204,9 @@ register_calling_tree(app,lambda: sales_connect())
 register_quota(app)
 register_invoices(app)
 
+from api.cases import register_cases
+register_cases(app)
+
 from api.store_hours import register_store_hours
 register_store_hours(app)
 
@@ -213,6 +216,8 @@ register_workforce(app)
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
+    if filename in ('cases.js', 'cases.css'):
+        return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
     if filename in ('public-experience.css', 'public-experience.js', 'public-data.js',
                     'public-scene.js', 'public-three.module.min.js', 'public-three-LICENSE.txt'):
         return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)

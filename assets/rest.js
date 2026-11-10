@@ -19,6 +19,7 @@
     window.invoiceDashboard?.clear();
     window.storeHoursDashboard?.clear();
     window.workforceDashboard?.clear();
+    window.casesDashboard?.clear();
     document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
     quotes = []; users = []; editingUser = editingQuote = null; offset = 0;
     ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());

@@ -24,6 +24,7 @@
 <link rel="stylesheet" href="/assets/portal-design.css">
 <link rel="stylesheet" href="/assets/appearance.css">
 <link rel="stylesheet" href="/assets/workforce-screen.css">
+<link rel="stylesheet" href="/assets/cases.css">
 </head>
 <body>
 <div id="boot" class="boot" role="status">Opening your workspace…</div>
@@ -77,7 +78,9 @@
       <button data-page="workforce"><span class="nav-icon">◉</span>AI Workforce</button>
       <button data-page="invoices" id="invoices-nav" hidden><span class="nav-icon">▧</span>Invoices</button>
       <button data-page="overview" class="active"><span class="nav-icon">◫</span>Overview</button>
-      <button data-page="quotes"><span class="nav-icon">▤</span>Quote inbox</button>
+      <button data-page="cases"><span class="nav-icon">✉</span>Drop cases</button>
+      <button data-page="inbox" data-label="Inbox"><span class="nav-icon">▤</span><span>Inbox</span><span id="case-unread" class="case-unread" hidden aria-label="Unread cases"></span></button>
+      <button data-page="case-report"><span class="nav-icon">▥</span>Case report</button>
       <button data-page="users" id="users-nav" hidden><span class="nav-icon">♧</span>Accounts</button>
       <button data-page="settings"><span class="nav-icon">⚙</span>Settings</button>
     </nav>
@@ -210,9 +213,24 @@
         <form id="tree-form"><label>Excel workbook<input id="tree-file" type="file" accept=".xlsx" required></label><label>Worksheet name <span>(optional)</span><input id="tree-sheet" type="text" maxlength="100" placeholder="Auto-detect store worksheet"></label><button class="primary" id="tree-preview-button" type="submit">Preview workbook</button></form>
         <p class="tree-help">Up to 2 MB · Upload the complete store list across all dealers. Existing sales history is preserved.</p>
       </div>
-      <div id="tree-preview" class="tree-preview" hidden><div><h2>Review before applying</h2><p id="tree-preview-summary"></p><p id="tree-preview-matches"></p></div><div class="tree-preview-actions"><button id="tree-discard" class="subtle">Discard preview</button><button id="tree-activate" class="primary">Use this Calling Tree</button></div></div>
+      <div id="tree-preview" class="tree-preview" hidden><div><h2>Review before applying</h2><p id="tree-preview-summary"></p></div><div class="tree-preview-actions"><button id="tree-discard" class="subtle">Discard preview</button><button id="tree-activate" class="primary">Use this Calling Tree</button></div></div>
       <div class="tree-list-head"><div><h2 id="tree-title">Active Calling Tree</h2><p id="tree-active-summary">Loading…</p></div><div class="tree-list-filters"><label>Dealer<select id="tree-dealer"><option value="">All Dealers</option></select></label><label>Search stores<input id="tree-search" type="search" placeholder="Name, Store ID, market, or DM"></label></div></div>
-      <div class="sales-panel"><div class="tree-table-scroll"><table id="tree-table"><thead><tr><th>Dealer</th><th>Market</th><th>Store ID</th><th>Store name</th><th>Carrier</th><th>DM</th><th>State</th><th>Dealer code</th><th>Door code</th><th>SAP ID</th><th>Address</th><th>ZIP</th><th>RT-POS match</th></tr></thead><tbody></tbody></table></div><div class="sales-empty" id="tree-empty" hidden>No Calling Tree uploaded yet.</div></div>
+      <div class="sales-panel"><div class="tree-table-scroll"><table id="tree-table"><thead><tr><th>S. No</th><th>Carrier</th><th>Dealer</th><th>DM</th><th>Store ID</th><th>State</th><th>Dealer Code</th><th>Door Code</th><th>SAP ID</th><th>Market</th><th>Store Name</th><th>Address</th><th>ZIP Code</th></tr></thead><tbody></tbody></table></div><div class="sales-empty" id="tree-empty" hidden>No Calling Tree uploaded yet.</div></div>
+    </section>
+    <section id="page-cases" class="case-page" hidden>
+      <div class="page-head row between"><div><div class="eyebrow">TEAM OPERATIONS</div><h1>Drop cases</h1><p class="muted">Document a violation. Keep the right people informed.</p></div><button class="primary" data-case-compose>+ Drop cases</button></div>
+      <div class="case-mailbox panel"><div class="case-toolbar"><h2>Case history</h2><label id="case-scope-label" hidden>View<select id="case-scope"><option value="all">All cases</option><option value="sent">My sent cases</option></select></label><label>Status<select id="case-status"><option value="">All statuses</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="not_approved">Not Approved</option></select></label><button class="subtle" id="case-refresh">Refresh</button></div><div id="case-history" aria-live="polite"></div><div class="pager"><button class="subtle" id="case-prev">← Previous</button><span id="case-page-number" class="muted small"></span><button class="subtle" id="case-next">Next →</button></div></div>
+    </section>
+    <section id="page-inbox" class="case-page" hidden>
+      <div class="page-head row between"><div><div class="eyebrow">YOUR MESSAGES</div><h1>Inbox</h1><p class="muted">Cases addressed to you, including CC notifications.</p></div><button class="primary" data-case-compose>+ Drop cases</button></div>
+      <div class="case-mailbox panel"><div class="case-toolbar"><h2>Received cases</h2><button class="subtle" data-page="quotes">Quote inquiries</button><button class="subtle" id="case-inbox-refresh">Refresh</button></div><div id="case-inbox" aria-live="polite"></div><div class="pager"><button class="subtle" id="case-inbox-prev">← Previous</button><span id="case-inbox-page-number" class="muted small"></span><button class="subtle" id="case-inbox-next">Next →</button></div></div>
+    </section>
+    <section id="page-case-report" class="case-page" hidden>
+      <div class="page-head"><div class="eyebrow">ADMINISTRATOR REPORT</div><h1>Violation report</h1><p class="muted">Compare submissions and review employee violations by violation date.</p></div>
+      <form id="case-report-filter" class="case-report-filters panel"><label>From<input id="case-report-start" type="date" required></label><label>Through<input id="case-report-end" type="date" required></label><button class="primary">View report</button></form>
+      <div id="case-report-summary" class="case-report-summary" aria-live="polite"></div>
+      <div class="panel case-ranking-panel"><h2>Most cases submitted</h2><div id="case-ranking"></div></div>
+      <div class="panel case-mailbox"><div class="case-toolbar"><h2>Violation details</h2><span class="muted small">Dates are inclusive · All approval statuses</span></div><div id="case-report-table"></div><div class="pager"><button class="subtle" id="case-report-prev">← Previous</button><span id="case-report-page-number" class="muted small"></span><button class="subtle" id="case-report-next">Next →</button></div></div>
     </section>
     <section id="page-overview">
       <div class="page-head"><div class="eyebrow">Your workspace at a glance</div><h1 id="greeting" style="margin-top:14px">Welcome back.</h1><p class="muted">Keep every conversation moving forward.</p></div>
@@ -224,7 +242,7 @@
       <div class="panel"><div class="panel-head row between"><h2>Latest inquiries</h2><button class="subtle table-button" data-open-inbox>View inbox →</button></div><div id="recent-quotes"></div></div>
     </section>
     <section id="page-quotes" hidden>
-      <div class="page-head row between"><div><h1>Quote inbox</h1><p class="muted">Inquiries from archetsolutions.com, shared with your team.</p></div><button id="refresh-quotes" class="subtle">Refresh</button></div>
+      <div class="page-head row between"><div><h1>Inbox</h1><p class="muted">Quote inquiries from archetsolutions.com.</p></div><div class="row"><button class="subtle" data-page="inbox">Received cases</button><button id="refresh-quotes" class="subtle">Refresh</button></div></div>
       <div class="panel"><div id="quote-list"></div><div class="pager"><button id="previous" class="subtle">← Previous</button><span id="page-number" class="muted small"></span><button id="next" class="subtle">Next →</button></div></div>
     </section>
     <section id="page-users" hidden>
@@ -242,12 +260,34 @@
     </section>
   </main>
 </div>
+<dialog id="case-compose-dialog" class="case-dialog" aria-labelledby="case-compose-title">
+  <div class="case-dialog-head row between"><div><span class="eyebrow">NEW MESSAGE</span><h2 id="case-compose-title">Drop a case</h2></div><button class="subtle close" data-close="case-compose-dialog" aria-label="Close draft">×</button></div>
+  <form id="case-compose-form">
+    <div class="case-address-line"><label for="case-to">To</label><div><div id="case-to-chips" class="case-chips"></div><select id="case-to" aria-label="Add To recipient"><option value="">Choose a recipient…</option></select></div></div>
+    <div class="case-address-line"><label for="case-cc">CC</label><div><div id="case-cc-chips" class="case-chips"></div><select id="case-cc" aria-label="Add CC recipient"><option value="">Choose a recipient…</option></select></div></div>
+    <p class="case-recipient-hint muted small">Choose portal users. Sending delivers a notification to their Inbox.</p>
+    <div class="case-compose-grid">
+      <label>Date of violation<input id="case-date" type="date" required></label>
+      <label>Case type<select id="case-type" required></select></label>
+      <label id="case-custom-label" class="case-full" hidden>Custom case type<input id="case-custom" maxlength="150"></label>
+      <label>Employee NTID<input id="case-ntid" maxlength="80" required autocomplete="off"></label>
+      <label>Employee name<input id="case-employee" maxlength="150" required autocomplete="off"></label>
+    </div>
+    <label class="case-subject">Subject<input id="case-subject" maxlength="200" required placeholder="A clear summary of the violation"></label>
+    <label class="case-body-label" for="case-body">Body</label><textarea id="case-body" maxlength="20000" rows="8" required placeholder="Describe what happened, where it happened, and any supporting details…"></textarea>
+    <div class="case-attachment-bar"><label class="case-attach-button" for="case-pictures">＋ Attach pictures</label><input id="case-pictures" type="file" multiple accept="image/jpeg,image/png,image/webp" class="case-file-input"><span class="muted small">Up to 5 pictures · 2 MB total · JPG, PNG, WebP</span></div><div id="case-draft-pictures" class="case-picture-list"></div>
+    <p id="case-compose-error" class="error" role="alert"></p><div class="case-compose-footer"><span class="muted small">The case is saved in your sent history.</span><button class="primary" id="case-send" type="submit">Send case →</button></div>
+  </form>
+</dialog>
+<dialog id="case-detail-dialog" class="case-dialog" aria-labelledby="case-detail-subject">
+  <div class="case-dialog-head row between"><h2 id="case-detail-subject"></h2><button class="subtle close" data-close="case-detail-dialog" aria-label="Close case">×</button></div><div id="case-detail-content"></div><p id="case-detail-error" class="error" role="alert"></p>
+</dialog>
 <dialog id="user-dialog" aria-labelledby="user-title">
   <div class="dialog-head row between"><h2 id="user-title">Create account</h2><button class="subtle close" data-close="user-dialog" aria-label="Close account form">×</button></div>
   <form id="user-form">
     <div id="new-user-fields"><div class="field"><label for="user-display-name">Full name</label><input id="user-display-name" maxlength="100" autocomplete="off"></div><div class="field"><label for="user-username">Username</label><input id="user-username" maxlength="32" pattern="[A-Za-z0-9_]{3,32}" autocomplete="off"></div><p class="hint">3–32 letters, numbers or underscores. Usernames are not case-sensitive.</p></div>
     <div class="field"><label for="user-role">Role</label><select id="user-role"><option value="member">Member - assigned pages</option><option value="admin">Admin - assigned pages and account management</option></select></div>
-    <fieldset id="user-page-access"><legend>Page access</legend><p class="hint">Choose the pages this person can open. Settings stays available for changing their password. Invoices remain available only to Mahee.</p><div id="user-page-options"></div></fieldset>
+    <fieldset id="user-page-access"><legend>Page access</legend><p class="hint">Choose the pages this person can open. Calling Tree, Drop cases, Inbox, and Settings are available to everyone. Case report is available to admins. Invoices remain available only to Mahee.</p><div id="user-page-options"></div></fieldset>
     <div class="field" id="user-active-field" hidden><label for="user-active">Account access</label><select id="user-active"><option value="true">Active</option><option value="false">Disabled</option></select></div>
     <div class="field"><label id="user-password-label" for="user-password">Initial password</label><input id="user-password" type="password" minlength="8" maxlength="128" autocomplete="new-password"></div>
     <p id="user-hint" class="hint">Share the username and password privately with your team member.</p>
@@ -278,6 +318,7 @@ function signedOut(message = '') {
   if (window.quotaDashboard) window.quotaDashboard.clear();
   window.invoiceDashboard?.clear();
   window.workforceDashboard?.clear();
+  window.casesDashboard?.clear();
   document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
   currentUser = null; accountPageOptions={}; assignablePages=[]; quotes = []; users = []; editingUser = null; editingQuote = null; offset = 0;
   ['recent-quotes','quote-list','user-list','quote-details','quote-message'].forEach(id => $(id).replaceChildren());
@@ -317,6 +358,8 @@ async function submit(form, errorId, action) {
 function canOpen(name) {
   if (!currentUser || currentUser.must_change_password) return false;
   if (name === 'users' && currentUser.role !== 'admin') return false;
+  if (name === 'case-report') return currentUser.role === 'admin';
+  if (['callingtree','cases','inbox'].includes(name)) return true;
   if (name === 'invoices') return window.invoiceDashboard.allowed();
   return (currentUser.page_access || ['sales','spreadsheet','compliance','quota','callingtree','workforce','overview','quotes','users','settings']).includes(name);
 }
@@ -330,6 +373,7 @@ function enterWorkspace(user, freshLogin = false) {
   $('avatar').textContent = user.display_name.slice(0,1).toUpperCase(); $('greeting').textContent = 'Welcome back, ' + user.display_name.split(' ')[0] + '.';
   $('users-nav').hidden = user.role !== 'admin'; $('login-password').value = ''; notice('');
   document.querySelectorAll('[data-page]').forEach(button => { button.hidden = !canOpen(button.dataset.page); });
+  window.casesDashboard?.start();
   const requested=location.hash.slice(1)||(location.pathname==='/ai-workforce'?'workforce':'sales');
   const initial=['storehours','storehoursreport'].includes(requested)?'spreadsheet':requested;
   showPage(canOpen(initial)?initial:['sales','spreadsheet','compliance','quota','callingtree','workforce','overview','quotes','users','settings'].find(canOpen));
@@ -346,14 +390,14 @@ async function showPage(name) {
   if(name!=='users')hideAccountPasswords();
   page = name; document.querySelectorAll('[id^="page-"]').forEach(el => { if (el.tagName === 'SECTION') el.hidden = el.id !== 'page-' + name; });
   history.replaceState(null,'','#'+name);
-  const activeNav = document.querySelector('.nav [data-page="'+name+'"]');
-  $('workspace-page-label').textContent = activeNav?.lastChild.textContent.trim() || 'Workspace';
+  const activeNav = document.querySelector('.nav [data-page="'+(name==='quotes'?'inbox':name)+'"]');
+  $('workspace-page-label').textContent = activeNav?.dataset.label || activeNav?.lastChild.textContent.trim() || 'Workspace';
   document.body.classList.toggle('sales-mode', ['sales','callingtree','quota'].includes(name));
   document.body.classList.toggle('invoices-mode', name === 'invoices');
   document.body.classList.toggle('workforce-mode', name === 'workforce');
   document.querySelectorAll('[data-page]').forEach(el => { const active = el.dataset.page === name; el.classList.toggle('active', active); if (active) el.setAttribute('aria-current','page'); else el.removeAttribute('aria-current'); });
   notice('');
-  try { if (name === 'workforce') await window.workforceDashboard.load(); else if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
+  try { if (['cases','inbox','case-report'].includes(name)) await window.casesDashboard.load(name); else if (name === 'workforce') await window.workforceDashboard.load(); else if (name === 'invoices') await window.invoiceDashboard.load(); else if (name === 'sales') await window.salesDashboard.load(); else if (name === 'callingtree') await window.callingTree.load(); else if (name === 'quota') await window.quotaDashboard.load(); else if (name === 'overview') await loadOverview(); else if (name === 'quotes') await loadQuotes(); else if (name === 'users') await loadUsers(); }
   catch (error) { notice(error.message, true); }
 }
 function quoteTable(rows) {
@@ -398,7 +442,7 @@ function renderPageAccess(user) {
   for (const [key,title] of Object.entries(accountPageOptions)) {
     const label=document.createElement('label');label.className='check';
     const input=document.createElement('input');input.type='checkbox';input.value=key;input.name='page_access';
-    input.checked=selected.includes(key);input.disabled=!assignablePages.includes(key);
+    input.checked=key==='callingtree'||selected.includes(key);input.disabled=key==='callingtree'||!assignablePages.includes(key);
     label.append(input,document.createTextNode(title));container.append(label);
   }
   updateAccountRole();
@@ -468,6 +512,7 @@ $('password-form').onsubmit = event => { event.preventDefault(); submit(event.ta
 <script src="/assets/sales-snapshot.js"></script>
 <script src="/assets/sales.js"></script>
 <script src="/assets/calling-tree.js"></script>
+<script src="/assets/cases.js"></script>
 <script src="/assets/quota.js"></script>
 <script src="/assets/workspace.js"></script>
 <script src="/assets/rest.js"></script>

@@ -1,5 +1,6 @@
 """Page grants cover navigation APIs, exports, mutations and account administration."""
 import pytest
+from contextlib import nullcontext
 from api import index, portal
 from test_portal import client, store, login, write
 
@@ -8,8 +9,20 @@ def restrict(store,user,pages):
     store.db('portal_users','PATCH',{'page_access':pages},id='eq.'+user['id'])
 
 
+@pytest.mark.parametrize('username',['Member','OtherAdmin'])
+def test_calling_tree_is_available_even_without_assigned_pages(client,store,monkeypatch,username):
+    from api import calling_tree
+    target=store.member if username=='Member' else store.admin
+    restrict(store,target,[]);login(client,username)
+    monkeypatch.setattr(index,'sales_connect',lambda:nullcontext(None))
+    monkeypatch.setattr(calling_tree,'active_roster',lambda conn:[])
+    monkeypatch.setattr(calling_tree,'source_catalog',lambda conn:{})
+    assert client.get('/api/internal/calling-tree').status_code==200
+    if username=='Member':assert write(client,'calling-tree/preview',{}).status_code==403
+
+
 @pytest.mark.parametrize('path',[
-    'sales','sales/export','quota','quota/excel','quota/template','calling-tree',
+    'sales','sales/export','quota','quota/excel','quota/template',
     'store-hours','store-hours/export','store-hours/history','store-hours/sheet',
     'store-hours/sheet/export','store-hours/sheet/updates','workforce/status',
     'workforce/conversations','invoices','users','quotes',
@@ -17,11 +30,11 @@ def restrict(store,user,pages):
 def test_restricted_read_routes_fail_before_loading_data(client,store,path):
     restrict(store,store.member,[]);login(client,'Member')
     assert client.get('/api/internal/'+path).status_code==403
-    assert client.get('/api/internal/me').json['user']['page_access']==['settings']
+    assert client.get('/api/internal/me').json['user']['page_access']==['callingtree','cases','inbox','settings']
 
 
 @pytest.mark.parametrize('path,method',[
-    ('sales/refresh','POST'),('quota/upload','POST'),('calling-tree/preview','POST'),
+    ('sales/refresh','POST'),('quota/upload','POST'),
     ('store-hours/review','POST'),('store-hours/employees','POST'),('store-hours/rows','POST'),
     ('store-hours/schedules/apply','POST'),('store-hours/sheet/columns','POST'),
     ('store-hours/sheet/presence','POST'),('workforce/conversations','POST'),
@@ -44,7 +57,7 @@ def test_grants_persist_and_changes_revoke_sessions(client,store):
     assert write(client,'users/'+uid,{'page_access':['overview']},'PATCH').status_code==200
     assert other.get('/api/internal/me').status_code==401
     login(other,'Scoped')
-    assert other.get('/api/internal/me').json['user']['page_access']==['overview','settings']
+    assert other.get('/api/internal/me').json['user']['page_access']==['callingtree','overview','cases','inbox','settings']
     assert other.get('/api/internal/quotes').status_code==200
     assert write(other,'quotes/'+store.member['id'],{'status':'new'},'PATCH').status_code==403
 
@@ -76,4 +89,4 @@ def test_legacy_access_and_new_account_empty_access(client,store):
     login(client)
     assert set(portal.PAGE_OPTIONS)<=set(client.get('/api/internal/me').json['user']['page_access'])
     created=write(client,'users',{'username':'NoPages','display_name':'No pages','password':'TestPass123','page_access':[]})
-    assert created.status_code==201 and created.json['user']['page_access']==['settings']
+    assert created.status_code==201 and created.json['user']['page_access']==['callingtree','cases','inbox','settings']

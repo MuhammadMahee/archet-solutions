@@ -8,7 +8,9 @@
     const rows=preview?preview.rows:active;
     const selected=el('dealer').value,query=el('search').value.toLowerCase();
     const filtered=rows.filter(r=>(!selected||r.dealer===selected)&&(!query||[r.dealer,r.store_id,r.store,r.market,r.dm,r.address].join(' ').toLowerCase().includes(query)));
-    el('table').tBodies[0].innerHTML=filtered.map(r=>'<tr>'+[r.dealer,r.market,r.store_id,r.store,r.carrier,r.dm,r.state,r.dealer_code,r.door_code,r.sap_id,r.address,r.zip_code].map(v=>'<td>'+escapeHTML(v)+'</td>').join('')+'<td><span class="tree-match '+(r.matched?'matched':'unmatched')+'">'+(r.matched?'Matched':'Not yet found')+'</span></td></tr>').join('');
+    const numbers=new Map(rows.map((r,i)=>[r,i+1]));
+    const visibleId=value=>/^WB-/i.test(String(value||''))?'':value;
+    el('table').tBodies[0].innerHTML=filtered.map(r=>'<tr>'+[numbers.get(r),r.carrier,r.original_dealer||r.dealer,r.dm,visibleId(r.store_id),r.state,r.dealer_code,r.door_code,r.sap_id,r.market,r.store,r.address,r.zip_code].map(v=>'<td>'+escapeHTML(v)+'</td>').join('')+'</tr>').join('');
     el('empty').hidden=filtered.length>0;
     el('empty').textContent=rows.length?'No stores match your filters.':'No Calling Tree uploaded yet. An administrator can upload one above.';
     el('title').textContent=preview?'Workbook preview':'Active Calling Tree';
@@ -33,7 +35,6 @@
       if(id!==sequence||!currentUser)return;
       preview=result;el('preview').hidden=false;
       el('preview-summary').textContent=Object.entries(preview.counts).map(([dealer,count])=>`${dealer}: ${count}`).join(' · ')+` — ${preview.rows.length} stores total.`;
-      el('preview-matches').textContent=preview.unmatched?`${preview.unmatched} Store IDs have not appeared in RT-POS yet. They remain in the list and show unavailable sales until matched.`:'Every Store ID matches saved RT-POS data.';
       el('dealer').value='';el('search').value='';filters();message('Preview ready. The active Calling Tree is unchanged until you apply this workbook.');
     }catch(error){message(error.message);}finally{el('preview-button').disabled=false;}
   };
