@@ -8,10 +8,11 @@
   const badge = status => '<span class="case-status case-status-' + esc(status) + '">' + esc(statusText(status)) + '</span>';
   let epoch=0, listSequence=0, reportSequence=0, detailSequence=0, timer=null, draftId=null, sending=false;
   let directory=[], selected={to:[],cc:[]}, pictures=[], detail=null;
+  let editing=null, editUsers=[], editSelected={to:[],cc:[]}, editPictures=[], removedPictures=new Set(), savingEdit=false, editSequence=0;
   const offsets={cases:0,inbox:0,'case-report':0}, more={};
   const admin=()=>currentUser?.role==='admin';
   const error=err=>notice(err.message,true);
-  const actionButtons = r => admin()?'<div class="case-review-actions"><button class="case-approve" data-case-review="'+r.id+'" data-revision="'+r.revision+'" data-status="approved" '+(r.status==='approved'?'disabled':'')+'>Approved</button><button class="subtle" data-case-review="'+r.id+'" data-revision="'+r.revision+'" data-status="not_approved" '+(r.status==='not_approved'?'disabled':'')+'>Not Approved</button></div>':'';
+  const actionButtons = r => '<div class="case-review-actions">'+(r.can_edit?'<button class="subtle" data-case-edit="'+r.id+'">Edit</button><button class="subtle danger" data-case-delete="'+r.id+'" data-revision="'+r.revision+'">Delete</button>':'')+(admin()?'<button class="case-approve" data-case-review="'+r.id+'" data-revision="'+r.revision+'" data-status="approved" '+(r.status==='approved'?'disabled':'')+'>Approved</button><button class="subtle" data-case-review="'+r.id+'" data-revision="'+r.revision+'" data-status="not_approved" '+(r.status==='not_approved'?'disabled':'')+'>Not Approved</button>':'')+'</div>';
 
   function pager(name, prefix) {
     el(prefix+'prev').disabled=offsets[name]===0;
@@ -33,7 +34,7 @@
     timer=setInterval(()=>{
       if(document.hidden||!currentUser||currentUser.rest_mode)return;
       unread();
-      if(page==='inbox'&&!el('detail-dialog').open&&!el('compose-dialog').open)loadList('inbox').catch(error);
+      if(page==='inbox'&&!el('detail-dialog').open&&!el('compose-dialog').open&&!el('edit-dialog').open)loadList('inbox').catch(error);
     },30000);
   }
   async function loadList(name) {
@@ -46,7 +47,7 @@
     const rows=result.cases;
     more[name]=result.has_more;
     if(!rows.length)target.innerHTML='<div class="case-empty"><span aria-hidden="true">✉</span><h3>'+(inbox?'Your inbox is clear':'No cases here yet')+'</h3><p>'+(inbox?'Cases sent to you or copied to you will appear here.':'Select + Drop cases to draft your first case, or adjust the status filter.')+'</p></div>';
-    else target.innerHTML='<div class="table-wrap"><table class="case-list-table"><thead><tr><th>Case / employee</th><th>From</th><th>Violation date</th><th>Case type</th><th>Status</th>'+(admin()?'<th>Review</th>':'')+'</tr></thead><tbody>'+rows.map(r=>'<tr class="'+(r.unread?'case-is-unread':'')+'"><td><button class="case-subject-button" data-case-open="'+r.id+'">'+(r.unread?'<span class="case-dot" aria-label="Unread"></span>':'')+esc(r.subject)+'</button><small>'+esc(r.employee_name)+' · '+esc(r.employee_ntid)+(r.attachment_count?' · '+r.attachment_count+' picture'+(r.attachment_count===1?'':'s'):'')+'</small></td><td>'+esc(r.sender_name)+'</td><td>'+esc(dateText(r.violation_date))+'</td><td>'+esc(r.case_type)+'</td><td>'+badge(r.status)+'</td>'+(admin()?'<td>'+actionButtons(r)+'</td>':'')+'</tr>').join('')+'</tbody></table></div>';
+    else target.innerHTML='<div class="table-wrap"><table class="case-list-table"><thead><tr><th>Case / employee</th><th>From</th><th>Violation date</th><th>Case type</th><th>Status</th>'+'<th>Actions</th>'+'</tr></thead><tbody>'+rows.map(r=>'<tr class="'+(r.unread?'case-is-unread':'')+'"><td><button class="case-subject-button" data-case-open="'+r.id+'">'+(r.unread?'<span class="case-dot" aria-label="Unread"></span>':'')+esc(r.subject)+'</button><small>'+esc(r.employee_name)+' · '+esc(r.employee_ntid)+(r.attachment_count?' · '+r.attachment_count+' picture'+(r.attachment_count===1?'':'s'):'')+'</small></td><td>'+esc(r.sender_name)+'</td><td>'+esc(dateText(r.violation_date))+'</td><td>'+esc(r.case_type)+'</td><td>'+badge(r.status)+'</td>'+'<td>'+actionButtons(r)+'</td>'+'</tr>').join('')+'</tbody></table></div>';
     pager(name,inbox?'inbox-':'');
   }
   async function loadReport() {
@@ -136,6 +137,10 @@
       const recipients=kind=>data.recipients.filter(r=>r.kind===kind).map(r=>r.recipient_name).join(', ')||'—';
       const fields=[['From',detail.sender_name],['To',recipients('to')],['CC',recipients('cc')],['Sent',new Date(detail.submitted_at).toLocaleString()],['Violation date',dateText(detail.violation_date)],['Employee',detail.employee_name+' · '+detail.employee_ntid],['Case type',detail.case_type]];
       el('detail-content').innerHTML='<div class="case-detail-status">'+badge(detail.status)+'</div><dl class="case-details">'+fields.map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+esc(value)+'</dd></div>').join('')+'</dl><div class="case-message-body">'+esc(detail.body)+'</div>'+(data.attachments.length?'<h3>Pictures</h3><div class="case-photos">'+data.attachments.map(a=>{const url='/api/internal/cases/'+id+'/attachments/'+a.id;return '<a href="'+url+'?download=1"><img loading="lazy" src="'+url+'" alt="'+esc(a.filename)+'"><span>'+esc(a.filename)+'</span></a>';}).join('')+'</div>':'')+actionButtons(detail)+(data.reviews.length?'<div class="case-review-history"><h3>Review history</h3>'+data.reviews.map(r=>'<p>'+esc(r.reviewer)+' · '+esc(statusText(r.status))+' · '+esc(new Date(r.reviewed_at).toLocaleString())+'</p>').join('')+'</div>':'');
+      if(data.edits?.length) {
+        const labels={to:'To',cc:'CC',sender:'Sender',pictures:'Pictures',violation_date:'Violation date',employee_ntid:'Employee NTID',employee_name:'Employee name',case_type:'Case type',subject:'Subject',body:'Body'};
+        el('detail-content').insertAdjacentHTML('beforeend','<div class="case-review-history"><h3>Edit history</h3>'+data.edits.map(e=>'<p>'+esc(e.editor)+' · '+esc(e.changed_fields.map(k=>labels[k]||k).join(', '))+' · '+esc(new Date(e.edited_at).toLocaleString())+'</p>').join('')+'</div>');
+      }
       if(!el('detail-dialog').open)el('detail-dialog').showModal();
       await api('cases/'+id+'/read','POST',{});await unread();
       if(['cases','inbox'].includes(page))await loadList(page);
@@ -153,10 +158,96 @@
     }catch(err){if(version===epoch){if(el('detail-dialog').open)el('detail-error').textContent=err.message;else error(err);}}
     finally{button.disabled=false;}
   }
+  function editRecipients() {
+    const used=new Set([...editSelected.to,...editSelected.cc]);
+    for(const kind of ['to','cc']) {
+      el('edit-'+kind).replaceChildren(new Option('Choose a recipient…',''),...editUsers.filter(u=>!u.retainedOnly&&!used.has(u.id)).map(u=>new Option((u.display_name||u.username)+' ('+u.username+')',u.id)));
+      el('edit-'+kind+'-chips').innerHTML=editSelected[kind].map(id=>{
+        const user=editUsers.find(u=>u.id===id);
+        return '<button type="button" class="case-chip" data-edit-recipient-kind="'+kind+'" data-edit-recipient-id="'+id+'" aria-label="Remove '+esc(user?.display_name||user?.username)+'">'+esc(user?.display_name||user?.username)+' ×</button>';
+      }).join('');
+    }
+  }
+  for(const kind of ['to','cc'])el('edit-'+kind).onchange=()=>{if(el('edit-'+kind).value)editSelected[kind].push(el('edit-'+kind).value);editRecipients();};
+  el('edit-type').onchange=()=>{const custom=el('edit-type').value==='Custom';el('edit-custom-label').hidden=!custom;el('edit-custom').required=custom;};
+  function editPictureList() {
+    el('edit-picture-list').innerHTML=(editing?.attachments||[]).filter(a=>!removedPictures.has(a.id)).map(a=>'<div class="case-picture-chip"><span>'+esc(a.filename)+'</span><button type="button" class="subtle" data-edit-remove-existing="'+a.id+'" aria-label="Remove '+esc(a.filename)+'">×</button></div>').join('')+editPictures.map((a,i)=>'<div class="case-picture-chip"><span>'+esc(a.name)+' (new)</span><button type="button" class="subtle" data-edit-remove-new="'+i+'" aria-label="Remove '+esc(a.name)+'">×</button></div>').join('');
+  }
+  async function editCase(id) {
+    if(savingEdit)return;
+    const version=epoch,sequence=++editSequence;
+    try {
+      const [data,options]=await Promise.all([api('cases/'+id),api('cases/recipients')]);
+      if(version!==epoch||sequence!==editSequence||!currentUser)return;
+      if(!data.case.can_edit)throw new Error('Only admins and the current sender can edit this case.');
+      editing=data;editUsers=options.users;editPictures=[];removedPictures=new Set();
+      editSelected={to:data.recipients.filter(r=>r.kind==='to').map(r=>r.user_id),cc:data.recipients.filter(r=>r.kind==='cc').map(r=>r.user_id)};
+      for(const recipient of data.recipients)if(!editUsers.some(u=>u.id===recipient.user_id))editUsers.push({id:recipient.user_id,display_name:recipient.recipient_name,username:'Unavailable account',retainedOnly:true});
+      el('edit-form').reset();el('edit-error').textContent='';
+      el('edit-fields').hidden=!admin();el('edit-fields').disabled=!admin();
+      el('edit-permissions').textContent=admin()?'You can edit case details, pictures, sender, To, and CC.':'You can edit only To and CC on your own case.';
+      editRecipients();
+      if(admin()) {
+        const row=data.case;
+        el('edit-sender').replaceChildren(...editUsers.filter(u=>!u.retainedOnly).map(u=>new Option((u.display_name||u.username)+' ('+u.username+')',u.id)));
+        if(![...el('edit-sender').options].some(o=>o.value===row.sender_id))el('edit-sender').add(new Option(row.sender_name+' (current sender)',row.sender_id));
+        el('edit-sender').value=row.sender_id;
+        el('edit-date').value=row.violation_date;el('edit-date').max=day();
+        el('edit-type').replaceChildren(...options.case_types.map(t=>new Option(t,t)));
+        const custom=!options.case_types.includes(row.case_type)||row.case_type==='Custom';
+        el('edit-type').value=custom?'Custom':row.case_type;el('edit-custom').value=custom?row.case_type:'';el('edit-type').onchange();
+        el('edit-ntid').value=row.employee_ntid;el('edit-employee').value=row.employee_name;
+        el('edit-subject').value=row.subject;el('edit-body').value=row.body;editPictureList();
+      }
+      el('detail-dialog').close();el('edit-dialog').showModal();
+    }catch(err){error(err);}
+  }
+  el('edit-pictures').onchange=()=>{
+    const next=[...editPictures,...el('edit-pictures').files];el('edit-pictures').value='';
+    const retained=editing.attachments.filter(a=>!removedPictures.has(a.id));
+    if(next.length+retained.length>5||next.reduce((s,f)=>s+f.size,0)+retained.reduce((s,f)=>s+f.size,0)>2*1024*1024){el('edit-error').textContent='Attach up to 5 pictures totaling 2 MB, including existing pictures.';return;}
+    if(next.some(f=>!['image/jpeg','image/png','image/webp'].includes(f.type))){el('edit-error').textContent='Choose JPG, PNG, or WebP pictures.';return;}
+    editPictures=next;el('edit-error').textContent='';editPictureList();
+  };
+  el('edit-form').onsubmit=async event=>{
+    event.preventDefault();if(savingEdit||!editing)return;
+    if(!editSelected.to.length){el('edit-error').textContent='Select at least one To recipient.';return;}
+    savingEdit=true;el('edit-save').disabled=true;el('edit-error').textContent='';
+    const version=epoch,id=editing.case.id;
+    try {
+      const payload={revision:editing.case.revision,to:[...editSelected.to],cc:[...editSelected.cc]};
+      if(admin())Object.assign(payload,{sender_id:el('edit-sender').value,violation_date:el('edit-date').value,case_type:el('edit-type').value,custom_type:el('edit-custom').value,employee_ntid:el('edit-ntid').value,employee_name:el('edit-employee').value,subject:el('edit-subject').value,body:el('edit-body').value,remove_attachments:[...removedPictures],attachments:await Promise.all(editPictures.map(encode))});
+      if(version!==epoch||!currentUser)return;
+      const result=await api('cases/'+id,'PATCH',payload);
+      if(version!==epoch||!currentUser)return;
+      el('edit-dialog').close();editing=null;
+      if(['cases','inbox','case-report'].includes(page))await load(page).catch(()=>{});
+      await openCase(id);notice(result.message);
+    }catch(err){if(version===epoch)el('edit-error').textContent=err.message;}
+    finally{if(version===epoch){savingEdit=false;el('edit-save').disabled=false;}}
+  };
+  async function deleteCase(button) {
+    if(!confirm('Delete this case? It will be removed from case history, recipient inboxes, and reports.'))return;
+    button.disabled=true;const version=epoch,id=button.dataset.caseDelete;
+    try {
+      const result=await api('cases/'+id,'DELETE',{revision:Number(button.dataset.revision)});
+      if(version!==epoch||!currentUser)return;
+      if(detail?.id===id){el('detail-dialog').close();el('detail-content').replaceChildren();el('detail-subject').textContent='';detail=null;}
+      if(editing?.case.id===id){el('edit-dialog').close();el('edit-form').reset();editing=null;}
+      if(['cases','inbox','case-report'].includes(page))await load(page).catch(()=>{});
+      await unread();notice(result.message);
+    }catch(err){if(version===epoch){if(el('detail-dialog').open)el('detail-error').textContent=err.message;else error(err);}}
+    finally{button.disabled=false;}
+  }
   document.addEventListener('click',event=>{
     if(event.target.closest('[data-case-compose]'))compose();
     const open=event.target.closest('[data-case-open]');if(open)openCase(open.dataset.caseOpen);
     const button=event.target.closest('[data-case-review]');if(button)review(button);
+    const edit=event.target.closest('[data-case-edit]');if(edit)editCase(edit.dataset.caseEdit);
+    const deletion=event.target.closest('[data-case-delete]');if(deletion)deleteCase(deletion);
+    const editChip=event.target.closest('[data-edit-recipient-id]');if(editChip){editSelected[editChip.dataset.editRecipientKind]=editSelected[editChip.dataset.editRecipientKind].filter(id=>id!==editChip.dataset.editRecipientId);editRecipients();}
+    const oldPicture=event.target.closest('[data-edit-remove-existing]');if(oldPicture){removedPictures.add(oldPicture.dataset.editRemoveExisting);editPictureList();}
+    const newPicture=event.target.closest('[data-edit-remove-new]');if(newPicture){editPictures.splice(Number(newPicture.dataset.editRemoveNew),1);editPictureList();}
     const chip=event.target.closest('[data-recipient-id]');if(chip){selected[chip.dataset.recipientKind]=selected[chip.dataset.recipientKind].filter(id=>id!==chip.dataset.recipientId);recipientOptions();}
     const picture=event.target.closest('[data-remove-picture]');if(picture){pictures.splice(Number(picture.dataset.removePicture),1);drawPictures();}
   });
@@ -170,6 +261,9 @@
   el('report-filter').onsubmit=event=>{event.preventDefault();offsets['case-report']=0;loadReport().catch(error);};
   function clear() {
     epoch++;listSequence++;reportSequence++;detailSequence++;clearInterval(timer);timer=null;
+    editSequence++;editing=null;editUsers=[];editSelected={to:[],cc:[]};editPictures=[];removedPictures=new Set();savingEdit=false;
+    el('edit-form').reset();el('edit-fields').disabled=false;el('edit-error').textContent='';el('edit-save').disabled=false;
+    ['edit-to','edit-cc','edit-to-chips','edit-cc-chips','edit-sender','edit-picture-list'].forEach(name=>el(name).replaceChildren());el('edit-dialog').close();
     draftId=null;detail=null;directory=[];selected={to:[],cc:[]};pictures=[];sending=false;
     Object.keys(offsets).forEach(key=>offsets[key]=0);
     ['history','inbox','report-summary','ranking','report-table','detail-content','detail-subject','to-chips','cc-chips','draft-pictures'].forEach(name=>el(name).replaceChildren());

@@ -279,6 +279,29 @@
     <p id="case-compose-error" class="error" role="alert"></p><div class="case-compose-footer"><span class="muted small">The case is saved in your sent history.</span><button class="primary" id="case-send" type="submit">Send case →</button></div>
   </form>
 </dialog>
+<dialog id="case-edit-dialog" class="case-dialog" aria-labelledby="case-edit-title">
+  <div class="case-dialog-head row between"><h2 id="case-edit-title">Edit case</h2><button class="subtle close" data-close="case-edit-dialog" aria-label="Close case editor">×</button></div>
+  <form id="case-edit-form">
+    <p id="case-edit-permissions" class="muted small" style="margin-top:18px"></p>
+    <div class="case-address-line"><label for="case-edit-to">To</label><div><div id="case-edit-to-chips" class="case-chips"></div><select id="case-edit-to" aria-label="Add To recipient"><option value="">Choose a recipient…</option></select></div></div>
+    <div class="case-address-line"><label for="case-edit-cc">CC</label><div><div id="case-edit-cc-chips" class="case-chips"></div><select id="case-edit-cc" aria-label="Add CC recipient"><option value="">Choose a recipient…</option></select></div></div>
+    <fieldset id="case-edit-fields" class="case-edit-fields">
+      <div class="case-compose-grid">
+        <label class="case-full">Sender<select id="case-edit-sender" required></select></label>
+        <label>Date of violation<input id="case-edit-date" type="date" required></label>
+        <label>Case type<select id="case-edit-type" required></select></label>
+        <label id="case-edit-custom-label" class="case-full" hidden>Custom case type<input id="case-edit-custom" maxlength="150"></label>
+        <label>Employee NTID<input id="case-edit-ntid" maxlength="80" required></label>
+        <label>Employee name<input id="case-edit-employee" maxlength="150" required></label>
+      </div>
+      <label class="case-subject">Subject<input id="case-edit-subject" maxlength="200" required></label>
+      <label class="case-body-label" for="case-edit-body">Body</label><textarea id="case-edit-body" maxlength="20000" rows="6" required></textarea>
+      <div class="case-attachment-bar"><label class="case-attach-button" for="case-edit-pictures">＋ Attach pictures</label><input id="case-edit-pictures" type="file" multiple accept="image/jpeg,image/png,image/webp" class="case-file-input"><span class="muted small">Up to 5 pictures · 2 MB total</span></div><div id="case-edit-picture-list" class="case-picture-list"></div>
+      <p class="muted small">Changing case details, pictures, or sender returns the case to Pending for review.</p>
+    </fieldset>
+    <p id="case-edit-error" class="error" role="alert"></p><div class="case-compose-footer"><span class="muted small">Changes are recorded in edit history.</span><button class="primary" id="case-edit-save" type="submit">Save changes</button></div>
+  </form>
+</dialog>
 <dialog id="case-detail-dialog" class="case-dialog" aria-labelledby="case-detail-subject">
   <div class="case-dialog-head row between"><h2 id="case-detail-subject"></h2><button class="subtle close" data-close="case-detail-dialog" aria-label="Close case">×</button></div><div id="case-detail-content"></div><p id="case-detail-error" class="error" role="alert"></p>
 </dialog>

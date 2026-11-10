@@ -22,6 +22,19 @@ The report uses an inclusive **violation date** range, ranks submitters across a
 approval statuses, and lists Date, User, Employee NTID, Employee Name, and Case Type.
 Reviews retain an audit trail and reject stale concurrent decisions.
 
+Admins can edit case details, pictures, recipients, and the sender. Members can
+edit only To and CC on cases where they are the current sender; being a recipient
+does not grant edit access. Sender reassignment transfers those permissions and
+report attribution while preserving the original creator for audit and duplicate
+send detection. Detail/picture/sender edits return the case to Pending; recipient
+changes preserve its approval status. Edits notify current recipients, revoke
+removed recipients' access, and retain before/after audit records.
+
+Admins and the current sender can delete a case after confirming. Deleted cases
+are excluded from history, Inbox, unread counts, reports, and picture access.
+The record is retained privately with the deleting user and timestamp for audit.
+Migration `031_case_editing.sql` adds these editing and deletion records.
+
 Migration `030_violation_cases.sql` creates the private message, recipient,
 picture, and review tables. The production build applies it automatically.
 Run `python -m pytest -q tests` for repository tests. Opt-in SQL case tests use

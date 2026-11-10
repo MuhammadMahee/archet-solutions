@@ -9,6 +9,7 @@ from uuid import UUID
 
 from flask import g, jsonify, request, send_file
 from PIL import Image, ImageOps, UnidentifiedImageError
+from psycopg.types.json import Jsonb
 
 from api.portal import PortalError, body, require_user, text_field, valid_id
 from api.sales import connect, today
@@ -115,11 +116,19 @@ def validate_draft(payload):
     }
 
 
-def visible_case(conn, case_id):
+def current_sender(row):
+    return str(row.get('sender_id') or row['submitted_by'])
+
+
+def can_edit(row):
+    return g.portal_user['role']=='admin' or current_sender(row)==str(g.portal_user['id'])
+
+
+def visible_case(conn, case_id, lock=False):
     uid = g.portal_user['id']
-    row = conn.execute('''select c.* from public.violation_cases c where c.id=%s
-        and (%s or c.submitted_by=%s or exists(select 1 from public.case_recipients r
-        where r.case_id=c.id and r.user_id=%s))''',
+    row = conn.execute('''select c.* from public.violation_cases c where c.id=%s and c.deleted_at is null
+        and (%s or coalesce(c.sender_id,c.submitted_by)=%s or exists(select 1 from public.case_recipients r
+        where r.case_id=c.id and r.user_id=%s))''' + (' for update of c' if lock else ''),
         (valid_id(case_id), g.portal_user['role'] == 'admin', uid, uid)).fetchone()
     if not row:
         raise PortalError('Case not found.', 404)
@@ -153,8 +162,10 @@ def register_cases(app):
                 values({','.join(['%s'] * (len(fields)+2))}) on conflict(submitted_by,request_id) do nothing returning id''',
                 (uid, g.portal_user['display_name'] or g.portal_user['username'], *(draft[k] for k in fields))).fetchone()
             if not row:
-                existing = conn.execute('select id from public.violation_cases where submitted_by=%s and request_id=%s',
+                existing = conn.execute('select id,deleted_at from public.violation_cases where submitted_by=%s and request_id=%s',
                                         (uid, draft['request_id'])).fetchone()
+                if existing['deleted_at'] is not None:
+                    raise PortalError('This draft was already sent and deleted. Start a new case.',409)
                 return jsonify(id=str(existing['id']), message='Case already sent.'), 200
             cid = row['id']
             with conn.cursor() as cur:
@@ -174,11 +185,11 @@ def register_cases(app):
         if folder == 'all' and g.portal_user['role'] != 'admin':
             raise PortalError('Administrator access is required.', 403)
         uid, offset = g.portal_user['id'], page_offset()
-        where, args = [], [uid]
+        where, args = ['c.deleted_at is null'], [uid]
         if folder == 'inbox':
             where.append('r.user_id is not null')
         elif folder == 'sent':
-            where.append('c.submitted_by=%s'); args.append(uid)
+            where.append('coalesce(c.sender_id,c.submitted_by)=%s'); args.append(uid)
         status = request.args.get('status', '')
         if status:
             if status not in ('pending', 'approved', 'not_approved'):
@@ -186,20 +197,22 @@ def register_cases(app):
             where.append('c.status=%s'); args.append(status)
         clause = ' and '.join(where) or 'true'
         with connect() as conn:
-            rows = conn.execute(f'''select c.id,c.sender_name,c.subject,c.violation_date,c.employee_ntid,
+            rows = conn.execute(f'''select c.id,coalesce(c.sender_id,c.submitted_by) as sender_id,c.sender_name,c.subject,c.violation_date,c.employee_ntid,
                 c.employee_name,c.case_type,c.status,c.submitted_at,c.revision,
                 (r.user_id is not null and r.read_at is null) as unread,
                 (select count(*) from public.case_attachments a where a.case_id=c.id) as attachment_count
                 from public.violation_cases c left join public.case_recipients r on r.case_id=c.id and r.user_id=%s
                 where {clause} order by c.submitted_at desc,c.id desc limit %s offset %s''',
                 (*args, PAGE_SIZE+1, offset)).fetchall()
-        return jsonify(cases=[serial(r) for r in rows[:PAGE_SIZE]], has_more=len(rows)>PAGE_SIZE)
+        return jsonify(cases=[{**serial(r),'can_edit':can_edit(r)} for r in rows[:PAGE_SIZE]], has_more=len(rows)>PAGE_SIZE)
 
     @app.get('/api/internal/cases/unread')
     @require_user()
     def unread_count():
         with connect() as conn:
-            count = conn.execute('select count(*) as count from public.case_recipients where user_id=%s and read_at is null',
+            count = conn.execute('''select count(*) as count from public.case_recipients r
+                join public.violation_cases c on c.id=r.case_id
+                where r.user_id=%s and r.read_at is null and c.deleted_at is null''',
                                  (g.portal_user['id'],)).fetchone()['count']
         return jsonify(count=count)
 
@@ -216,17 +229,17 @@ def register_cases(app):
         offset = page_offset()
         with connect() as conn, conn.transaction():
             conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
-            ranking = conn.execute('''select c.submitted_by as user_id,u.username,
+            ranking = conn.execute('''select coalesce(c.sender_id,c.submitted_by) as user_id,u.username,
                 coalesce(nullif(u.display_name,''),u.username) as user_name,count(*) as submitted,
                 count(*) filter(where c.status='approved') as approved,
                 count(*) filter(where c.status='not_approved') as not_approved,
                 count(*) filter(where c.status='pending') as pending
-                from public.violation_cases c join public.portal_users u on u.id=c.submitted_by
-                where c.violation_date between %s and %s group by c.submitted_by,u.username,u.display_name
+                from public.violation_cases c join public.portal_users u on u.id=coalesce(c.sender_id,c.submitted_by)
+                where c.deleted_at is null and c.violation_date between %s and %s group by coalesce(c.sender_id,c.submitted_by),u.username,u.display_name
                 order by submitted desc,user_name,user_id''', (start,end)).fetchall()
             rows = conn.execute('''select c.id,c.violation_date as date,c.sender_name as "user",
                 c.employee_ntid,c.employee_name,c.case_type from public.violation_cases c
-                where c.violation_date between %s and %s
+                where c.deleted_at is null and c.violation_date between %s and %s
                 order by c.violation_date desc,c.submitted_at desc,c.id desc limit %s offset %s''',
                 (start,end,PAGE_SIZE+1,offset)).fetchall()
         return jsonify(rows=[serial(r) for r in rows[:PAGE_SIZE]], ranking=[serial(r) for r in ranking],
@@ -245,10 +258,126 @@ def register_cases(app):
             reviews = conn.execute('''select r.status,r.reviewed_at,u.display_name as reviewer
                 from public.case_reviews r join public.portal_users u on u.id=r.reviewed_by
                 where r.case_id=%s order by r.reviewed_at,r.id''', (row['id'],)).fetchall()
+            edits = conn.execute('''select e.edited_at,e.changed_fields,u.display_name as editor
+                from public.case_edits e join public.portal_users u on u.id=e.edited_by
+                where e.case_id=%s order by e.id''',(row['id'],)).fetchall()
         result = serial(row)
         result.pop('request_id', None)
+        result.update(sender_id=current_sender(row),can_edit=can_edit(row))
         return jsonify(case=result, recipients=[serial(r) for r in recipients],
-                       attachments=[serial(a) for a in attachments], reviews=[serial(r) for r in reviews])
+                       attachments=[serial(a) for a in attachments], reviews=[serial(r) for r in reviews],
+                       edits=[serial(e) for e in edits])
+
+    @app.patch('/api/internal/cases/<case_id>')
+    @require_user()
+    def edit_case(case_id):
+        payload=body()
+        admin=g.portal_user['role']=='admin'
+        content_fields=('violation_date','employee_ntid','employee_name','case_type','subject','body')
+        allowed={'revision','to','cc'}
+        if admin:
+            allowed.update((*content_fields,'custom_type','sender_id','attachments','remove_attachments'))
+        if set(payload)-allowed:
+            raise PortalError('Admins can edit case details. Senders may edit only To and CC.',403)
+        revision=payload.get('revision')
+        if type(revision) is not int or revision<1:
+            raise PortalError('Refresh the case before editing.')
+        with connect() as conn, conn.transaction():
+            row=visible_case(conn,case_id,lock=True)
+            if not can_edit(row):
+                raise PortalError('Only admins and the current sender can edit this case.',403)
+            if row['revision']!=revision:
+                raise PortalError('This case was changed. Reopen Edit to load the latest version.',409)
+            previous_recipients=conn.execute('select user_id,kind,recipient_name from public.case_recipients where case_id=%s',(row['id'],)).fetchall()
+            old_pictures=conn.execute('select id,filename,octet_length(data) as size from public.case_attachments where case_id=%s order by id',(row['id'],)).fetchall()
+            merged={k:row[k] for k in content_fields}
+            merged['violation_date']=row['violation_date'].isoformat()
+            if merged['case_type'] not in CASE_TYPES or merged['case_type']=='Custom':
+                merged.update(case_type='Custom',custom_type=row['case_type'])
+            merged.update({k:v for k,v in payload.items() if k in (*content_fields,'custom_type','attachments')})
+            for kind in ('to','cc'):
+                merged[kind]=payload.get(kind,[str(r['user_id']) for r in previous_recipients if r['kind']==kind])
+            merged['request_id']=str(row['request_id'])
+            draft=validate_draft(merged)
+            recipient_ids=[uid for uid,kind in draft['recipients']]
+            existing_ids={str(r['user_id']) for r in previous_recipients}
+            recipient_users=conn.execute('''select id,display_name,username,active from public.portal_users
+                where id=any(%s::uuid[]) for share''',(recipient_ids,)).fetchall()
+            if len(recipient_users)!=len(recipient_ids) or any(not r['active'] and str(r['id']) not in existing_ids for r in recipient_users):
+                raise PortalError('A selected recipient is unavailable. Refresh the recipient list.')
+            names={str(r['id']):r['display_name'] or r['username'] for r in recipient_users}
+            sender=current_sender(row)
+            if 'sender_id' in payload:
+                sender=valid_id(text_field(payload,'sender_id',36))
+            sender_name=row['sender_name']
+            if sender!=current_sender(row):
+                account=conn.execute('select display_name,username from public.portal_users where id=%s and active=true for share',(sender,)).fetchone()
+                if not account:
+                    raise PortalError('Choose an active user as the sender.')
+                sender_name=account['display_name'] or account['username']
+            remove=payload.get('remove_attachments',[])
+            if not isinstance(remove,list) or any(not isinstance(a,str) for a in remove):
+                raise PortalError('Choose valid pictures to remove.')
+            remove={valid_id(a) for a in remove}
+            if not remove<={str(a['id']) for a in old_pictures}:
+                raise PortalError('A selected picture does not belong to this case.')
+            retained=[a for a in old_pictures if str(a['id']) not in remove]
+            if len(retained)+len(draft['attachments'])>5 or sum(a['size'] for a in retained)+sum(len(a['data']) for a in draft['attachments'])>MAX_IMAGE_BYTES:
+                raise PortalError('Attach up to 5 pictures, totaling 2 MB.')
+            changes=[k for k in content_fields if draft[k]!=row[k]]
+            if sender!=current_sender(row):changes.append('sender')
+            if remove or draft['attachments']:changes.append('pictures')
+            reset_review=bool(changes)
+            for kind in ('to','cc'):
+                old={str(r['user_id']) for r in previous_recipients if r['kind']==kind}
+                new={uid for uid,k in draft['recipients'] if k==kind}
+                if old!=new:changes.append(kind)
+            if not changes:
+                return jsonify(message='No changes to save.')
+            before={**serial({k:row[k] for k in content_fields}),'sender_id':current_sender(row),
+                    'sender_name':row['sender_name'],'status':row['status'],
+                    'recipients':[serial(r) for r in previous_recipients],'pictures':[serial(a) for a in old_pictures]}
+            conn.execute(f'''update public.violation_cases set {','.join(k+'=%s' for k in content_fields)},
+                sender_id=%s,sender_name=%s,edited_by=%s,edited_at=now(),revision=revision+1,
+                status=%s,reviewed_by=%s,reviewed_at=%s where id=%s''',
+                (*(draft[k] for k in content_fields),sender,sender_name,g.portal_user['id'],
+                 'pending' if reset_review else row['status'],None if reset_review else row['reviewed_by'],
+                 None if reset_review else row['reviewed_at'],row['id']))
+            conn.execute('delete from public.case_recipients where case_id=%s and not(user_id=any(%s::uuid[]))',(row['id'],recipient_ids))
+            with conn.cursor() as cur:
+                cur.executemany('''insert into public.case_recipients(case_id,user_id,kind,recipient_name)
+                    values(%s,%s,%s,%s) on conflict(case_id,user_id) do update
+                    set kind=excluded.kind,recipient_name=excluded.recipient_name,read_at=null''',
+                    [(row['id'],uid,kind,names[uid]) for uid,kind in draft['recipients']])
+                if remove:
+                    conn.execute('delete from public.case_attachments where case_id=%s and id=any(%s::uuid[])',(row['id'],list(remove)))
+                if draft['attachments']:
+                    cur.executemany('insert into public.case_attachments(case_id,filename,content_type,data) values(%s,%s,%s,%s)',
+                                    [(row['id'],a['filename'],a['content_type'],a['data']) for a in draft['attachments']])
+            after={**serial({k:draft[k] for k in content_fields}),'sender_id':sender,'sender_name':sender_name,
+                   'status':'pending' if reset_review else row['status'],
+                   'recipients':[{'user_id':uid,'kind':kind,'recipient_name':names[uid]} for uid,kind in draft['recipients']],
+                   'pictures':[serial(a) for a in conn.execute('select id,filename,octet_length(data) as size from public.case_attachments where case_id=%s order by id',(row['id'],)).fetchall()]}
+            conn.execute('insert into public.case_edits(case_id,edited_by,changed_fields,before_state,after_state) values(%s,%s,%s,%s,%s)',
+                         (row['id'],g.portal_user['id'],changes,Jsonb(before),Jsonb(after)))
+        return jsonify(message='Case updated. Recipients have been notified in Inbox.'+
+                       (' The case is pending review.' if reset_review else ''))
+
+    @app.delete('/api/internal/cases/<case_id>')
+    @require_user()
+    def delete_case(case_id):
+        revision=body().get('revision')
+        if type(revision) is not int or revision<1:
+            raise PortalError('Refresh the case before deleting.')
+        with connect() as conn, conn.transaction():
+            row=visible_case(conn,case_id,lock=True)
+            if not can_edit(row):
+                raise PortalError('Only admins and the current sender can delete this case.',403)
+            if row['revision']!=revision:
+                raise PortalError('This case was changed. Refresh before deleting it.',409)
+            conn.execute('''update public.violation_cases set deleted_at=now(),deleted_by=%s,
+                revision=revision+1 where id=%s''',(g.portal_user['id'],row['id']))
+        return jsonify(message='Case deleted from history, Inbox, and reports.')
 
     @app.post('/api/internal/cases/<case_id>/read')
     @require_user()
@@ -269,7 +398,7 @@ def register_cases(app):
         with connect() as conn, conn.transaction():
             row = visible_case(conn, case_id)
             updated = conn.execute('''update public.violation_cases set status=%s,reviewed_by=%s,
-                reviewed_at=now(),revision=revision+1 where id=%s and revision=%s returning id''',
+                reviewed_at=now(),revision=revision+1 where id=%s and revision=%s and deleted_at is null returning id''',
                 (status,g.portal_user['id'],row['id'],revision)).fetchone()
             if not updated:
                 raise PortalError('Another administrator reviewed this case. Refresh before reviewing again.',409)

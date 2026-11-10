@@ -191,6 +191,8 @@ def register_portal(app):
     @app.before_request
     def guard_portal():
         limit=3*1024*1024 if request.path in ('/api/internal/cases','/api/internal/calling-tree/preview','/api/internal/quota/upload','/api/internal/store-hours/schedules/preview','/api/internal/compliance/schedules/preview') else 32*1024
+        if request.method=='PATCH' and re.fullmatch(r'/api/internal/cases/[0-9a-f-]{36}',request.path):
+            limit=3*1024*1024
         if request.path.startswith('/api/internal/invoices/'):
             limit = 512 * 1024
         if request.path in ('/api/internal/store-hours/review','/api/internal/store-hours/sheet/presence','/api/internal/compliance/review','/api/internal/compliance/sheet/presence'):

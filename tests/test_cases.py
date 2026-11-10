@@ -85,6 +85,9 @@ def case_db(monkeypatch,store):
     ddl=migration.split('alter table public.violation_cases enable row level security;')[0]
     ddl=ddl.replace('create table public.','create temp table pg_temp.').replace('public.','pg_temp.')
     conn.execute(ddl,prepare=False)
+    editing=(Path(__file__).parents[1]/'supabase/migrations/031_case_editing.sql').read_text()
+    ddl=editing.split('alter table public.case_edits enable row level security;')[0]
+    conn.execute(ddl.replace('create table public.','create temp table pg_temp.').replace('public.','pg_temp.'),prepare=False)
 
     class Cursor:
         def __enter__(self):self.raw=conn.cursor();return self
@@ -183,3 +186,94 @@ def test_disabled_recipient_pagination_and_restricted_pages(client,store,case_db
     assert len(first['cases'])==50 and first['has_more']
     assert len(second['cases'])==1 and not second['has_more']
     assert first['cases'][0]['id']!=second['cases'][0]['id']
+
+
+def test_sender_edits_only_recipients_and_recipient_access_is_revoked(client,store,case_db):
+    login(client,'Member')
+    outsider=next(u for u in store.tables['portal_users'] if u['username']=='Outsider')
+    cid=write(client,'cases',payload([outsider['id']],[store.admin['id']])).json['id']
+    other=signed_in('Outsider');owner=signed_in('Mahee')
+    assert other.get('/api/internal/cases/'+cid).json['case']['can_edit'] is False
+    assert write(other,'cases/'+cid,{'revision':1,'to':[store.owner['id']]},'PATCH').status_code==403
+    assert write(other,'cases/'+cid,{'revision':1},'DELETE').status_code==403
+    for key,value in [('sender_id',store.owner['id']),('submitted_by',store.owner['id']),('subject','Changed'),
+                      ('body','Changed'),('employee_name','Changed'),('case_type','Theft'),('attachments',[]),
+                      ('remove_attachments',[]),('status','approved')]:
+        assert write(client,'cases/'+cid,{'revision':1,key:value},'PATCH').status_code==403
+    assert write(owner,'cases/'+cid+'/review',{'revision':1,'status':'approved'},'PATCH').status_code==200
+    response=write(client,'cases/'+cid,{'revision':2,'to':[store.owner['id']],'cc':[store.admin['id']]},'PATCH')
+    assert response.status_code==200,response.json
+    updated=client.get('/api/internal/cases/'+cid).json
+    assert updated['case']['status']=='approved' and updated['case']['revision']==3
+    assert updated['edits'][0]['changed_fields']==['to']
+    assert other.get('/api/internal/cases/'+cid).status_code==404
+    assert other.get('/api/internal/cases?folder=inbox').json['cases']==[]
+    assert other.get('/api/internal/cases/unread').json['count']==0
+    assert owner.get('/api/internal/cases/unread').json['count']==1
+    assert write(client,'cases/'+cid,{'revision':2,'to':[store.owner['id']]},'PATCH').status_code==409
+    assert write(client,'cases/'+cid,{'revision':3,'to':[]},'PATCH').status_code==400
+    assert write(client,'cases/'+cid,{'revision':3,'cc':[store.owner['id']]},'PATCH').status_code==400
+    assert client.get('/api/internal/cases/'+cid).json['case']['revision']==3
+
+
+def test_admin_changes_sender_details_pictures_and_report_attribution(client,store,case_db):
+    login(client,'Member')
+    outsider=next(u for u in store.tables['portal_users'] if u['username']=='Outsider')
+    draft=payload([store.member['id']],[store.owner['id']]);draft['attachments']=[picture()]
+    cid=write(client,'cases',draft).json['id'];owner=signed_in('Mahee')
+    aid=client.get('/api/internal/cases/'+cid).json['attachments'][0]['id']
+    assert write(owner,'cases/'+cid+'/review',{'status':'approved','revision':1},'PATCH').status_code==200
+    changed=write(owner,'cases/'+cid,{'revision':2,'sender_id':outsider['id'],
+        'subject':'Corrected subject','case_type':'Custom','custom_type':'Invoice error',
+        'employee_ntid':'updated-ntid','body':'Corrected details','remove_attachments':[aid]},'PATCH')
+    assert changed.status_code==200,changed.json
+    result=owner.get('/api/internal/cases/'+cid).json
+    assert result['case']['sender_id']==outsider['id'] and result['case']['sender_name']=='Outsider'
+    assert result['case']['submitted_by']==store.member['id'] # original creator remains immutable
+    assert result['case']['status']=='pending' and result['case']['reviewed_by'] is None
+    assert result['case']['case_type']=='Invoice error' and result['case']['employee_ntid']=='UPDATED-NTID'
+    assert result['attachments']==[] and 'sender' in result['edits'][0]['changed_fields']
+    assert owner.get('/api/internal/cases/'+cid+'/attachments/'+aid).status_code==404
+    assert client.get('/api/internal/cases').json['cases']==[]
+    assert client.get('/api/internal/cases/'+cid).json['case']['can_edit'] is False # still a recipient
+    assert write(client,'cases/'+cid,{'revision':3,'to':[store.owner['id']]},'PATCH').status_code==403
+    assert write(client,'cases/'+cid,{'revision':3},'DELETE').status_code==403
+    sender=signed_in('Outsider')
+    assert sender.get('/api/internal/cases').json['cases'][0]['can_edit'] is True
+    assert write(sender,'cases/'+cid,{'revision':3,'cc':[store.admin['id']]},'PATCH').status_code==200
+    assert write(client,'cases',draft).json['id']==cid # retry cannot duplicate a reassigned case
+    today=cases.today().isoformat()
+    report=owner.get('/api/internal/cases/report?start='+today+'&end='+today).json
+    assert report['ranking'][0]['user_name']=='Outsider' and report['rows'][0]['user']=='Outsider'
+    invalid=write(owner,'cases/'+cid,{'revision':4,'sender_id':str(uuid4())},'PATCH')
+    assert invalid.status_code==400
+    assert write(owner,'cases/'+cid,{'revision':4,'remove_attachments':[str(uuid4())]},'PATCH').status_code==400
+    assert owner.get('/api/internal/cases/'+cid).json['case']['revision']==4
+    audit=case_db.execute('select before_state,after_state from public.case_edits where case_id=%s order by id',(cid,)).fetchall()
+    assert audit[0]['before_state']['sender_id']==store.member['id'] and audit[0]['after_state']['sender_id']==outsider['id']
+
+
+def test_sender_and_admin_delete_hide_case_inbox_pictures_and_reports(client,store,case_db):
+    login(client,'Member');owner=signed_in('Mahee')
+    draft=payload([store.owner['id']]);draft['attachments']=[picture()]
+    cid=write(client,'cases',draft).json['id']
+    aid=client.get('/api/internal/cases/'+cid).json['attachments'][0]['id']
+    assert write(client,'cases/'+cid,{'revision':2},'DELETE').status_code==409
+    assert client.delete('/api/internal/cases/'+cid,json={'revision':1}).status_code==403
+    response=write(client,'cases/'+cid,{'revision':1},'DELETE')
+    assert response.status_code==200,response.json
+    assert client.get('/api/internal/cases').json['cases']==[]
+    assert owner.get('/api/internal/cases?folder=all').json['cases']==[]
+    assert owner.get('/api/internal/cases?folder=inbox').json['cases']==[]
+    assert owner.get('/api/internal/cases/unread').json['count']==0
+    assert client.get('/api/internal/cases/'+cid).status_code==404
+    assert owner.get('/api/internal/cases/'+cid+'/attachments/'+aid).status_code==404
+    assert write(owner,'cases/'+cid+'/review',{'revision':2,'status':'approved'},'PATCH').status_code==404
+    assert write(owner,'cases/'+cid,{'revision':2,'subject':'Resurrect'},'PATCH').status_code==404
+    assert write(client,'cases',draft).status_code==409
+    today=cases.today().isoformat()
+    assert owner.get('/api/internal/cases/report?start='+today+'&end='+today).json['total']==0
+    record=case_db.execute('select deleted_at,deleted_by from public.violation_cases where id=%s',(cid,)).fetchone()
+    assert record['deleted_at'] and str(record['deleted_by'])==store.member['id']
+    cid2=write(client,'cases',payload([store.admin['id']])).json['id']
+    assert write(owner,'cases/'+cid2,{'revision':1},'DELETE').status_code==200
