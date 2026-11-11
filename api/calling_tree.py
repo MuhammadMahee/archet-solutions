@@ -129,8 +129,37 @@ def source_catalog(conn):
     return catalog
 
 
+def market_time_zone(row):
+    # Use the market first: the workbook labels the Utah repair stores as CA.
+    market=' '.join(str(row.get('market') or '').upper().split())
+    zones={
+        'RENO':'America/Los_Angeles', 'CALI':'America/Los_Angeles',
+        'CALIFORNIA':'America/Los_Angeles', 'SPDI CALI 1':'America/Los_Angeles',
+        'SPDI CALI 2':'America/Los_Angeles',
+        'UTAH':'America/Denver', 'NEW MEXICO':'America/Denver',
+        'DALLAS':'America/Chicago', 'HOUSTON':'America/Chicago',
+        'CHICAGO':'America/Chicago', 'LOUISANA':'America/Chicago',
+        'LOUISIANA':'America/Chicago',
+        'METRO - CLA':'America/New_York', 'METRO - CND':'America/New_York',
+    }
+    if market in zones:
+        return zones[market]
+    state=str(row.get('state') or '').strip().upper()
+    # Only use states wholly in one zone. Texas and Nevada span time zones.
+    states={'CA':'America/Los_Angeles', 'UT':'America/Denver', 'NM':'America/Denver',
+            'IL':'America/Chicago', 'LA':'America/Chicago', 'OH':'America/New_York'}
+    if state in states:
+        return states[state]
+    # The generic TOTAL market's Dallas/Fort Worth stores have 75xxx/76xxx ZIPs.
+    zip_code=str(row.get('zip_code') or '').strip()
+    if state=='TX' and re.fullmatch(r'7[56]\d{3}(?:-\d{4})?',zip_code):
+        return 'America/Chicago'
+    return None
+
+
 def describe_rows(rows,catalog):
-    return [{**r,'matched':(r['dealer'],r['store_id']) in catalog} for r in rows]
+    return [{**r,'matched':(r['dealer'],r['store_id']) in catalog,
+             'time_zone':market_time_zone(r)} for r in rows]
 
 
 def register_calling_tree(app,connect):

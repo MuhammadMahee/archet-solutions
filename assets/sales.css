@@ -43,6 +43,7 @@
 #tree-table th{position:sticky;top:0;background:#095570;color:white;padding:13px;font-size:10px}
 #tree-table td{padding:12px 13px;border-bottom:1px solid #e0e9ed;color:#163b4b}
 #tree-table tr:nth-child(even){background:#f3f8fa}
+#tree-table .tree-market-time{font-variant-numeric:tabular-nums;min-width:165px}
 .tree-match{font-size:10px;font-weight:700;border-radius:20px;padding:5px 8px}.tree-match.matched{background:#e3f3e7;color:#207039}.tree-match.unmatched{background:#fff1d5;color:#805b0d}
 @media(max-width:1000px){.tree-upload form{grid-template-columns:1fr 1fr}.tree-upload form button{grid-column:1/-1}.tree-preview,.tree-list-head{align-items:stretch;flex-direction:column}}
 @media(max-width:720px){#sales-table caption{font-size:15px}.tree-upload{padding:18px}.tree-upload form{grid-template-columns:1fr}.tree-list-filters{min-width:0;flex-wrap:wrap}.tree-list-filters label{flex:1;min-width:120px}.tree-preview-actions{flex-wrap:wrap}.tree-preview-actions button{flex:1}}

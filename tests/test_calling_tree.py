@@ -10,6 +10,32 @@ from api.portal import PortalError
 from test_portal import store,client,login,write
 
 
+@pytest.mark.parametrize('market,state,zip_code,expected',[
+    ('Reno','NV','89502','America/Los_Angeles'),
+    ('SPDI CALI 1','CA','93930','America/Los_Angeles'),
+    ('SPDI CALI 2','CA','95350','America/Los_Angeles'),
+    (' Utah ','CA','-','America/Denver'),
+    ('NEW MEXICO','NM','87107','America/Denver'),
+    ('DALLAS','TX','-','America/Chicago'),
+    ('HOUSTON','TX','77598','America/Chicago'),
+    ('CHICAGO','IL','-','America/Chicago'),
+    ('LOUISANA','TX','75670','America/Chicago'),
+    ('METRO - CLA','OH','44223','America/New_York'),
+    ('METRO - CND','OH','45044','America/New_York'),
+    ('TOTAL','TX','76040','America/Chicago'),
+    ('TOTAL','TX','75237','America/Chicago'),
+    ('NEW MARKET','OH','','America/New_York'),
+    ('NEW MARKET','TX','79901',None),
+    ('NEW MARKET','NV','',None),
+    ('UNKNOWN','','',None),
+])
+def test_market_clocks_use_local_zone_without_guessing(market,state,zip_code,expected):
+    row={'dealer':'Connect','store_id':'S1','market':market,'state':state,'zip_code':zip_code}
+    described=calling_tree.describe_rows([row],{})[0]
+    assert described['time_zone']==expected
+    assert 'time_zone' not in row
+
+
 def workbook(rows=None,headers=None):
     book=Workbook();sheet=book.active
     sheet.append(headers or ['Dealer','Store ID','Market','Store Name','DM'])

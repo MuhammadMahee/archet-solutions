@@ -78,7 +78,7 @@ def main():
                 assert page.locator('#case-history [data-case-review]').count()==0
                 page.locator('.nav [data-page="callingtree"]').click()
                 expect(page.locator('#tree-table tbody tr')).to_have_count(1)
-                assert page.locator('#tree-table thead th').all_text_contents()==['S. No','Carrier','Dealer','DM','Store ID','State','Dealer Code','Door Code','SAP ID','Market','Store Name','Address','ZIP Code']
+                assert page.locator('#tree-table thead th').all_text_contents()==['S. No','Carrier','Dealer','DM','Store ID','State','Dealer Code','Door Code','SAP ID','Market','Market Live Time','Store Name','Address','ZIP Code']
                 expect(page.locator('#tree-table')).not_to_contain_text('WB-')
                 expect(page.locator('#tree-table')).not_to_contain_text('RT-POS')
                 expect(page.locator('#tree-upload')).to_be_hidden()

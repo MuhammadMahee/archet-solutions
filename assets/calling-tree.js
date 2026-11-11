@@ -2,6 +2,25 @@
 (() => {
   const el=id=>document.getElementById('tree-'+id);
   let active=[],preview=null,version=null,sequence=0;
+  let clockTimer=null;
+  const clockFormats=new Map();
+  function clockCell(zone){
+    if(zone&&!clockFormats.has(zone)){
+      try{clockFormats.set(zone,new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}));}
+      catch{zone=null;}
+    }
+    return zone?`<td class="tree-market-time" data-time-zone="${escapeHTML(zone)}" title="${escapeHTML(zone)}"></td>`:'<td class="tree-market-time">Time zone unavailable</td>';
+  }
+  function updateClocks(){
+    if(document.hidden||document.getElementById('page-callingtree').hidden)return;
+    const now=new Date(),times=new Map();
+    el('table').querySelectorAll('[data-time-zone]').forEach(cell=>{
+      const zone=cell.dataset.timeZone;
+      if(!times.has(zone))times.set(zone,clockFormats.get(zone).format(now));
+      cell.textContent=times.get(zone);
+    });
+  }
+  document.addEventListener('visibilitychange',updateClocks);
   const message=text=>{el('message').textContent=text;el('message').hidden=!text;};
   function draw(){
     window.archetAppearance.dealer(el('dealer').value);
@@ -10,7 +29,10 @@
     const filtered=rows.filter(r=>(!selected||r.dealer===selected)&&(!query||[r.dealer,r.store_id,r.store,r.market,r.dm,r.address].join(' ').toLowerCase().includes(query)));
     const numbers=new Map(rows.map((r,i)=>[r,i+1]));
     const visibleId=value=>/^WB-/i.test(String(value||''))?'':value;
-    el('table').tBodies[0].innerHTML=filtered.map(r=>'<tr>'+[numbers.get(r),r.carrier,r.original_dealer||r.dealer,r.dm,visibleId(r.store_id),r.state,r.dealer_code,r.door_code,r.sap_id,r.market,r.store,r.address,r.zip_code].map(v=>'<td>'+escapeHTML(v)+'</td>').join('')+'</tr>').join('');
+    const cells=values=>values.map(v=>'<td>'+escapeHTML(v)+'</td>').join('');
+    el('table').tBodies[0].innerHTML=filtered.map(r=>'<tr>'+cells([numbers.get(r),r.carrier,r.original_dealer||r.dealer,r.dm,visibleId(r.store_id),r.state,r.dealer_code,r.door_code,r.sap_id,r.market])+clockCell(r.time_zone)+cells([r.store,r.address,r.zip_code])+'</tr>').join('');
+    updateClocks();
+    if(clockTimer===null)clockTimer=setInterval(updateClocks,1000);
     el('empty').hidden=filtered.length>0;
     el('empty').textContent=rows.length?'No stores match your filters.':'No Calling Tree uploaded yet. An administrator can upload one above.';
     el('title').textContent=preview?'Workbook preview':'Active Calling Tree';
@@ -44,5 +66,5 @@
     try{const result=await api('calling-tree/activate','POST',{preview_id:preview.preview_id});preview=null;el('preview').hidden=true;el('form').reset();await load();message(result.message);}
     catch(error){message(error.message);}finally{el('activate').disabled=false;el('discard').disabled=false;}
   };
-  window.callingTree={load,clear(){sequence++;active=[];preview=null;version=null;el('table').tBodies[0].replaceChildren();el('preview').hidden=true;el('form').reset();el('dealer').replaceChildren(new Option('All Dealers',''));el('search').value='';}};
+  window.callingTree={load,clear(){sequence++;clearInterval(clockTimer);clockTimer=null;clockFormats.clear();active=[];preview=null;version=null;el('table').tBodies[0].replaceChildren();el('preview').hidden=true;el('form').reset();el('dealer').replaceChildren(new Option('All Dealers',''));el('search').value='';}};
 })();
