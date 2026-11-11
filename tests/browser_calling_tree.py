@@ -58,17 +58,17 @@ def main():
                 expect(page.locator('#tree-preview')).to_be_hidden();assert state['active']
                 # Exercise every active time zone and the unavailable fallback, independently of the viewer's zone.
                 clock_rows=[dict(rows[0],market=market,state=st,store_id=str(i)) for i,(market,st) in enumerate([
-                    ('RENO','NV'),('UTAH','CA'),('CHICAGO','IL'),('METRO - CLA','OH'),('UNKNOWN','')])]
+                    ('RENO','NV'),('UTAH','CA'),('DALLAS','TX'),('METRO - CLA','OH'),('METRO - CND','OH'),('UNKNOWN','')])]
                 state['rows']=calling_tree.describe_rows(clock_rows,{})
                 page.evaluate('window.callingTree.load()')
                 page.clock.pause_at(datetime(2026,11,10,18,30,tzinfo=timezone.utc))
                 clock_cells=page.locator('.tree-market-time')
-                expect(clock_cells).to_have_text(['10:30:00 AM PST','11:30:00 AM MST','12:30:00 PM CST','01:30:00 PM EST','Time zone unavailable'])
+                expect(clock_cells).to_have_text(['10:30:00 AM PST','11:30:00 AM MST','12:30:00 PM CST','12:30:00 PM CST','12:30:00 PM CST','Time zone unavailable'])
                 page.clock.run_for(1000)
                 expect(clock_cells.first).to_have_text('10:30:01 AM PST')
                 page.clock.set_system_time(datetime(2026,7,10,18,30,tzinfo=timezone.utc))
                 page.clock.run_for(1000)
-                expect(clock_cells).to_have_text(['11:30:01 AM PDT','12:30:01 PM MDT','01:30:01 PM CDT','02:30:01 PM EDT','Time zone unavailable'])
+                expect(clock_cells).to_have_text(['11:30:01 AM PDT','12:30:01 PM MDT','01:30:01 PM CDT','01:30:01 PM CDT','01:30:01 PM CDT','Time zone unavailable'])
                 state['rows']=rows
                 page.evaluate('window.callingTree.load()')
                 page.locator('#tree-search').fill('FIRST');expect(page.locator('#tree-table tbody tr')).to_have_count(1)
@@ -83,7 +83,7 @@ def main():
                 expect(page.locator('#page-callingtree')).to_be_visible();expect(page.locator('#tree-upload')).to_be_hidden()
                 expect(page.locator('#tree-table tbody tr')).to_have_count(2)
                 assert not errors,errors
-                browser.close();print('Calling Tree browser checks passed: live seconds, four time zones, daylight saving, unknown market, upload, preview, activate, filters, mobile, member read-only, logout cleanup.')
+                browser.close();print('Calling Tree browser checks passed: live seconds, market time zones, Metro matches Dallas, daylight saving, unknown market, upload, preview, activate, filters, mobile, member read-only, logout cleanup.')
         finally:server.shutdown()
 
 

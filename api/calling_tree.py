@@ -140,7 +140,8 @@ def market_time_zone(row):
         'DALLAS':'America/Chicago', 'HOUSTON':'America/Chicago',
         'CHICAGO':'America/Chicago', 'LOUISANA':'America/Chicago',
         'LOUISIANA':'America/Chicago',
-        'METRO - CLA':'America/New_York', 'METRO - CND':'America/New_York',
+        # These markets follow Dallas time by the portal's business convention.
+        'METRO - CLA':'America/Chicago', 'METRO - CND':'America/Chicago',
     }
     if market in zones:
         return zones[market]
