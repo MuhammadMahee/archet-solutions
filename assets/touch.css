@@ -1,0 +1,19 @@
+/* Keep taps from changing page zoom; scrolling and pinch zoom remain available. */
+@media (any-pointer: coarse) {
+  html {
+    touch-action: manipulation;
+  }
+}
+
+/* iOS zooms focused controls below 16px. Layered !important declarations keep
+   compact component styles (including dynamically created editors) from winning. */
+@layer touch-controls {
+  @media (any-pointer: coarse) {
+    input,
+    select,
+    textarea,
+    [contenteditable]:not([contenteditable="false"]) {
+      font-size: 16px !important;
+    }
+  }
+}

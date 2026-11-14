@@ -216,7 +216,7 @@ register_workforce(app)
 
 @app.get('/assets/<filename>')
 def portal_assets(filename):
-    if filename in ('cases.js', 'cases.css'):
+    if filename in ('cases.js', 'cases.css', 'touch.css'):
         return send_from_directory(os.path.join(BASE_DIR, 'assets'), filename)
     if filename in ('public-experience.css', 'public-experience.js', 'public-data.js',
                     'public-scene.js', 'public-three.module.min.js', 'public-three-LICENSE.txt'):
